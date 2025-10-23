@@ -1,0 +1,151 @@
+﻿@model List<IPTSYSTEM.Models.Conversation>
+@{
+    ViewData["Title"] = "Messages";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/messages.css" asp-append-version="true" />
+}
+
+<!-- Messages Page -->
+<section class="messages-page">
+    <div class="container-fluid py-4">
+        <!-- Page Header -->
+ <div class="mb-4 d-flex justify-content-between align-items-center">
+      <div>
+       <h1 class="messages-page-title mb-1">Messages</h1>
+       <p class="messages-page-subtitle text-muted mb-0">Chat with buyers, sellers, and our AI assistant</p>
+      </div>
+   <button class="btn-ai-assistant" onclick="openAIChat()">
+  <i class="bi bi-robot me-2"></i>
+     AI Assistant
+  </button>
+      </div>
+
+     <!-- Messages Container -->
+    <div class="messages-container">
+      <!-- Left Panel: Conversations List -->
+  <div class="conversations-panel">
+       <!-- Search Box -->
+  <div class="search-conversations">
+       <i class="bi bi-search search-icon"></i>
+             <input type="text" class="form-control" id="searchConversations" placeholder="Search conversations..." onkeyup="filterConversations()">
+ </div>
+
+      <!-- Conversation List -->
+       <div class="conversation-list" id="conversationList">
+    @if (Model != null && Model.Any())
+   {
+      @foreach (var conversation in Model.OrderByDescending(c => c.LastMessageTime))
+   {
+     <div class="conversation-item @(conversation.Id == 0 ? "ai-conversation" : "")" onclick="loadConversation(@conversation.Id)" data-conversation-id="@conversation.Id">
+           <div class="conversation-avatar">
+        <img src="@conversation.OtherUserAvatar" alt="@conversation.OtherUserName">
+           <span class="status-indicator @(conversation.IsOnline ? "online" : "offline")"></span>
+     </div>
+ <div class="conversation-info">
+      <h4 class="conversation-name">
+        @conversation.OtherUserName
+      @if (conversation.Id == 0)
+{
+     <i class="bi bi-robot ms-1" style="font-size: 0.9rem; color: #8b5cf6;"></i>
+       }
+       </h4>
+     <p class="conversation-preview">@conversation.LastMessage</p>
+ </div>
+     <div class="conversation-meta">
+  <span class="conversation-time">@GetTimeAgo(conversation.LastMessageTime)</span>
+        @if (conversation.UnreadCount > 0)
+     {
+  <span class="unread-badge">@conversation.UnreadCount</span>
+         }
+      </div>
+       </div>
+      }
+    }
+       </div>
+    </div>
+
+       <!-- Right Panel: Chat View -->
+        <div class="chat-panel">
+          <!-- Chat Header -->
+<div class="chat-header" id="chatHeader" style="display: none;">
+             <div class="chat-user-info">
+       <div class="chat-user-avatar">
+      <img src="" alt="" id="chatAvatar">
+      <span class="status-indicator" id="chatStatus"></span>
+      </div>
+       <div>
+        <h3 class="chat-user-name" id="chatUserName"></h3>
+      <p class="chat-user-status" id="chatUserStatus"></p>
+         </div>
+       </div>
+ <button class="btn-chat-options" onclick="toggleChatOptions()">
+     <i class="bi bi-three-dots-vertical"></i>
+  </button>
+  </div>
+
+      <!-- Empty State -->
+    <div class="chat-empty-state" id="chatEmptyState">
+       <div class="empty-state-content">
+       <i class="bi bi-chat-dots" style="font-size: 5rem; color: #d1d5db;"></i>
+       <h3 class="mt-4 mb-2" style="color: #6b7280;">Select a conversation</h3>
+     <p style="color: #9ca3af;">Choose a conversation from the list to start chatting</p>
+      <button class="btn-ai-assistant mt-3" onclick="openAIChat()">
+       <i class="bi bi-robot me-2"></i>
+  Chat with AI Assistant
+   </button>
+         </div>
+     </div>
+
+     <!-- Chat Messages -->
+          <div class="chat-messages" id="chatMessages" style="display: none;">
+     <!-- Messages will be loaded here dynamically -->
+ </div>
+
+          <!-- Chat Input -->
+        <div class="chat-input-container" id="chatInputContainer" style="display: none;">
+ <input type="text" class="chat-input" id="messageInput" placeholder="Type a message..." onkeypress="handleKeyPress(event)">
+            <button class="btn-send-message" onclick="sendMessage()">
+           <i class="bi bi-send-fill"></i>
+      </button>
+       </div>
+     </div>
+        </div>
+    </div>
+</section>
+
+<!-- Chat Options Dropdown -->
+<div class="chat-options-dropdown" id="chatOptionsDropdown" style="display: none;">
+    <button onclick="blockUser()"><i class="bi bi-slash-circle me-2"></i>Block User</button>
+    <button onclick="reportUser()"><i class="bi bi-flag me-2"></i>Report</button>
+<button onclick="deleteChat()"><i class="bi bi-trash me-2"></i>Delete Chat</button>
+</div>
+
+<!-- Toast Notification -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11000">
+    <div id="toastNotification" class="toast align-items-center border-0" role="alert">
+        <div class="d-flex">
+     <div class="toast-body" id="toastMessage"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+ </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/messages-manager.js"></script>
+}
+
+@functions {
+    private string GetTimeAgo(DateTime dateTime)
+    {
+        var timeSpan = DateTime.Now - dateTime;
+        
+        if (timeSpan.TotalMinutes < 1) return "Just now";
+ if (timeSpan.TotalMinutes < 60) return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24) return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7) return $"{(int)timeSpan.TotalDays}d ago";
+   
+        return dateTime.ToString("MMM dd");
+    }
+}

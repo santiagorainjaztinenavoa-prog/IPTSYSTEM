@@ -1,0 +1,169 @@
+﻿@{
+    ViewData["Title"] = "Recommerce - Your Trusted Marketplace";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/home.css" asp-append-version="true" />
+}
+
+<section class="hero-yellow text-dark position-relative overflow-hidden">
+    <!-- Yellow Shopping Background -->
+    <div class="hero-yellow-bg"></div>
+
+ <!-- Shopping Items Decoration -->
+    <div class="shopping-items-decor">
+        <div class="shopping-item item-cart"></div>
+        <div class="shopping-item item-bag"></div>
+  <div class="shopping-item item-card"></div>
+        <div class="shopping-item item-glasses"></div>
+      <div class="shopping-item item-watch"></div>
+ </div>
+    
+    <div class="container position-relative hero-content-yellow">
+        <div class="row align-items-center">
+      <div class="col-lg-7">
+       <!-- Main Heading -->
+   <h1 class="hero-main-heading-yellow mb-4">
+      Your One-Stop Shop for<br>
+           <span class="highlight-yellow">Pre-Loved Treasures</span>
+  </h1>
+  
+                <!-- Description -->
+             <p class="hero-description-yellow mb-4">
+  Shop smarter, sell faster. Join thousands of buyers and sellers in our trusted community marketplace. Find amazing deals on quality items or turn your unused belongings into cash today.
+                </p>
+           
+ <!-- Action Buttons -->
+       <div class="hero-buttons d-flex gap-3">
+  <a href="/Home/Categories" class="btn btn-browse-yellow">
+  Browse Categories
+         <i class="bi bi-arrow-right ms-2"></i>
+ </a>
+            <a href="/Home/Mylisting" class="btn btn-start-selling-yellow">
+          Start Selling
+           </a>
+    </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Latest Items Section -->
+<section class="latest-items-section py-5">
+    <div class="container">
+ <!-- Section Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="section-title mb-0">Latest Items</h2>
+            <div class="dropdown">
+        <button class="btn btn-outline-secondary dropdown-toggle sort-dropdown" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+ Newest First
+                </button>
+     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="sortDropdown">
+       <li><a class="dropdown-item" href="#">Newest First</a></li>
+        <li><a class="dropdown-item" href="#">Price: Low to High</a></li>
+     <li><a class="dropdown-item" href="#">Price: High to Low</a></li>
+     <li><a class="dropdown-item" href="#">Most Popular</a></li>
+    </ul>
+  </div>
+        </div>
+
+        <!-- Items Grid -->
+        <div class="row g-4">
+       <!-- Item 1: iPhone 13 Pro Max -->
+      <div class="col-12 col-sm-6 col-lg-3">
+          <div class="item-card">
+    <div class="item-image-wrapper">
+                 <img src="https://images.unsplash.com/photo-1632661674596-df8be070a5c5?w=500&h=500&fit=crop" alt="iPhone 13 Pro Max" class="item-image">
+  <span class="item-badge badge-like-new">Like New</span>
+     <button class="btn-wishlist">
+            <i class="bi bi-heart"></i>
+                   </button>
+     </div>
+             <div class="item-details">
+        <h3 class="item-title">iPhone 13 Pro Max</h3>
+         <p class="item-description">Barely used iPhone 13 Pro Max. 256GB, Pacific Blue. Comes with original box and...</p>
+    <div class="item-footer">
+   <span class="item-price">$899</span>
+     <div class="item-rating">
+    <i class="bi bi-star-fill text-success"></i>
+           <span class="rating-value">4.8</span>
+        </div>
+          </div>
+             </div>
+       </div>
+            </div>
+
+     <!-- Item 2: Vintage Denim Jacket -->
+      <div class="col-12 col-sm-6 col-lg-3">
+             <div class="item-card">
+        <div class="item-image-wrapper">
+        <img src="https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500&h=500&fit=crop" alt="Vintage Denim Jacket" class="item-image">
+         <span class="item-badge badge-good">Good</span>
+       <button class="btn-wishlist">
+   <i class="bi bi-heart"></i>
+        </button>
+        </div>
+           <div class="item-details">
+              <h3 class="item-title">Vintage Denim Jacket</h3>
+            <p class="item-description">Classic 90s style denim jacket, size M. Perfect condition with minimal wear.</p>
+        <div class="item-footer">
+          <span class="item-price">$45</span>
+   <div class="item-rating">
+              <i class="bi bi-star-fill text-success"></i>
+     <span class="rating-value">4.5</span>
+   </div>
+         </div>
+            </div>
+       </div>
+    </div>
+
+   <!-- Item 3: Modern Table Lamp -->
+        <div class="col-12 col-sm-6 col-lg-3">
+      <div class="item-card">
+       <div class="item-image-wrapper">
+      <img src="https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&h=500&fit=crop" alt="Modern Table Lamp" class="item-image">
+     <span class="item-badge badge-new">New</span>
+               <button class="btn-wishlist">
+             <i class="bi bi-heart"></i>
+      </button>
+       </div>
+             <div class="item-details">
+              <h3 class="item-title">Modern Table Lamp</h3>
+ <p class="item-description">Beautiful minimalist table lamp with adjustable brightness. White and gold...</p>
+  <div class="item-footer">
+          <span class="item-price">$35</span>
+       <div class="item-rating">
+           <i class="bi bi-star-fill text-success"></i>
+ <span class="rating-value">5</span>
+                </div>
+      </div>
+    </div>
+         </div>
+            </div>
+
+        <!-- Item 4: Harry Potter Complete Set -->
+       <div class="col-12 col-sm-6 col-lg-3">
+     <div class="item-card">
+             <div class="item-image-wrapper">
+      <img src="https://images.unsplash.com/photo-1615799998603-7c6270a45196?w=500&h=500&fit=crop" alt="Harry Potter Complete Set" class="item-image">
+            <span class="item-badge badge-good">Good</span>
+                 <button class="btn-wishlist">
+    <i class="bi bi-heart"></i>
+       </button>
+ </div>
+             <div class="item-details">
+   <h3 class="item-title">Harry Potter Complete Set</h3>
+      <p class="item-description">All 7 Harry Potter books in hardcover. Great condition, perfect for collectors.</p>
+      <div class="item-footer">
+          <span class="item-price">$85</span>
+    <div class="item-rating">
+     <i class="bi bi-star-fill text-success"></i>
+             <span class="rating-value">4.7</span>
+     </div>
+     </div>
+                  </div>
+  </div>
+            </div>
+        </div>
+  </div>
+</section>
