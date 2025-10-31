@@ -71,14 +71,36 @@
 
                         <!-- Icon Actions -->
                         <div class="icon-actions d-flex align-items-center gap-2">
-                            <a href="#cart" class="action-icon cart-icon">
+                            <a href="#cart" class="action-icon cart-icon" title="Shopping Cart">
                                 <i class="bi bi-cart3"></i>
                                 <span class="icon-badge">0</span>
                             </a>
-                            <a href="#profile" class="action-icon">
-                                <i class="bi bi-person-circle"></i>
-                            </a>
-                            <a href="#admin" class="btn-admin">Admin</a>
+                            
+                            @if (Context.Session.GetString("Username") != null)
+                            {
+                                <!-- Logged In User -->
+                                <span class="user-welcome">Welcome, @Context.Session.GetString("Username")</span>
+                                <form method="post" asp-controller="Home" asp-action="Logout" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn-logout-nav">
+                                        <i class="bi bi-box-arrow-right"></i>
+                                        <span>Logout</span>
+                                    </button>
+                                </form>
+                                
+                                @if (Context.Session.GetString("IsAdmin") == "true")
+                                {
+                                    <a href="@Url.Action("AdminDashboard", "Home")" class="btn-admin">Admin</a>
+                                }
+                            }
+                            else
+                            {
+                                <!-- Not Logged In -->
+                                <a href="@Url.Action("Login", "Home")" class="btn-login-nav">
+                                    <i class="bi bi-box-arrow-in-right"></i>
+                                    <span>Login</span>
+                                </a>
+                            }
                         </div>
                     </div>
                 </div>
