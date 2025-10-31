@@ -37,7 +37,7 @@ namespace IPTSYSTEM.Controllers
       },
      [0] = new List<Message>
      {
-         new Message { Id = 1, ConversationId = 0, SenderId = "bot", SenderName = "AI Assistant", Content = "?? Hello! I'm your AI shopping assistant. I can help you with:\n\n• Product recommendations\n• Price negotiations\n• Listing questions\n• General marketplace info\n\nHow can I assist you today?", Timestamp = DateTime.Now.AddMinutes(-1), IsFromBot = true }
+         new Message { Id = 1, ConversationId = 0, SenderId = "bot", SenderName = "AI Assistant", Content = "?? Hello! I'm your AI shopping assistant. I can help you with:\n\n?? Product recommendations\n?? Price negotiations\n?? Listing questions\n? General marketplace info\n\nHow can I assist you today?", Timestamp = DateTime.Now.AddMinutes(-1), IsFromBot = true }
  }
         };
 
@@ -72,6 +72,221 @@ _logger = logger;
   public IActionResult Messages()
       {
          return View(_conversations);
+        }
+
+        // ========== AUTHENTICATION OPERATIONS ==========
+        
+        [HttpGet]
+        public IActionResult Login()
+        {
+            return View(new LoginViewModel());
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        {
+            try
+            {
+                // Validate input
+                if (string.IsNullOrWhiteSpace(request.EmailOrUsername) || string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return Json(new LoginResponse
+                    {
+                        Success = false,
+                        Message = "Email/Username and Password are required"
+                    });
+                }
+
+                // Check for admin credentials (static account)
+                const string ADMIN_USERNAME = "admin@gmail.com";
+                const string ADMIN_PASSWORD = "admin123!";
+
+                bool isAdmin = false;
+                
+                // Check if logging in as admin
+                if (request.EmailOrUsername.ToLower() == ADMIN_USERNAME && request.Password == ADMIN_PASSWORD)
+                {
+                    isAdmin = true;
+                    
+                    // Set admin session
+                    HttpContext.Session.SetString("IsAdmin", "true");
+                    HttpContext.Session.SetString("Username", ADMIN_USERNAME);
+                    
+                    // Simulate authentication delay
+                    await Task.Delay(500);
+
+                    return Json(new LoginResponse
+                    {
+                        Success = true,
+                        Message = "Admin login successful! Redirecting...",
+                        RedirectUrl = "/Home/Landing"
+                    });
+                }
+
+                // Demo authentication - Replace with actual authentication service in production
+                // For demo purposes, accept any credentials with password length >= 6
+                if (request.Password.Length >= 6)
+                {
+                    // Simulate authentication delay
+                    await Task.Delay(500);
+
+                    // Set regular user session (not admin)
+                    HttpContext.Session.SetString("IsAdmin", "false");
+                    HttpContext.Session.SetString("Username", request.EmailOrUsername);
+                    
+                    return Json(new LoginResponse
+                    {
+                        Success = true,
+                        Message = "Login successful! Redirecting...",
+                        RedirectUrl = "/Home/Landing"
+                    });
+                }
+                else
+                {
+                    return Json(new LoginResponse
+                    {
+                        Success = false,
+                        Message = "Invalid credentials. Please try again."
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Login error");
+                return Json(new LoginResponse
+                {
+                    Success = false,
+                    Message = "An error occurred during login. Please try again."
+                });
+            }
+        }
+
+        [HttpGet]
+        public IActionResult Register()
+        {
+            return View(new RegisterViewModel());
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        {
+            try
+            {
+                // Validate input
+                if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email) || 
+                    string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return Json(new RegisterResponse
+                    {
+                        Success = false,
+                        Message = "All fields are required"
+                    });
+                }
+
+                // Validate email format
+                if (!request.Email.Contains("@"))
+                {
+                    return Json(new RegisterResponse
+                    {
+                        Success = false,
+                        Message = "Please enter a valid email address"
+                    });
+                }
+
+                // Validate password length
+                if (request.Password.Length < 6)
+                {
+                    return Json(new RegisterResponse
+                    {
+                        Success = false,
+                        Message = "Password must be at least 6 characters"
+                    });
+                }
+
+                // Validate password match
+                if (request.Password != request.ConfirmPassword)
+                {
+                    return Json(new RegisterResponse
+                    {
+                        Success = false,
+                        Message = "Passwords do not match"
+                    });
+                }
+
+                // Validate terms agreement
+                if (!request.AgreeToTerms)
+                {
+                    return Json(new RegisterResponse
+                    {
+                        Success = false,
+                        Message = "You must agree to the Terms and Conditions"
+                    });
+                }
+
+                // Demo registration - Replace with actual user creation in production
+                // Simulate registration delay
+                await Task.Delay(800);
+
+                // In production, create user in database
+                // Example:
+                // var user = new ApplicationUser
+                // {
+                //     UserName = request.Username,
+                //     Email = request.Email,
+                //     FullName = request.FullName
+                // };
+                // var result = await _userManager.CreateAsync(user, request.Password);
+
+                // For demo, accept all valid registrations
+                return Json(new RegisterResponse
+                {
+                    Success = true,
+                    Message = "Account created successfully! Redirecting to login...",
+                    RedirectUrl = "/Home/Login"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Registration error");
+                return Json(new RegisterResponse
+                {
+                    Success = false,
+                    Message = "An error occurred during registration. Please try again."
+                });
+            }
+        }
+
+        [HttpGet]
+        public IActionResult ExternalLogin(string provider)
+        {
+            // Handle external authentication (Google, Facebook)
+            // In production, implement OAuth flow
+            _logger.LogInformation($"External login initiated for provider: {provider}");
+            
+            // Redirect to OAuth provider
+            // Example: return Challenge(new AuthenticationProperties { RedirectUri = "/Home/ExternalLoginCallback" }, provider);
+            
+            return RedirectToAction("Login");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExternalLoginCallback()
+        {
+            // Handle OAuth callback
+            // Authenticate user and create session
+            await Task.CompletedTask;
+            return RedirectToAction("Landing");
+        }
+
+        [HttpPost]
+        public IActionResult Logout()
+        {
+            // Clear all session data including admin status
+            HttpContext.Session.Clear();
+            
+            return RedirectToAction("Login");
         }
 
      // ========== CRUD OPERATIONS FOR LISTINGS ==========
@@ -271,7 +486,7 @@ return Json(new { success = false, message = ex.Message });
    }
        else if (userMessage.Contains("recommend") || userMessage.Contains("suggest"))
        {
-          return "? I'd be happy to recommend items! What category interests you?\n\n• Electronics\n• Fashion\n• Home & Living\n• Books\n• Sports\n\nJust let me know!";
+          return "?? I'd be happy to recommend items! What category interests you?\n\n?? Electronics\n?? Fashion\n?? Home & Living\n?? Books\n? Sports\n\nJust let me know!";
             }
     else if (userMessage.Contains("problem") || userMessage.Contains("issue") || userMessage.Contains("help") || userMessage.Contains("concern"))
   {
@@ -279,19 +494,19 @@ return Json(new { success = false, message = ex.Message });
             }
        else if (userMessage.Contains("ship") || userMessage.Contains("deliver"))
        {
-   return "?? Shipping Information:\n\n• Standard: 5-7 business days\n• Express: 2-3 business days\n• Tracking provided for all orders\n• Free shipping on orders over $50\n\nNeed more details?";
+   return "?? Shipping Information:\n\n?? Standard: 5-7 business days\n? Express: 2-3 business days\n?? Tracking provided for all orders\n?? Free shipping on orders over $50\n\nNeed more details?";
             }
  else if (userMessage.Contains("return") || userMessage.Contains("refund"))
   {
-     return "?? Return Policy:\n\n• 30-day return window\n• Items must be in original condition\n• Full refund or exchange available\n• Free return shipping\n\nWould you like to initiate a return?";
+     return "?? Return Policy:\n\n? 30-day return window\n?? Items must be in original condition\n?? Full refund or exchange available\n?? Free return shipping\n\nWould you like to initiate a return?";
             }
             else if (userMessage.Contains("pay") || userMessage.Contains("payment"))
 {
-         return "?? We accept:\n\n• Credit/Debit Cards\n• PayPal\n• Apple Pay\n• Google Pay\n• Bank Transfer\n\nAll transactions are secure and encrypted. Need payment assistance?";
+         return "?? We accept:\n\n?? Credit/Debit Cards\n??? PayPal\n?? Apple Pay\n?? Google Pay\n?? Bank Transfer\n\nAll transactions are secure and encrypted. Need payment assistance?";
   }
        else if (userMessage.Contains("account") || userMessage.Contains("profile"))
     {
-            return "?? Account Help:\n\n• Update profile information\n• Change password\n• Manage notifications\n• View order history\n\nWhat would you like to do with your account?";
+            return "?? Account Help:\n\n?? Update profile information\n?? Change password\n?? Manage notifications\n?? View order history\n\nWhat would you like to do with your account?";
    }
             else if (userMessage.Contains("thank") || userMessage.Contains("thanks"))
      {
@@ -303,7 +518,7 @@ return Json(new { success = false, message = ex.Message });
       }
     else
             {
-     return "I understand you're asking about: \"" + userMessage + "\"\n\n?? I can help you with:\n\n• Product recommendations\n• Price inquiries\n• Shipping & returns\n• Account issues\n• General marketplace questions\n\nCould you please provide more specific details so I can assist you better?";
+     return "I understand you're asking about: \"" + userMessage + "\"\n\n?? I can help you with:\n\n?? Product recommendations\n?? Price inquiries\n?? Shipping & returns\n?? Account issues\n? General marketplace questions\n\nCould you please provide more specific details so I can assist you better?";
             }
         }
 
@@ -313,10 +528,51 @@ return Json(new { success = false, message = ex.Message });
          return View("Mylisting");
         }
 
+        // ========== ADMIN DASHBOARD ==========
+        
+        [HttpGet]
+        public IActionResult AdminDashboard(string menu = "overview")
+        {
+            // Check if user is admin
+            if (HttpContext.Session.GetString("IsAdmin") != "true")
+            {
+                return RedirectToAction("Login");
+            }
+
+            // Prepare dashboard data
+            var viewModel = new AdminDashboardViewModel
+            {
+                Stats = new DashboardStats
+                {
+                    TotalUsers = 12453,
+                    TotalListings = 8921,
+                    TotalRevenue = 456230,
+                    ActiveTransactions = 342
+                },
+                RecentUsers = new List<RecentUser>
+                {
+                    new RecentUser { Id = 1, Name = "Juan Dela Cruz", Email = "juan@example.com", JoinDate = "2025-10-25", Status = "active" },
+                    new RecentUser { Id = 2, Name = "Maria Santos", Email = "maria@example.com", JoinDate = "2025-10-24", Status = "active" },
+                    new RecentUser { Id = 3, Name = "Carlo Reyes", Email = "carlo@example.com", JoinDate = "2025-10-23", Status = "inactive" },
+                    new RecentUser { Id = 4, Name = "Ana Garcia", Email = "ana@example.com", JoinDate = "2025-10-22", Status = "active" }
+                },
+                RecentListings = new List<RecentListing>
+                {
+                    new RecentListing { Id = 1, Title = "iPhone 14 Pro", Seller = "Juan Dela Cruz", Price = 35000, Views = 452, Status = "active" },
+                    new RecentListing { Id = 2, Title = "Nike Air Max", Seller = "Maria Santos", Price = 4500, Views = 128, Status = "active" },
+                    new RecentListing { Id = 3, Title = "MacBook Pro M2", Seller = "Carlo Reyes", Price = 89000, Views = 876, Status = "flagged" },
+                    new RecentListing { Id = 4, Title = "Samsung 65\" TV", Seller = "Ana Garcia", Price = 28000, Views = 234, Status = "active" }
+                },
+                ActiveMenu = menu
+            };
+
+            return View(viewModel);
+        }
+
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
     {
     return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
    }
-}
+    }
 }
