@@ -63,27 +63,67 @@ class LoginController {
         this.setLoadingState(true);
 
         try {
-            const response = await fetch('/Home/Login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'RequestVerificationToken': formData.get('__RequestVerificationToken')
-                },
-                body: JSON.stringify(data)
-            });
+            // Prefer client-side Firebase sign-in if available
+            if (typeof window.firebaseSignIn === 'function') {
+                const result = await window.firebaseSignIn(data.emailOrUsername, data.password);
 
-            const result = await response.json();
+                if (result && result.success) {
+                    // Try to establish a server-side session for UI personalization
+                    try {
+                        const email = (result.profile && result.profile.email) ? result.profile.email : data.emailOrUsername;
+                        const serverResp = (typeof window.establishServerSession === 'function') ? await window.establishServerSession(email, result.uid) : null;
+                        if (serverResp && serverResp.success) {
+                            console.debug('Server session established');
+                        } else {
+                            console.warn('Server session not established', serverResp);
+                        }
+                    } catch (ex) {
+                        console.warn('Error establishing server session', ex);
+                    }
 
-            if (result.success) {
-                this.showToast('Success!', result.message, 'success');
-                
-                // Redirect after short delay
-                setTimeout(() => {
-                    window.location.href = result.redirectUrl || '/Home/Landing';
-                }, 1000);
+                    this.showToast('Success!', 'Login successful! Redirecting...', 'success');
+                    setTimeout(() => { window.location.href = '/Home/Landing'; }, 800);
+                } else {
+                    const code = result?.code || null;
+
+                    // More specific user-facing messages for common auth failures
+                    if (code === 'user-doc-not-found') {
+                        this.showToast('Login Failed', 'Your account is missing a profile in our database. Please register first.', 'error');
+                    } else if (code === 'auth/user-not-found' || code === 'auth/invalid-login-credentials') {
+                        // Map Firebase's combined invalid-login-credentials or user-not-found into a friendly message
+                        this.showToast('Login Failed', "Your login credentials don't match an account in our system.", 'error');
+                    } else if (code === 'auth/wrong-password') {
+                        this.showToast('Login Failed', 'Incorrect password. Try again or use the Forgot Password option.', 'error');
+                    } else if (code === 'auth/too-many-requests') {
+                        this.showToast('Login Failed', 'Too many failed attempts. Please wait and try again later or reset your password.', 'error');
+                    } else if (code === 'auth/invalid-email') {
+                        this.showToast('Login Failed', 'The email address is not valid. Please check and try again.', 'error');
+                    } else {
+                        this.showToast('Login Failed', result?.message || 'Login failed', 'error');
+                    }
+
+                    this.setLoadingState(false);
+                }
             } else {
-                this.showToast('Login Failed', result.message, 'error');
-                this.setLoadingState(false);
+                // Fallback to existing server-side login
+                const response = await fetch('/Home/Login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': formData.get('__RequestVerificationToken')
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    this.showToast('Success!', result.message, 'success');
+                    setTimeout(() => { window.location.href = result.redirectUrl || '/Home/Landing'; }, 1000);
+                } else {
+                    this.showToast('Login Failed', result.message, 'error');
+                    this.setLoadingState(false);
+                }
             }
         } catch (error) {
             console.error('Login error:', error);

@@ -406,6 +406,15 @@ select.form-control:focus option, select.form-control:active option {
     font-weight: 500;
 }
 
+/* Asterisk for required fields - keep inline beside label */
+.required-asterisk {
+    display: inline-block;
+    color: var(--primary-red);
+    margin-left: 0.35rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
 /* Toast Notifications */
 .toast {
     border: none;

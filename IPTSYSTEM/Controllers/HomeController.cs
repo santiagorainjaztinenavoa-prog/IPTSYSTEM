@@ -1,11 +1,25 @@
 using System.Diagnostics;
 using IPTSYSTEM.Models;
+// Server-side Firebase admin integration removed - client-side Firebase is used for registrations
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IPTSYSTEM.Controllers
 {
-    public class HomeController : Controller
-    {
+        public class HomeController : Controller
+        {
+            // In-memory registered users (populated by server-side Register fallback)
+            private record RegisteredUser(string Username, string PasswordHash, string UserType, string Email, string FullName);
+            private static readonly List<RegisteredUser> _registeredUsers = new();
+
+            private static string HashPassword(string pwd)
+            {
+                using var sha = SHA256.Create();
+                var bytes = Encoding.UTF8.GetBytes(pwd ?? string.Empty);
+                var hash = sha.ComputeHash(bytes);
+                return Convert.ToHexString(hash);
+            }
         private readonly ILogger<HomeController> _logger;
         // In-memory storage for demo - replace with database in production
         private static List<Listing> _listings = new List<Listing>
@@ -124,39 +138,29 @@ _logger = logger;
                     });
                 }
 
-                // Demo authentication - Replace with actual authentication service in production
-                // For demo purposes, accept any credentials with password length >= 6
-                if (request.Password.Length >= 6)
+                // Check registered users (server-side fallback registration)
+                var hashed = HashPassword(request.Password);
+                var regUser = _registeredUsers.FirstOrDefault(u => (u.Username == request.EmailOrUsername || u.Email == request.EmailOrUsername) && u.PasswordHash == hashed);
+                if (regUser != null)
                 {
-                    // Simulate authentication delay
-                    await Task.Delay(500);
-
-                    // Set regular user session (not admin)
                     HttpContext.Session.SetString("IsAdmin", "false");
-                    HttpContext.Session.SetString("Username", request.EmailOrUsername);
-                    // Fetch user details from registration (demo: search _listings for username)
-                    var user = _listings.FirstOrDefault(l => l.Title == request.EmailOrUsername);
-                    if (user != null)
-                    {
-                        HttpContext.Session.SetString("FullName", user.Title);
-                        HttpContext.Session.SetString("AccountType", user.Condition ?? "Buyer");
-                    }
-                    
+                    HttpContext.Session.SetString("Username", regUser.Username);
+                    HttpContext.Session.SetString("UserType", regUser.UserType);
+                    await Task.Delay(500);
                     return Json(new LoginResponse
                     {
                         Success = true,
-                        Message = "Login successful! Redirecting...",
+                        Message = $"{regUser.UserType.ToUpper()} login successful! Redirecting...",
                         RedirectUrl = "/Home/Landing"
                     });
                 }
-                else
+
+                // No matching user found
+                return Json(new LoginResponse
                 {
-                    return Json(new LoginResponse
-                    {
-                        Success = false,
-                        Message = "Invalid credentials. Please try again."
-                    });
-                }
+                    Success = false,
+                    Message = "Invalid credentials. Please try again."
+                });
             }
             catch (Exception ex)
             {
@@ -236,17 +240,38 @@ _logger = logger;
                 // Simulate registration delay
                 await Task.Delay(800);
 
-                // In production, create user in database
-                // Example:
-                // var user = new ApplicationUser
-                // {
-                //     UserName = request.Username,
-                //     Email = request.Email,
-                //     FullName = request.FullName
-                // };
-                // var result = await _userManager.CreateAsync(user, request.Password);
+                // Registration persistence is handled on the client using Firebase Auth + Firestore.
+                // Server-side Firestore writes have been intentionally removed to avoid storing service account credentials
+                // on this project. If you later want server-side persistence, reintroduce admin SDK usage here.
 
-                // For demo, accept all valid registrations
+                // For demo, persist user in an in-memory list so server-side login can use AccountType
+                try
+                {
+                    // Prevent duplicate username/email
+                    if (_registeredUsers.Any(u => u.Username == request.Username || u.Email == request.Email))
+                    {
+                        return Json(new RegisterResponse { Success = false, Message = "Username or email already in use." });
+                    }
+
+                    string HashPassword(string pwd)
+                    {
+                        using var sha = SHA256.Create();
+                        var bytes = Encoding.UTF8.GetBytes(pwd ?? string.Empty);
+                        var hash = sha.ComputeHash(bytes);
+                        return Convert.ToHexString(hash);
+                    }
+
+                    var userHash = HashPassword(request.Password);
+                    var userType = string.IsNullOrWhiteSpace(request.AccountType) ? "Buyer" : request.AccountType;
+
+                    _registeredUsers.Add(new RegisteredUser(request.Username, userHash, userType.ToLowerInvariant(), request.Email, request.FullName));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to persist in-memory registered user");
+                    return Json(new RegisterResponse { Success = false, Message = "Registration failed. Please try again." });
+                }
+
                 return Json(new RegisterResponse
                 {
                     Success = true,
@@ -294,6 +319,58 @@ _logger = logger;
             HttpContext.Session.Clear();
             
             return RedirectToAction("Login");
+        }
+
+        // Client-side helper: called after Firebase client sign-in to establish a server session
+        public class ClientLoginRequest
+        {
+            public string? Email { get; set; }
+            public string? Uid { get; set; }
+            public string? Username { get; set; }
+            public string? UserType { get; set; }
+            public string? FullName { get; set; }
+        }
+
+        [HttpPost]
+        public IActionResult ClientLogin([FromBody] ClientLoginRequest req)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(req?.Email))
+                {
+                    return Json(new LoginResponse { Success = false, Message = "Invalid request" });
+                }
+
+                // If client passed Username/UserType, prefer those (useful when server-side persistence hasn't propagated yet)
+                if (!string.IsNullOrWhiteSpace(req.Username))
+                {
+                    HttpContext.Session.SetString("IsAdmin", "false");
+                    HttpContext.Session.SetString("Username", req.Username);
+                    HttpContext.Session.SetString("UserType", (req.UserType ?? "buyer").ToLowerInvariant());
+                    HttpContext.Session.SetString("FullName", req.FullName ?? string.Empty);
+                    return Json(new LoginResponse { Success = true, Message = "Server session established" });
+                }
+
+                // Find registered user by email as fallback
+                var regUser = _registeredUsers.FirstOrDefault(u => string.Equals(u.Email, req.Email, StringComparison.OrdinalIgnoreCase));
+                if (regUser == null)
+                {
+                    return Json(new LoginResponse { Success = false, Message = "No server-side profile found for this account" });
+                }
+
+                // Set server session values
+                HttpContext.Session.SetString("IsAdmin", "false");
+                HttpContext.Session.SetString("Username", regUser.Username);
+                HttpContext.Session.SetString("UserType", regUser.UserType);
+                HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+
+                return Json(new LoginResponse { Success = true, Message = "Server session established" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ClientLogin error");
+                return Json(new LoginResponse { Success = false, Message = "Server error" });
+            }
         }
 
      // ========== CRUD OPERATIONS FOR LISTINGS ==========

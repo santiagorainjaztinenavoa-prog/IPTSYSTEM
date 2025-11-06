@@ -57,6 +57,15 @@
                                 <span>Messages</span>
                             </a>
                         </li>
+                        @if (Context.Session.GetString("UserType") == "seller")
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link modern-nav-link d-flex align-items-center" href="#saved" title="Saved Products" style="gap:8px;">
+                                    <i class="bi bi-box-seam" style="font-size:1.15rem;"></i>
+                                    <span>Saved Products</span>
+                                </a>
+                            </li>
+                        }
                     </ul>
 
                     <!-- Right Side - Search + Icons -->
@@ -71,13 +80,21 @@
 
                         <!-- Icon Actions -->
                         <div class="icon-actions d-flex align-items-center gap-2">
-                            @* Cart icon only visible for logged-in users *@
+                            @* Cart or Saved Products icon based on user type *@
                             @if (Context.Session.GetString("Username") != null)
                             {
-                                <a href="#cart" class="action-icon cart-icon" title="Shopping Cart">
-                                    <i class="bi bi-cart3"></i>
-                                    <span class="icon-badge">0</span>
-                                </a>
+                                var userType = Context.Session.GetString("UserType");
+                                if (userType == "buyer")
+                                {
+                                    <a href="#cart" class="action-icon cart-icon" title="Shopping Cart">
+                                        <i class="bi bi-cart3"></i>
+                                        <span class="icon-badge">0</span>
+                                    </a>
+                                }
+                                else if (userType == "seller")
+                                {
+                                    // Removed duplicate Saved Products icon from right side
+                                }
                                 <!-- Logged In User -->
                                 <span class="user-welcome">Welcome, @Context.Session.GetString("Username")</span>
                                 <form method="post" asp-controller="Home" asp-action="Logout" class="d-inline">

@@ -52,13 +52,17 @@ class RegisterController {
         e.preventDefault();
 
         const formData = new FormData(this.form);
+        const firstName = (formData.get('FirstName') || '').toString().trim();
+        const lastName = (formData.get('LastName') || '').toString().trim();
+        const accountType = (formData.get('AccountType') || '').toString();
         const data = {
-            fullName: formData.get('FullName'),
+            // Combine first and last name into fullName for server-side compatibility
+            fullName: `${firstName} ${lastName}`.trim(),
             email: formData.get('Email'),
             username: formData.get('Username'),
             password: formData.get('Password'),
             confirmPassword: formData.get('ConfirmPassword'),
-            agreeToTerms: formData.get('AgreeToTerms') === 'true'
+            agreeToTerms: formData.get('AgreeToTerms') !== null
         };
 
         // Client-side validation
@@ -70,31 +74,82 @@ class RegisterController {
         this.setLoadingState(true);
 
         try {
-            const response = await fetch('/Home/Register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'RequestVerificationToken': formData.get('__RequestVerificationToken')
-                },
-                body: JSON.stringify(data)
-            });
+            // Prefer client-side Firebase registration if available
+            if (typeof window.firebaseRegister === 'function') {
+                const result = await window.firebaseRegister(firstName, lastName, data.email, data.password, data.username, accountType);
 
-            const result = await response.json();
+                if (result && result.success) {
+                    // Also notify server fallback so server can track registered users for demo login
+                    try {
+                        await fetch('/Home/Register', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'RequestVerificationToken': formData.get('__RequestVerificationToken')
+                            },
+                            body: JSON.stringify({
+                                AccountType: accountType,
+                                FullName: data.fullName,
+                                Email: data.email,
+                                Username: data.username,
+                                Password: data.password,
+                                ConfirmPassword: data.confirmPassword,
+                                AgreeToTerms: data.agreeToTerms
+                            })
+                        });
+                    } catch (ex) {
+                        console.warn('Server fallback registration failed (non-blocking):', ex);
+                    }
 
-            if (result.success) {
-                this.showToast('Success!', result.message, 'success');
-                
-                // Redirect after short delay
-                setTimeout(() => {
-                    window.location.href = result.redirectUrl || '/Home/Login';
-                }, 1500);
+                    this.showToast('Success!', 'Account created successfully! Redirecting to login...', 'success');
+                    setTimeout(() => window.location.href = '/Home/Login', 1400);
+                } else {
+                    const code = result?.code ? result.code : null;
+                    const message = result?.message || 'Unknown error';
+
+                    // Helpful guidance for common Firebase errors
+                    if (code === 'auth/operation-not-allowed') {
+                        // Try to get projectId from the loaded config for a direct console link
+                        const pid = (window.__firebaseConfig && window.__firebaseConfig.projectId) ? window.__firebaseConfig.projectId : null;
+                        const consoleLink = pid ? `https://console.firebase.google.com/project/${pid}/authentication/providers` : 'https://console.firebase.google.com/project/_/authentication/providers';
+                        this.showToast('Registration Failed: Email/Password sign-in disabled', 'Email/Password sign-in is not enabled for this Firebase project. Open the Firebase Console Authentication -> Sign-in method and enable Email/Password. See console for a link.', 'error');
+                        console.error('Firebase auth error (operation-not-allowed). To fix: enable Email/Password provider in Firebase Console:', consoleLink);
+                    } else if (code === 'auth/email-already-in-use') {
+                        this.showToast('Registration Failed', 'That email is already in use. Try logging in or use a different email.', 'error');
+                    } else if (code === 'auth/weak-password') {
+                        this.showToast('Registration Failed', 'Password is too weak. Use at least 6 characters.', 'error');
+                    } else {
+                        const display = code ? '[' + code + '] ' + message : message;
+                        this.showToast('Registration Failed: ' + display, 'error');
+                    }
+
+                    console.warn('Registration error response', result);
+                    this.setLoadingState(false);
+                }
             } else {
-                this.showToast('Registration Failed', result.message, 'error');
-                this.setLoadingState(false);
+                // Fallback: server-side registration POST
+                const response = await fetch('/Home/Register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': formData.get('__RequestVerificationToken')
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    this.showToast('Success!', result.message, 'success');
+                    setTimeout(() => window.location.href = result.redirectUrl || '/Home/Login', 1500);
+                } else {
+                    this.showToast('Registration Failed', result.message, 'error');
+                    this.setLoadingState(false);
+                }
             }
         } catch (error) {
             console.error('Registration error:', error);
-            this.showToast('Error', 'An unexpected error occurred. Please try again.', 'error');
+            this.showToast('Error', error?.message || 'An unexpected error occurred. Please try again.', 'error');
             this.setLoadingState(false);
         }
     }
@@ -268,3 +323,12 @@ class RegisterController {
 document.addEventListener('DOMContentLoaded', () => {
     new RegisterController();
 });
+
+// Debug: print loaded firebase config when present to help diagnose auth issues
+try {
+    if (typeof window.__firebaseConfig !== 'undefined') {
+        console.debug('Loaded firebase config:', window.__firebaseConfig);
+    }
+} catch (e) {
+    console.debug('No firebase config available:', e);
+}

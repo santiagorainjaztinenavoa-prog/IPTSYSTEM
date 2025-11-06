@@ -57,24 +57,34 @@
           
     <!-- Price & Category -->
        <div class="product-meta">
-        <span class="product-price">$@listing.Price</span>
+    <span class="product-price">₱@listing.Price</span>
             <span class="product-category">@listing.Category</span>
       </div>
 
            <!-- Action Buttons -->
           <div class="product-actions">
- <button class="btn-action btn-edit-minimal" 
-                 onclick="editListing(@listing.Id)"
-          title="Edit">
-             <i class="bi bi-pencil"></i>
-     Edit
-     </button>
-                <button class="btn-action btn-delete-minimal" 
-     onclick="deleteListing(@listing.Id, '@listing.Title')"
-       title="Delete">
-     <i class="bi bi-trash"></i>
-         </button>
-         </div>
+            @if (Context.Session.GetString("UserType") == "seller")
+            {
+                <button class="btn-action btn-edit-minimal" onclick="editListing(@listing.Id)" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                    Edit
+                </button>
+                <button class="btn-action btn-delete-minimal" onclick="deleteListing(@listing.Id, '@listing.Title')" title="Delete">
+                    <i class="bi bi-trash"></i>
+                </button>
+            }
+            else if (Context.Session.GetString("UserType") == "buyer")
+            {
+                <button class="btn-action btn-buy-minimal animate__animated animate__pulse" onclick="buyProduct(@listing.Id)" title="Buy" style="background:#10b981;color:#fff;font-weight:600;">
+                    <i class="bi bi-bag-check"></i>
+                    Buy
+                </button>
+                <button class="btn-action btn-message-minimal animate__animated animate__pulse" onclick="messageSeller(@listing.Id)" title="Message Seller" style="background:#2563eb;color:#fff;font-weight:600;">
+                    <i class="bi bi-chat-dots"></i>
+                    Message Seller
+                </button>
+            }
+          </div>
          </div>
  </div>
       }
