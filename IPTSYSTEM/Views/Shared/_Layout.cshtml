@@ -71,23 +71,45 @@
 
                         <!-- Icon Actions -->
                         <div class="icon-actions d-flex align-items-center gap-2">
-                            <a href="#cart" class="action-icon cart-icon" title="Shopping Cart">
-                                <i class="bi bi-cart3"></i>
-                                <span class="icon-badge">0</span>
-                            </a>
-                            
+                            @* Cart icon only visible for logged-in users *@
                             @if (Context.Session.GetString("Username") != null)
                             {
+                                <a href="#cart" class="action-icon cart-icon" title="Shopping Cart">
+                                    <i class="bi bi-cart3"></i>
+                                    <span class="icon-badge">0</span>
+                                </a>
                                 <!-- Logged In User -->
                                 <span class="user-welcome">Welcome, @Context.Session.GetString("Username")</span>
                                 <form method="post" asp-controller="Home" asp-action="Logout" class="d-inline">
                                     @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn-logout-nav">
+                                    <button type="button" class="btn-logout-nav" data-bs-toggle="modal" data-bs-target="#logoutConfirmModal">
                                         <i class="bi bi-box-arrow-right"></i>
                                         <span>Logout</span>
                                     </button>
+        <!-- Logout Confirmation Modal -->
+        <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutConfirmModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content animate__animated animate__fadeInDown">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="logoutConfirmModalLabel">Confirm Logout</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        Are you sure you want to logout?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <form method="post" asp-controller="Home" asp-action="Logout" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-danger">Logout</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <!-- Animate.css for modal animation -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
                                 </form>
-                                
                                 @if (Context.Session.GetString("IsAdmin") == "true")
                                 {
                                     <a href="@Url.Action("AdminDashboard", "Home")" class="btn-admin">Admin</a>
@@ -96,6 +118,7 @@
                             else
                             {
                                 <!-- Not Logged In -->
+                                @* Cart icon is NOT rendered for visitors *@
                                 <a href="@Url.Action("Login", "Home")" class="btn-login-nav">
                                     <i class="bi bi-box-arrow-in-right"></i>
                                     <span>Login</span>

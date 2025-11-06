@@ -134,6 +134,13 @@ _logger = logger;
                     // Set regular user session (not admin)
                     HttpContext.Session.SetString("IsAdmin", "false");
                     HttpContext.Session.SetString("Username", request.EmailOrUsername);
+                    // Fetch user details from registration (demo: search _listings for username)
+                    var user = _listings.FirstOrDefault(l => l.Title == request.EmailOrUsername);
+                    if (user != null)
+                    {
+                        HttpContext.Session.SetString("FullName", user.Title);
+                        HttpContext.Session.SetString("AccountType", user.Condition ?? "Buyer");
+                    }
                     
                     return Json(new LoginResponse
                     {

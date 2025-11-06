@@ -4,6 +4,9 @@ namespace IPTSYSTEM.Models
 {
     public class RegisterViewModel
     {
+        [Required(ErrorMessage = "Please select your account type")]
+        [Display(Name = "Account Type")]
+        public string AccountType { get; set; } = string.Empty;
         [Required(ErrorMessage = "Full name is required")]
         [Display(Name = "Full Name")]
         [StringLength(100, MinimumLength = 2, ErrorMessage = "Name must be between 2 and 100 characters")]
