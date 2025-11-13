@@ -95,6 +95,79 @@
                     <span asp-validation-for="Username" class="text-danger"></span>
                 </div>
 
+                <!-- Phone Number Field -->
+                <div class="form-group">
+                    <label class="form-label">Phone Number <span class="required-asterisk">*</span></label>
+                    <div class="input-with-icon">
+                        <i class="bi bi-telephone input-icon"></i>
+                        <input name="PhoneNumber" 
+                               id="PhoneNumber"
+                               type="tel"
+                               class="form-control" 
+                               placeholder="Enter your phone number" 
+                               autocomplete="tel"
+                               required />
+                    </div>
+                    <span class="text-danger" data-valmsg-for="PhoneNumber" data-valmsg-replace="true"></span>
+                </div>
+
+                <!-- Address Cascade: Region / Province / City / Barangay -->
+                <div class="form-group">
+                    <label class="form-label">Location <span class="required-asterisk">*</span></label>
+                    <div class="row g-2">
+                        <div class="col-12 col-sm-6">
+                            <select id="regionSelect" class="form-control" aria-label="Region">
+                                <option value="">Region</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <select id="provinceSelect" class="form-control" aria-label="Province" disabled>
+                                <option value="">Province</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <select id="citySelect" class="form-control" aria-label="City/Municipality" disabled>
+                                <option value="">City / Municipality</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <select id="barangaySelect" class="form-control" aria-label="Barangay" disabled>
+                                <option value="">Barangay</option>
+                            </select>
+                        </div>
+                    </div>
+                    <input type="hidden" name="Region" id="Region" />
+                    <input type="hidden" name="Province" id="Province" />
+                    <input type="hidden" name="City" id="City" />
+                    <input type="hidden" name="Barangay" id="Barangay" />
+                </div>
+
+                <!-- Address composed display -->
+                <div class="form-group">
+                    <label class="form-label">Address</label>
+                    <div class="input-with-icon">
+                        <i class="bi bi-geo-alt input-icon"></i>
+                        <input asp-for="Address" id="AddressDisplay" class="form-control" placeholder="Region, Province, City, Barangay" readonly />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="row g-2">
+                        <div class="col-12 col-sm-4">
+                            <div class="input-with-icon">
+                                <i class="bi bi-mailbox input-icon"></i>
+                                <input id="PostalCode" name="PostalCode" class="form-control" placeholder="Postal Code" />
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-8">
+                            <div class="input-with-icon">
+                                <i class="bi bi-building input-icon"></i>
+                                <input id="StreetAddress" name="StreetAddress" class="form-control" placeholder="Street Name, Building, House No." />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Password Field -->
                 <div class="form-group">
                     <label asp-for="Password" class="form-label">Password <span class="required-asterisk">*</span></label>

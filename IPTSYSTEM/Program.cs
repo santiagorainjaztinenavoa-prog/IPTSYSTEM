@@ -1,7 +1,16 @@
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+// EF Core DbContext registration (SQL Server)
+builder.Services.AddDbContext<IPTSYSTEM.Data.AppDbContext>(options =>
+{
+    var cs = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Server=.;Database=IPTSYSTEM;Trusted_Connection=True;TrustServerCertificate=True;";
+    options.UseSqlServer(cs);
+});
 
 // Add Session support for admin authentication
 builder.Services.AddDistributedMemoryCache();

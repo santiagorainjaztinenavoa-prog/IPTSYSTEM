@@ -32,6 +32,136 @@ try {
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// -----------------------
+// Geo data (Regions/Provinces/Cities/Barangays) from Firestore
+// Expected collections (client-managed):
+//   ph_regions:      { code, name }
+//   ph_provinces:    { code, name, regionCode }
+//   ph_cities:       { code, name, regionCode, provinceCode }
+//   ph_barangays:    { code, name, cityCode }
+// Field naming is flexible; common aliases are supported (region_code, province_code, city_code, regionName)
+// -----------------------
+const geoCache = {
+  regions: null,
+  provincesByRegion: {},
+  citiesByRegion: {},
+  citiesByProvince: {},
+  barangaysByCity: {}
+};
+
+function mapName(d) {
+  return d.name || d.regionName || d.cityName || d.provinceName || d.barangayName || d.title || '';
+}
+
+function mapRegionCode(d, fallbackId) {
+  return d.regionCode || d.region_code || d.region || fallbackId;
+}
+function mapProvinceCode(d, fallbackId) {
+  return d.provinceCode || d.province_code || d.province || fallbackId;
+}
+function mapCityCode(d, fallbackId) {
+  return d.cityCode || d.city_code || d.municipalityCode || d.municipality_code || d.city || fallbackId;
+}
+
+async function geoLoadRegions() {
+  if (geoCache.regions) return geoCache.regions;
+  const snaps = await getDocs(collection(db, 'ph_regions'));
+  const arr = [];
+  snaps.forEach(docSnap => {
+    const d = docSnap.data() || {};
+    arr.push({ code: d.code || docSnap.id, name: mapName(d) || (d.code || docSnap.id) });
+  });
+  arr.sort((a, b) => a.name.localeCompare(b.name));
+  geoCache.regions = arr;
+  return arr;
+}
+
+async function geoLoadProvincesByRegion(regionCode) {
+  if (!regionCode) return [];
+  if (geoCache.provincesByRegion[regionCode]) return geoCache.provincesByRegion[regionCode];
+  const col = collection(db, 'ph_provinces');
+  // Match multiple possible field names
+  const results = [];
+  for (const f of ['regionCode', 'region_code', 'region']) {
+    const qy = query(col, where(f, '==', regionCode));
+    const snaps = await getDocs(qy);
+    snaps.forEach(s => {
+      const d = s.data() || {};
+      results.push({ code: d.code || s.id, name: mapName(d) || (d.code || s.id), regionCode: mapRegionCode(d, regionCode) });
+    });
+    if (results.length > 0) break;
+  }
+  results.sort((a, b) => a.name.localeCompare(b.name));
+  geoCache.provincesByRegion[regionCode] = results;
+  return results;
+}
+
+async function geoLoadCitiesByRegion(regionCode) {
+  if (!regionCode) return [];
+  if (geoCache.citiesByRegion[regionCode]) return geoCache.citiesByRegion[regionCode];
+  const col = collection(db, 'ph_cities');
+  const results = [];
+  for (const f of ['regionCode', 'region_code', 'region']) {
+    const qy = query(col, where(f, '==', regionCode));
+    const snaps = await getDocs(qy);
+    snaps.forEach(s => {
+      const d = s.data() || {};
+      results.push({ code: d.code || s.id, name: mapName(d) || (d.code || s.id), regionCode: mapRegionCode(d, regionCode), provinceCode: mapProvinceCode(d, null) });
+    });
+    if (results.length > 0) break;
+  }
+  results.sort((a, b) => a.name.localeCompare(b.name));
+  geoCache.citiesByRegion[regionCode] = results;
+  return results;
+}
+
+async function geoLoadCitiesByProvince(provinceCode) {
+  if (!provinceCode) return [];
+  if (geoCache.citiesByProvince[provinceCode]) return geoCache.citiesByProvince[provinceCode];
+  const col = collection(db, 'ph_cities');
+  const results = [];
+  for (const f of ['provinceCode', 'province_code', 'province']) {
+    const qy = query(col, where(f, '==', provinceCode));
+    const snaps = await getDocs(qy);
+    snaps.forEach(s => {
+      const d = s.data() || {};
+      results.push({ code: d.code || s.id, name: mapName(d) || (d.code || s.id), regionCode: mapRegionCode(d, null), provinceCode: mapProvinceCode(d, provinceCode) });
+    });
+    if (results.length > 0) break;
+  }
+  results.sort((a, b) => a.name.localeCompare(b.name));
+  geoCache.citiesByProvince[provinceCode] = results;
+  return results;
+}
+
+async function geoLoadBarangaysByCity(cityCode) {
+  if (!cityCode) return [];
+  if (geoCache.barangaysByCity[cityCode]) return geoCache.barangaysByCity[cityCode];
+  const col = collection(db, 'ph_barangays');
+  const results = [];
+  for (const f of ['cityCode', 'city_code', 'municipalityCode', 'municipality_code', 'city']) {
+    const qy = query(col, where(f, '==', cityCode));
+    const snaps = await getDocs(qy);
+    snaps.forEach(s => {
+      const d = s.data() || {};
+      results.push({ code: d.code || s.id, name: mapName(d) || (d.code || s.id), cityCode: mapCityCode(d, cityCode) });
+    });
+    if (results.length > 0) break;
+  }
+  results.sort((a, b) => a.name.localeCompare(b.name));
+  geoCache.barangaysByCity[cityCode] = results;
+  return results;
+}
+
+// Expose geo loaders
+window.firebaseGeo = {
+  loadRegions: geoLoadRegions,
+  loadProvincesByRegion: geoLoadProvincesByRegion,
+  loadCitiesByRegion: geoLoadCitiesByRegion,
+  loadCitiesByProvince: geoLoadCitiesByProvince,
+  loadBarangaysByCity: geoLoadBarangaysByCity
+};
+
 // Listen for authentication state changes
 auth.onAuthStateChanged((user) => {
   if (user) {
@@ -69,7 +199,8 @@ async function tryAutoSignInFromSession() {
 window.tryAutoSignInFromSession = tryAutoSignInFromSession;
 
 // Expose a simple register helper used by the page
-window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType) {
+// Extended to include location/address fields
+window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType, phoneNumber, region, province, city, barangay, postalCode, streetAddress, composedAddress) {
   try {
     // create user in Firebase Auth
     const userCred = await createUserWithEmailAndPassword(auth, email, password);
@@ -82,7 +213,14 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
       email: email || '',
       username: username || '',
       account_type: accountType || 'Buyer',
-      phone_number: '',
+      phone_number: phoneNumber || '',
+      region: region || '',
+      province: province || '',
+      city: city || '',
+      barangay: barangay || '',
+      postal_code: postalCode || '',
+      street_address: streetAddress || '',
+      address_full: composedAddress || '',
       user_id: uid,
       date_created: serverTimestamp()
     });

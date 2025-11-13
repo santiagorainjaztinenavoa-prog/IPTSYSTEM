@@ -724,10 +724,6 @@ async function loadListingsFromFirebase() {
                     <i class="bi bi-inbox"></i>
                     <h3>No listings yet</h3>
                     <p>Create your first listing to get started!</p>
-                    <button class="btn-add-new" onclick="openListingModal()">
-                        <i class="bi bi-plus-circle me-2"></i>
-                        Add Your First Listing
-                    </button>
                 </div>
             `;
             

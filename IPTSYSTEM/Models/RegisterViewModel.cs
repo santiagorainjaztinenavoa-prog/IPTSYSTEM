@@ -20,7 +20,6 @@ namespace IPTSYSTEM.Models
         [Required(ErrorMessage = "Username is required")]
         [Display(Name = "Username")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3 and 50 characters")]
-        [RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Username can only contain letters, numbers, and underscores")]
         public string Username { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Password is required")]
@@ -36,8 +35,28 @@ namespace IPTSYSTEM.Models
         public string ConfirmPassword { get; set; } = string.Empty;
 
         [Display(Name = "I agree to the Terms and Conditions")]
-        [Range(typeof(bool), "true", "true", ErrorMessage = "You must agree to the Terms and Conditions")]
         public bool AgreeToTerms { get; set; }
+
+        [Required(ErrorMessage = "Phone number is required")]
+        [StringLength(20, MinimumLength = 10, ErrorMessage = "Phone number must be between 10 and 20 characters")]
+        [Display(Name = "Phone Number")]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        // Address fields
+        [Display(Name = "Region")]
+        public string Region { get; set; } = string.Empty;
+        [Display(Name = "Province")]
+        public string Province { get; set; } = string.Empty;
+        [Display(Name = "City/Municipality")]
+        public string City { get; set; } = string.Empty;
+        [Display(Name = "Barangay")]
+        public string Barangay { get; set; } = string.Empty;
+        [Display(Name = "Postal Code")]
+        public string PostalCode { get; set; } = string.Empty;
+        [Display(Name = "Street Address")]
+        public string StreetAddress { get; set; } = string.Empty;
+        [Display(Name = "Address")]
+        public string Address { get; set; } = string.Empty; // Composed Region, Province, City, Barangay
     }
 
     public class RegisterRequest
@@ -49,6 +68,16 @@ namespace IPTSYSTEM.Models
         public string Password { get; set; } = string.Empty;
         public string ConfirmPassword { get; set; } = string.Empty;
         public bool AgreeToTerms { get; set; }
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        // Address fields (optional server-side)
+        public string Region { get; set; } = string.Empty;
+        public string Province { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
+        public string Barangay { get; set; } = string.Empty;
+        public string PostalCode { get; set; } = string.Empty;
+        public string StreetAddress { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty; // Composed
     }
 
     public class RegisterResponse
