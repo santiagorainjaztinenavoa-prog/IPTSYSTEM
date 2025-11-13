@@ -5,6 +5,7 @@
 
 @section Styles {
     <link rel="stylesheet" href="~/css/pages/mylistings.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/listing-form.css" asp-append-version="true" />
 }
 
 <!-- My Listings Page - Modern Minimalist Design -->
@@ -12,20 +13,22 @@
   <div class="container py-5">
         <!-- Page Header - Clean & Simple -->
         <div class="page-header mb-5">
-         <div class="d-flex justify-content-between align-items-center">
-             <div>
-            <h1 class="page-title">My Listings</h1>
-  <p class="page-subtitle">Manage your products</p>
-       </div>
-            @if (Context.Session.GetString("UserType") == "seller" || Context.Session.GetString("UserType") == "admin")
-            {
-                <button class="btn-add-new" onclick="openListingModal()">
-                    <i class="bi bi-plus-circle me-2"></i>
-                    Add New Listing
-                </button>
-            }
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-4">
+                    <div>
+                        <h1 class="page-title">My Listings</h1>
+                        <p class="page-subtitle">Manage your products</p>
+                    </div>
+                </div>
+                @if (Context.Session.GetString("UserType") == "seller" || Context.Session.GetString("UserType") == "admin")
+                {
+                    <button class="btn-add-new" onclick="openListingModal()">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        Add New Listing
+                    </button>
+                }
             </div>
-    </div>
+        </div>
 
         <!-- Listings Grid - Minimalist Cards -->
         <div class="listings-grid" id="listings-container">
@@ -114,7 +117,7 @@
 
 <!-- Add/Edit Listing Modal -->
 <div class="modal fade" id="listingModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content modern-modal">
             <div class="modal-header border-0">
                 <div>
@@ -178,6 +181,7 @@
     <label for="title" class="form-label">Title *</label>
 <input type="text" 
  class="form-control minimal-input" 
+ name="title"
  id="title" 
  placeholder="e.g., iPhone 13 Pro Max 256GB" 
         required
@@ -188,6 +192,7 @@
      <div class="mb-4">
     <label for="description" class="form-label">Description *</label>
     <textarea class="form-control minimal-input" 
+     name="description"
      id="description" 
           rows="3" 
          placeholder="Describe your item..." 
@@ -201,6 +206,7 @@
       <label for="price" class="form-label">Price ($) *</label>
       <input type="number" 
  class="form-control minimal-input" 
+ name="price"
     id="price" 
      placeholder="0.00" 
         step="0.01" 
@@ -211,7 +217,7 @@
 <!-- Category -->
  <div class="col-md-6">
           <label for="category" class="form-label">Category *</label>
-         <select class="form-select minimal-input" id="category" required>
+         <select class="form-select minimal-input" name="category" id="category" required>
     <option value="">Select category</option>
      <option value="Electronics">Electronics</option>
      <option value="Fashion">Fashion</option>
@@ -240,12 +246,14 @@
            <label class="condition-option" for="conditionFair">Fair</label>
          </div>
   </div>
+  
+    <!-- Hidden imageUrl field (already defined at top of form) -->
   </form>
    </div>
           <div class="modal-footer border-0">
          <button type="button" class="btn-modal-cancel" data-bs-dismiss="modal">Cancel</button>
-    <button type="button" class="btn-modal-save" onclick="saveListing()">
-        <span id="saveButtonText">Save Listing</span>
+    <button type="button" class="btn-modal-save btn-save-listing" onclick="saveListing()">
+        <span id="saveButtonText">Add Listing</span>
     </button>
     </div>
         </div>
@@ -263,6 +271,29 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script>
+        // Wait for Firebase functions to be available
+        function waitForFirebaseFunctions() {
+            if (typeof window.firebaseCreateListing === 'function') {
+                console.log('Firebase functions ready');
+                // Store user info in sessionStorage for use in listing cards
+                const username = '@Context.Session.GetString("Username")';
+                const fullName = '@Context.Session.GetString("FullName")';
+                const userId = '@Context.Session.GetString("UserId")';
+                
+                sessionStorage.setItem('Username', username);
+                sessionStorage.setItem('FullName', fullName);
+                sessionStorage.setItem('UserId', userId);
+                
+                console.log('Session data:', { username, fullName, userId });
+            } else {
+                setTimeout(waitForFirebaseFunctions, 100);
+            }
+        }
+        waitForFirebaseFunctions();
+    </script>
+    <script src="~/js/listing-form.js"></script>
     <script src="~/js/listings-manager.js"></script>
     <script src="~/js/listings-enhanced.js"></script>
 }

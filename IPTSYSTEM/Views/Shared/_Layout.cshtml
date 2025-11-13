@@ -5,6 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Recommerce</title>
+    <link rel="icon" type="image/png" href="/logo/logo.png" />
     <!-- Google Fonts - Inter for modern typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,10 +24,10 @@
             <div class="container-fluid px-4 py-2">
                 <!-- Brand with Logo - Left Side -->
                 <a class="navbar-brand brand-logo" asp-area="" asp-controller="Home" asp-action="Index">
-                    <div class="logo-wrapper">
-                        <img src="~/images/recommerce-logo.svg" alt="Recommerce" class="logo-icon" />
+                    <div class="logo-wrapper" style="width:80px; height:80px;">
+                        <img src="/logo/logo.png" alt="System Logo" class="logo-icon" style="width:70px; height:70px;" />
                     </div>
-                    <span class="brand-text">Recommerce</span>
+                    <span class="brand-text" style="font-size:2.5rem;">Recommerce</span>
                 </a>
 
                 <!-- Mobile Toggle -->
@@ -47,25 +48,27 @@
                                 <span>Categories</span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Mylisting" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Mylisting">
-                                <span>My Listings</span>
-                            </a>
-                        </li>
+                        @if (Context.Session.GetString("UserType") == "buyer")
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Browse" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Browse">
+                                    <span>Browse</span>
+                                </a>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Mylisting" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Mylisting">
+                                    <span>My Listings</span>
+                                </a>
+                            </li>
+                        }
                         <li class="nav-item">
                             <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Messages" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Messages">
                                 <span>Messages</span>
                             </a>
                         </li>
-                        @if (Context.Session.GetString("UserType") == "seller")
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link modern-nav-link d-flex align-items-center" href="#saved" title="Saved Products" style="gap:8px;">
-                                    <i class="bi bi-box-seam" style="font-size:1.15rem;"></i>
-                                    <span>Saved Products</span>
-                                </a>
-                            </li>
-                        }
                     </ul>
 
                     <!-- Right Side - Search + Icons -->
@@ -93,7 +96,9 @@
                                 }
                                 else if (userType == "seller")
                                 {
-                                    // Removed duplicate Saved Products icon from right side
+                                    <a href="#saved" class="action-icon saved-icon" title="Saved Products">
+                                        <i class="bi bi-box-seam"></i>
+                                    </a>
                                 }
                                 <!-- Logged In User with avatar and role -->
                                     var fullName = Context.Session.GetString("FullName") ?? string.Empty;

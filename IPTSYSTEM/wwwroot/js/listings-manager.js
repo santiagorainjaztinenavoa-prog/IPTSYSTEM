@@ -334,39 +334,52 @@ hideSaveLoadingState();
         if (result.success) {
             showToast(`Listing ${actionText} successfully!`, 'success');
       
-            // Close modal
-  if (listingModal) listingModal.hide();
-      
-      // Reload page after a short delay to show the toast
-        setTimeout(() => {
-         window.location.reload();
-    }, 1200);
-     } else {
-     showToast(result.message || `Failed to ${actionText} listing`, 'error');
- }
-        // Mirror data into Firestore (if client Firebase helpers are available)
-        try {
-            if (result.success && typeof window.firebaseCreateListing === 'function') {
-                // For create action, server returns `listing` object; for update, use listingData
-                const serverListing = result.listing || listingData;
-                const fbPayload = {
-                    id: serverListing.id ?? serverListing.Id ?? listingData.id,
-                    title: serverListing.title ?? serverListing.Title ?? listingData.title,
-                    description: serverListing.description ?? serverListing.Description ?? listingData.description,
-                    price: serverListing.price ?? serverListing.Price ?? listingData.price,
-                    category: serverListing.category ?? serverListing.Category ?? listingData.category,
-                    condition: serverListing.condition ?? serverListing.Condition ?? listingData.condition,
-                    imageUrl: serverListing.imageUrl ?? serverListing.ImageUrl ?? listingData.imageUrl
-                };
+            // Mirror data into Firestore (if client Firebase helpers are available)
+            // Do this BEFORE closing/reloading
+            try {
+                if (typeof window.firebaseCreateListing === 'function') {
+                    // For create action, server returns `listing` object; for update, use listingData
+                    const serverListing = result.listing || listingData;
+                    const fbPayload = {
+                        id: serverListing.id ?? serverListing.Id ?? listingData.id,
+                        title: serverListing.title ?? serverListing.Title ?? listingData.title,
+                        description: serverListing.description ?? serverListing.Description ?? listingData.description,
+                        price: serverListing.price ?? serverListing.Price ?? listingData.price,
+                        category: serverListing.category ?? serverListing.Category ?? listingData.category,
+                        condition: serverListing.condition ?? serverListing.Condition ?? listingData.condition,
+                        imageUrl: serverListing.imageUrl ?? serverListing.ImageUrl ?? listingData.imageUrl
+                    };
 
-                if (isUpdate && typeof window.firebaseUpdateListing === 'function') {
-                    await window.firebaseUpdateListing(fbPayload);
-                } else if (!isUpdate && typeof window.firebaseCreateListing === 'function') {
-                    await window.firebaseCreateListing(fbPayload);
+                    console.log('🔥 Syncing to Firestore:', fbPayload);
+                    
+                    if (isUpdate && typeof window.firebaseUpdateListing === 'function') {
+                        const updateResult = await window.firebaseUpdateListing(fbPayload);
+                        console.log('🔥 Firestore update result:', updateResult);
+                        if (!updateResult.success) {
+                            console.error('⚠️ Firestore update failed, but server update succeeded');
+                        }
+                    } else if (!isUpdate && typeof window.firebaseCreateListing === 'function') {
+                        const createResult = await window.firebaseCreateListing(fbPayload);
+                        console.log('🔥 Firestore create result:', createResult);
+                        if (!createResult.success) {
+                            console.error('⚠️ Firestore create failed, but server create succeeded');
+                        }
+                    }
                 }
+            } catch (e) {
+                console.error('❌ Firestore mirroring error:', e);
+                // Continue anyway - the listing was saved on the server
             }
-        } catch (e) {
-            console.debug('Firestore mirroring error:', e);
+      
+            // Close modal
+            if (listingModal) listingModal.hide();
+      
+            // Reload page after a short delay to show the toast and allow Firestore to complete
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showToast(result.message || `Failed to ${actionText} listing`, 'error');
         }
         
   } catch (error) {
@@ -494,10 +507,12 @@ if (card) {
         // Also attempt to delete from Firestore if helper exists
         try {
             if (result.success && typeof window.firebaseDeleteListing === 'function') {
-                await window.firebaseDeleteListing(id);
+                console.log('🔥 Syncing delete to Firestore for listing ID:', id);
+                const deleteResult = await window.firebaseDeleteListing(id);
+                console.log('🔥 Firestore delete result:', deleteResult);
             }
         } catch (e) {
-            console.debug('Firestore delete mirror error:', e);
+            console.error('❌ Firestore delete error:', e);
         }
         
     } catch (error) {

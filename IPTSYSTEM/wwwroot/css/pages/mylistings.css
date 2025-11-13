@@ -2,48 +2,65 @@
 
 .my-listings-page {
     min-height: calc(100vh - 72px);
-background: #f8f9fa;
-    padding: 40px 0;
+    background: #f8f9fa;
+    padding: 20px 0 40px 0;
 }
 
 /* Page Header - Clean & Simple */
 .page-header {
-    margin-bottom: 48px;
+    margin-bottom: 32px;
+    padding-top: 8px;
+}
+
+.page-header .d-flex {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 24px;
+}
+
+.page-header .d-flex > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: nowrap;
 }
 
 .page-title {
-    font-size: 2rem;
-    font-weight: 700;
+    font-size: 2.2rem;
+    font-weight: 800;
     color: #1a1a1a;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
     letter-spacing: -0.02em;
+    line-height: 1.1;
 }
 
 .page-subtitle {
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     color: #6b7280;
-    margin: 0;
+    margin: 0 0 2px 0;
+    font-weight: 500;
 }
 
 /* Add New Button - Coral/Pink Color */
 .btn-add-new {
-    padding: 12px 24px;
-    font-size: 0.95rem;
-    font-weight: 600;
+    padding: 14px 32px;
+    font-size: 1.05rem;
+    font-weight: 700;
     color: white;
-    background: linear-gradient(135deg, #ff9a9e 0%, #ff7e85 100%);
+    background: linear-gradient(135deg, #ff7e85 0%, #ff6b72 100%);
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(255, 126, 133, 0.3);
+    box-shadow: 0 6px 18px rgba(255, 126, 133, 0.25);
+    margin-left: 24px;
 }
 
 .btn-add-new:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(255, 126, 133, 0.4);
-    background: linear-gradient(135deg, #ff7e85 0%, #ff6b72 100%);
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 8px 24px rgba(255, 126, 133, 0.35);
+    background: linear-gradient(135deg, #ff6b72 0%, #ff7e85 100%);
 }
 
 /* Listings Grid - 3 Columns */
@@ -262,7 +279,7 @@ font-size: 4rem;
 .modern-modal .modal-title {
   font-size: 1.5rem;
     font-weight: 700;
-    color: #1a1a1a;
+    color: #000000;
     margin-bottom: 2px;
 }
 

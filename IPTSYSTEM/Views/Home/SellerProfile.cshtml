@@ -1,0 +1,181 @@
+@model IPTSYSTEM.Models.Listing
+@{
+    ViewData["Title"] = "Seller Profile";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/seller-profile.css" asp-append-version="true" />
+}
+
+<!-- Seller Profile Page -->
+<section class="seller-profile-page">
+    <div class="container">
+        <!-- Seller Header -->
+        <div class="seller-header">
+            <div class="seller-card-large">
+                <div class="seller-avatar-large">
+                    <span class="avatar-initial-large" id="sellerInitial">U</span>
+                </div>
+                <div class="seller-info-large">
+                <h1 id="sellerName" class="seller-name-large">Seller Name</h1>
+                <p id="sellerUsernameDisplay" class="seller-username-large"></p>
+                    <div class="seller-stats">
+                        <div class="stat">
+                            <span class="stat-value" id="productCount">0</span>
+                            <span class="stat-label">Products</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="ratingValue">4.5</span>
+                            <span class="stat-label">Rating</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn-follow-seller" id="followBtn">
+                    <i class="bi bi-person-plus"></i>
+                    Follow
+                </button>
+            </div>
+        </div>
+
+        <!-- Seller Products Section -->
+        <div class="seller-products-section">
+            <div class="section-header">
+                <h2>Products</h2>
+                <div class="view-controls">
+                    <select id="sortSelect" class="sort-select" onchange="changeSortOrder()">
+                        <option value="newest">Newest</option>
+                        <option value="price-low">Price: Low to High</option>
+                        <option value="price-high">Price: High to Low</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Products Grid -->
+            <div class="seller-products-grid" id="sellerProductsGrid">
+                <div class="loading-spinner">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading products...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script src="~/js/seller-products.js"></script>
+    <script>
+        // Get seller ID from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const sellerId = urlParams.get('id');
+        const sellerName = urlParams.get('name');
+        const sellerUsername = urlParams.get('username');
+
+        // Initialize seller profile
+        async function initializeSellerProfile() {
+            if (!sellerId) {
+                document.getElementById('sellerProductsGrid').innerHTML = '<p class="error">No seller selected</p>';
+                return;
+            }
+
+            try {
+                // Display seller info
+                document.getElementById('sellerName').textContent = sellerName || 'Seller';
+                const usernameDisplay = (sellerUsername || sellerId);
+                document.getElementById('sellerUsernameDisplay').textContent = usernameDisplay;
+                const initial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+                document.getElementById('sellerInitial').textContent = initial;
+
+                // Fetch seller products
+                const products = await window.sellerProductsManager.fetchSellerProducts(sellerId);
+                
+                document.getElementById('productCount').textContent = products.length;
+
+                if (products.length === 0) {
+                    document.getElementById('sellerProductsGrid').innerHTML = 
+                        '<p class="no-products">This seller has no products yet</p>';
+                    return;
+                }
+
+                // Display products
+                displaySellerProducts(products);
+            } catch (error) {
+                console.error('Error initializing seller profile:', error);
+                document.getElementById('sellerProductsGrid').innerHTML = 
+                    '<p class="error">Error loading seller products</p>';
+            }
+        }
+
+        function displaySellerProducts(products) {
+            const grid = document.getElementById('sellerProductsGrid');
+            grid.innerHTML = '';
+
+            products.forEach(product => {
+                const card = createProductCard(product);
+                grid.appendChild(card);
+            });
+        }
+
+        function createProductCard(product) {
+            const card = document.createElement('div');
+            card.className = 'seller-product-card';
+            card.innerHTML = `
+                <div class="product-image-container">
+                    <img src="${product.imageUrl || product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
+                         alt="${product.title}"
+                         class="product-image"
+                         onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                    <span class="condition-badge badge-${(product.condition || 'new').toLowerCase().replace(' ', '-')}">
+                        ${product.condition || 'New'}
+                    </span>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-title">${product.title || 'Untitled'}</h3>
+                    <p class="product-category">${product.category || 'Uncategorized'}</p>
+                    <p class="product-price">C$${parseFloat(product.price || 0).toFixed(2)}</p>
+                </div>
+                <button class="btn-view-product" onclick="viewProduct('${product.id || product.product_id}')">
+                    View
+                </button>
+            `;
+            return card;
+        }
+
+        function changeSortOrder() {
+            const sortSelect = document.getElementById('sortSelect');
+            const order = sortSelect.value;
+            const products = window.sellerProductsManager.getSellerProducts();
+            
+            let sorted;
+            if (order === 'newest') {
+                sorted = window.sellerProductsManager.sortByDate(products, 'newest');
+            } else if (order === 'price-low') {
+                sorted = window.sellerProductsManager.sortByPrice(products, 'asc');
+            } else if (order === 'price-high') {
+                sorted = window.sellerProductsManager.sortByPrice(products, 'desc');
+            }
+
+            displaySellerProducts(sorted);
+        }
+
+        function viewProduct(productId) {
+            // Redirect to product detail page
+            window.location.href = `/Home/ProductDetail?id=${productId}`;
+        }
+
+        function followSeller() {
+            const btn = document.getElementById('followBtn');
+            const isFollowing = btn.classList.toggle('following');
+            btn.innerHTML = isFollowing ? 
+                '<i class="bi bi-person-check"></i> Following' : 
+                '<i class="bi bi-person-plus"></i> Follow';
+        }
+
+        document.getElementById('followBtn').addEventListener('click', followSeller);
+
+        // Initialize on page load
+        window.addEventListener('load', initializeSellerProfile);
+    </script>
+}

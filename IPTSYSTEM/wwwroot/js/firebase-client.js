@@ -32,6 +32,42 @@ try {
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Listen for authentication state changes
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    console.log('Firebase user authenticated:', user.uid, user.email);
+  } else {
+    console.log('No Firebase user authenticated');
+    // Try to auto-sign in using server session
+    tryAutoSignInFromSession();
+  }
+});
+
+// Try to auto-sign in using server session credentials
+async function tryAutoSignInFromSession() {
+  try {
+    // Get user email from the page (if available)
+    const userEmail = document.querySelector('[data-user-email]')?.getAttribute('data-user-email');
+    const sessionEmail = sessionStorage.getItem('SessionEmail');
+    
+    if (!userEmail && !sessionEmail) {
+      console.log('No user email in session, auto-sign in skipped');
+      return;
+    }
+    
+    const email = userEmail || sessionEmail;
+    console.log('Attempting auto-sign in with:', email);
+    
+    // Note: This requires the user to be already authenticated server-side
+    // For now, we'll just log that we tried
+    console.log('Auto-sign in prepared for:', email);
+  } catch (err) {
+    console.debug('Auto-sign in not available:', err.message);
+  }
+}
+
+window.tryAutoSignInFromSession = tryAutoSignInFromSession;
+
 // Expose a simple register helper used by the page
 window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType) {
   try {
@@ -81,35 +117,65 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
 // The required Firestore helpers are already imported above from the firebase-firestore module.
 // (Avoid re-importing to prevent duplicate identifier errors.)
 
-// Proper create using addDoc
+// Proper create using addDoc - MODIFIED TO WORK WITH UNAUTHENTICATED USERS
 window.firebaseCreateListing = async function(listing) {
   try {
+    console.log('🔥 firebaseCreateListing called with:', listing);
+    
+    // Try to get Firebase user, but don't fail if not authenticated
+    let userId = null;
     const user = auth.currentUser;
-    if (!user) return { success: false, message: 'User not signed in' };
+    
+    if (user) {
+      userId = user.uid;
+      console.log('✅ Using Firebase authenticated user:', userId);
+    } else {
+      // Generate a pseudo-user ID from session or create anonymous
+      userId = sessionStorage.getItem('UserId') || 'anonymous-' + Date.now();
+      console.log('⚠️  Using session/anonymous user ID:', userId);
+    }
 
+    const docId = listing.id || null;
     const payload = {
       title: listing.title || '',
       description: listing.description || '',
-      price: listing.price || 0,
+      price: typeof listing.price === 'number' ? listing.price : parseFloat(listing.price) || 0,
       category: listing.category || '',
       condition: listing.condition || '',
       imageUrl: listing.imageUrl || '',
-      user_id: user.uid,
-      product_id: listing.id ?? null,
+      user_id: userId,
+      seller_name: sessionStorage.getItem('FullName') || 'Unknown Seller',
+      seller_username: sessionStorage.getItem('Username') || 'unknown',
+      product_id: docId,
       date_created: serverTimestamp()
     };
+    
+    console.log('📝 Payload to save:', JSON.stringify(payload, null, 2));
 
-    const col = collection(db, 'listings');
+    const col = collection(db, 'tbl_listing');
+    console.log('📍 Saving to collection: tbl_listing');
+    
     const docRefAdded = await addDoc(col, payload);
+    console.log('✅ Document added successfully with ID:', docRefAdded.id);
 
-    // If product_id wasn't provided, set product_id to the generated doc id
-    if (!payload.product_id) {
-      await updateDoc(doc(db, 'listings', docRefAdded.id), { product_id: docRefAdded.id });
+    // If product_id wasn't provided in payload, update the document to set product_id = firestore doc id
+    if (!docId) {
+      try {
+        await updateDoc(doc(db, 'tbl_listing', docRefAdded.id), { product_id: docRefAdded.id });
+        console.log('✅ Updated product_id field to:', docRefAdded.id);
+      } catch (updateErr) {
+        console.warn('⚠️  Failed to update product_id, but document was created:', updateErr.message);
+        // Continue anyway - the document is created, just the product_id update failed
+      }
     }
 
+    console.log('✅ Listing saved successfully to Firestore!');
     return { success: true, id: docRefAdded.id };
   } catch (err) {
-    console.error('firebaseCreateListing error', err);
+    console.error('❌ firebaseCreateListing error:', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
+    console.error('Full error:', JSON.stringify(err, null, 2));
     return { success: false, message: err?.message || String(err) };
   }
 };
@@ -117,13 +183,19 @@ window.firebaseCreateListing = async function(listing) {
 // Update listing by matching product_id (server id) or by doc id
 window.firebaseUpdateListing = async function(listing) {
   try {
-  const col = collection(db, 'listings');
-  // Try to find doc by product_id
-  const q = query(col, where('product_id', '==', listing.id));
-  const snaps = await getDocs(q);
+    console.log('firebaseUpdateListing called with:', listing);
+    const col = collection(db, 'tbl_listing');
+    
+    // Try to find doc by product_id first
+    const q = query(col, where('product_id', '==', listing.id));
+    const snaps = await getDocs(q);
+    
+    console.log('Found', snaps.size, 'documents with product_id:', listing.id);
+    
     if (snaps.size === 0) {
-      // maybe listing.id is the firestore doc id
-  const docReference = doc(db, 'listings', String(listing.id));
+      // Maybe listing.id is the firestore doc id
+      console.log('No docs found by product_id, trying as firestore doc id');
+      const docReference = doc(db, 'tbl_listing', String(listing.id));
       await updateDoc(docReference, {
         title: listing.title,
         description: listing.description,
@@ -132,12 +204,14 @@ window.firebaseUpdateListing = async function(listing) {
         condition: listing.condition,
         imageUrl: listing.imageUrl || ''
       });
+      console.log('Updated doc by firestore id');
       return { success: true };
     }
 
     // Update all matching docs
     for (const d of snaps.docs) {
-      await updateDoc(doc(db, 'listings', d.id), {
+      console.log('Updating doc:', d.id);
+      await updateDoc(doc(db, 'tbl_listing', d.id), {
         title: listing.title,
         description: listing.description,
         price: listing.price,
@@ -147,9 +221,12 @@ window.firebaseUpdateListing = async function(listing) {
       });
     }
 
+    console.log('Update completed successfully');
     return { success: true };
   } catch (err) {
     console.error('firebaseUpdateListing error', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
     return { success: false, message: err?.message || String(err) };
   }
 };
@@ -157,25 +234,37 @@ window.firebaseUpdateListing = async function(listing) {
 // Delete listing by product_id or doc id
 window.firebaseDeleteListing = async function(productIdOrDocId) {
   try {
-  const col = collection(db, 'listings');
-  const q = query(col, where('product_id', '==', productIdOrDocId));
-  const snaps = await getDocs(q);
+    console.log('firebaseDeleteListing called with:', productIdOrDocId);
+    const col = collection(db, 'tbl_listing');
+    const q = query(col, where('product_id', '==', productIdOrDocId));
+    const snaps = await getDocs(q);
+    
+    console.log('Found', snaps.size, 'documents with product_id:', productIdOrDocId);
+    
     if (snaps.size === 0) {
       // try deleting by doc id
       try {
-  await deleteDoc(doc(db, 'listings', String(productIdOrDocId)));
+        console.log('No docs found by product_id, trying as firestore doc id');
+        await deleteDoc(doc(db, 'tbl_listing', String(productIdOrDocId)));
+        console.log('Deleted doc by firestore id');
         return { success: true };
       } catch (e) {
+        console.error('Error deleting by doc id:', e);
         return { success: false, message: 'No matching listing found' };
       }
     }
 
     for (const d of snaps.docs) {
-  await deleteDoc(doc(db, 'listings', d.id));
+      console.log('Deleting doc:', d.id);
+      await deleteDoc(doc(db, 'tbl_listing', d.id));
     }
+    
+    console.log('Delete completed successfully');
     return { success: true };
   } catch (err) {
     console.error('firebaseDeleteListing error', err);
+    console.error('Error code:', err.code);
+    console.error('Error message:', err.message);
     return { success: false, message: err?.message || String(err) };
   }
 };
@@ -277,6 +366,122 @@ window.establishServerSession = async function(email, uid) {
   } catch (e) {
     console.error('Failed to establish server session', e);
     return { success: false, message: e?.message || String(e) };
+  }
+};
+
+// Fetch all products by a specific seller
+window.firebaseFetchSellerProducts = async function(sellerUserId) {
+  try {
+    console.log('Fetching products for seller:', sellerUserId);
+    const col = collection(db, 'tbl_listing');
+    const q = query(col, where('user_id', '==', sellerUserId));
+    const snaps = await getDocs(q);
+    
+    console.log('Found', snaps.size, 'products for seller:', sellerUserId);
+    
+    const products = [];
+    snaps.forEach((doc) => {
+      const data = doc.data();
+      // Filter out dummy documents (boolean or placeholder docs)
+      if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
+        products.push({
+          id: doc.id,
+          ...data
+        });
+      }
+    });
+    
+    return { success: true, products, count: products.length };
+  } catch (err) {
+    console.error('firebaseFetchSellerProducts error', err);
+    return { success: false, message: err?.message || String(err), products: [] };
+  }
+};
+
+// Fetch all active products (for browse page)
+window.firebaseFetchAllProducts = async function() {
+  try {
+    console.log('Fetching all active products');
+    const col = collection(db, 'tbl_listing');
+    const snaps = await getDocs(col);
+    
+    console.log('Found', snaps.size, 'total products');
+    
+    const products = [];
+    snaps.forEach((doc) => {
+      const data = doc.data();
+      // Filter out dummy documents (boolean or placeholder docs)
+      // Only include documents with a valid title
+      if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
+        if (data.is_active !== false) { // Include unless explicitly inactive
+          products.push({
+            id: doc.id,
+            ...data
+          });
+        }
+      }
+    });
+    
+    return { success: true, products, count: products.length };
+  } catch (err) {
+    console.error('firebaseFetchAllProducts error', err);
+    return { success: false, message: err?.message || String(err), products: [] };
+  }
+};
+
+// Fetch a single product by ID
+window.firebaseFetchProductById = async function(productId) {
+  try {
+    console.log('Fetching product:', productId);
+    const docRef = doc(db, 'tbl_listing', productId);
+    const snap = await getDoc(docRef);
+    
+    if (!snap.exists()) {
+      console.warn('Product not found:', productId);
+      return { success: false, message: 'Product not found' };
+    }
+    
+    const product = {
+      id: snap.id,
+      ...snap.data()
+    };
+    
+    console.log('Product found:', product);
+    return { success: true, product };
+  } catch (err) {
+    console.error('firebaseFetchProductById error', err);
+    return { success: false, message: err?.message || String(err) };
+  }
+};
+
+// Fetch products by category
+window.firebaseFetchProductsByCategory = async function(category) {
+  try {
+    console.log('Fetching products in category:', category);
+    const col = collection(db, 'tbl_listing');
+    const q = query(col, where('category', '==', category));
+    const snaps = await getDocs(q);
+    
+    console.log('Found', snaps.size, 'products in category:', category);
+    
+    const products = [];
+    snaps.forEach((doc) => {
+      const data = doc.data();
+      // Filter out dummy documents
+      if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
+        if (data.is_active !== false) {
+          products.push({
+            id: doc.id,
+            ...data
+          });
+        }
+      }
+    });
+    
+    return { success: true, products, count: products.length };
+  } catch (err) {
+    console.error('firebaseFetchProductsByCategory error', err);
+    return { success: false, message: err?.message || String(err), products: [] };
   }
 };
 
