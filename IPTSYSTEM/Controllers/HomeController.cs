@@ -1,45 +1,34 @@
 using System.Diagnostics;
 using IPTSYSTEM.Models;
+// Server-side Firebase admin integration removed - client-side Firebase is used for registrations
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IPTSYSTEM.Controllers
 {
-    public class HomeController : Controller
-    {
+        public class HomeController : Controller
+        {
+            // In-memory registered users (populated by server-side Register fallback)
+            private record RegisteredUser(string Username, string PasswordHash, string UserType, string Email, string FullName);
+            private static readonly List<RegisteredUser> _registeredUsers = new();
+
+            private static string HashPassword(string pwd)
+            {
+                using var sha = SHA256.Create();
+                var bytes = Encoding.UTF8.GetBytes(pwd ?? string.Empty);
+                var hash = sha.ComputeHash(bytes);
+                return Convert.ToHexString(hash);
+            }
         private readonly ILogger<HomeController> _logger;
         // In-memory storage for demo - replace with database in production
-        private static List<Listing> _listings = new List<Listing>
-        {
-     new Listing { Id = 1, Title = "iPhone 13 Pro Max", Description = "Barely used iPhone 13 Pro Max. 256GB, Pacific Blue. Comes with original box and charger.", Price = 899, Category = "Electronics", Condition = "Like New", ImageUrl = "https://images.unsplash.com/photo-1632661674596-df8be070a5c5?w=500&h=500&fit=crop" },
-  new Listing { Id = 2, Title = "Vintage Denim Jacket", Description = "Classic 90s style denim jacket, size M. Perfect condition with minimal wear.", Price = 45, Category = "Fashion", Condition = "Good", ImageUrl = "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500&h=500&fit=crop" },
-        new Listing { Id = 3, Title = "Modern Table Lamp", Description = "Beautiful minimalist table lamp with adjustable brightness. White and gold finish.", Price = 35, Category = "Home & Living", Condition = "New", ImageUrl = "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&h=500&fit=crop" },
-      new Listing { Id = 4, Title = "MacBook Pro M2", Description = "2023 MacBook Pro with M2 chip, 16GB RAM, 512GB SSD. Space Gray, excellent condition.", Price = 1499, Category = "Electronics", Condition = "Like New", ImageUrl = "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=500&h=500&fit=crop" },
-    new Listing { Id = 5, Title = "Leather Crossbody Bag", Description = "Genuine leather crossbody bag in tan. Perfect everyday bag with adjustable strap.", Price = 65, Category = "Fashion", Condition = "Good", ImageUrl = "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=500&h=500&fit=crop" },
-  new Listing { Id = 6, Title = "Wireless Headphones", Description = "Premium noise-canceling headphones. Black, barely used with original case and cables.", Price = 199, Category = "Electronics", Condition = "Like New", ImageUrl = "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop" }
-        };
+        // In-memory storage for listings (populated from Firestore in production)
+        private static List<Listing> _listings = new List<Listing>();
 
-   // In-memory message storage
-        private static List<Conversation> _conversations = new List<Conversation>
-        {
-   new Conversation { Id = 1, OtherUserId = "user1", OtherUserName = "Tech Trader", OtherUserAvatar = "https://ui-avatars.com/api/?name=Tech+Trader&background=ff6b9d&color=fff&size=48", IsOnline = true, LastMessage = "Can you do $850?", LastMessageTime = DateTime.Now.AddMinutes(-10) },
-     new Conversation { Id = 2, OtherUserId = "user2", OtherUserName = "Vintage Vibe", OtherUserAvatar = "https://ui-avatars.com/api/?name=Vintage+Vibe&background=fbbf24&color=fff&size=48", IsOnline = true, LastMessage = "Yes, it's available!", LastMessageTime = DateTime.Now.AddMinutes(-15) },
-          new Conversation { Id = 3, OtherUserId = "user3", OtherUserName = "Home Decor Pro", OtherUserAvatar = "https://ui-avatars.com/api/?name=Home+Decor+Pro&background=f97316&color=fff&size=48", IsOnline = false, LastMessage = "Thanks for your interest", LastMessageTime = DateTime.Now.AddDays(-1) },
-       new Conversation { Id = 0, OtherUserId = "bot", OtherUserName = "AI Assistant", OtherUserAvatar = "https://ui-avatars.com/api/?name=AI&background=8b5cf6&color=fff&size=48", IsOnline = true, LastMessage = "Hi! How can I help you today?", LastMessageTime = DateTime.Now }
- };
+      // In-memory message storage (populated from Firestore in production)
+        private static List<Conversation> _conversations = new List<Conversation>();
 
-     private static Dictionary<int, List<Message>> _messages = new Dictionary<int, List<Message>>
-        {
-     [1] = new List<Message>
-        {
-                new Message { Id = 1, ConversationId = 1, SenderId = "user1", SenderName = "Tech Trader", Content = "Hi! Is this still available?", Timestamp = DateTime.Now.AddMinutes(-30) },
-     new Message { Id = 2, ConversationId = 1, SenderId = "me", SenderName = "You", Content = "Yes, it's still available! Would you like to know more about it?", Timestamp = DateTime.Now.AddMinutes(-25) },
-                new Message { Id = 3, ConversationId = 1, SenderId = "user1", SenderName = "Tech Trader", Content = "Can you do $850?", Timestamp = DateTime.Now.AddMinutes(-10) }
-      },
-     [0] = new List<Message>
-     {
-         new Message { Id = 1, ConversationId = 0, SenderId = "bot", SenderName = "AI Assistant", Content = "?? Hello! I'm your AI shopping assistant. I can help you with:\n\n?? Product recommendations\n?? Price negotiations\n?? Listing questions\n? General marketplace info\n\nHow can I assist you today?", Timestamp = DateTime.Now.AddMinutes(-1), IsFromBot = true }
- }
-        };
+     private static Dictionary<int, List<Message>> _messages = new Dictionary<int, List<Message>>();
 
      public HomeController(ILogger<HomeController> logger)
    {
@@ -68,6 +57,18 @@ _logger = logger;
         {
     return View(_listings.Where(l => l.IsActive).ToList());
    }
+
+        public IActionResult Browse()
+        {
+            // Show all active listings for buyers to browse
+            return View(_listings.Where(l => l.IsActive).ToList());
+        }
+
+        public IActionResult SellerProfile()
+        {
+            // Show seller profile and their products
+            return View();
+        }
 
   public IActionResult Messages()
       {
@@ -104,14 +105,22 @@ _logger = logger;
 
                 bool isAdmin = false;
                 
-                // Check if logging in as admin
-                if (request.EmailOrUsername.ToLower() == ADMIN_USERNAME && request.Password == ADMIN_PASSWORD)
+                // Check if logging in as admin (trim and compare case-insensitively for username/email)
+                var loginIdentifier = request.EmailOrUsername?.Trim() ?? string.Empty;
+                var loginPassword = request.Password?.Trim() ?? string.Empty;
+
+                if (string.Equals(loginIdentifier, ADMIN_USERNAME, StringComparison.OrdinalIgnoreCase) && string.Equals(loginPassword, ADMIN_PASSWORD, StringComparison.Ordinal))
                 {
                     isAdmin = true;
                     
                     // Set admin session
                     HttpContext.Session.SetString("IsAdmin", "true");
                     HttpContext.Session.SetString("Username", ADMIN_USERNAME);
+                    // Mark admin user type for display in header
+                    HttpContext.Session.SetString("UserType", "admin");
+                    // Also set a display name for admin to show in header
+                    HttpContext.Session.SetString("FullName", "Admin");
+                    HttpContext.Session.SetString("UserId", "admin-user-id");
                     
                     // Simulate authentication delay
                     await Task.Delay(500);
@@ -124,32 +133,33 @@ _logger = logger;
                     });
                 }
 
-                // Demo authentication - Replace with actual authentication service in production
-                // For demo purposes, accept any credentials with password length >= 6
-                if (request.Password.Length >= 6)
+                // Check registered users (server-side fallback registration)
+                var hashed = HashPassword(loginPassword);
+                var regUser = _registeredUsers.FirstOrDefault(u => (string.Equals(u.Username, loginIdentifier, StringComparison.OrdinalIgnoreCase) || string.Equals(u.Email, loginIdentifier, StringComparison.OrdinalIgnoreCase)) && u.PasswordHash == hashed);
+                if (regUser != null)
                 {
-                    // Simulate authentication delay
-                    await Task.Delay(500);
-
-                    // Set regular user session (not admin)
                     HttpContext.Session.SetString("IsAdmin", "false");
-                    HttpContext.Session.SetString("Username", request.EmailOrUsername);
-                    
+                    HttpContext.Session.SetString("Username", regUser.Username);
+                    HttpContext.Session.SetString("UserType", regUser.UserType);
+                    // Persist full name in session so layout can show avatar initial and proper display name
+                    HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+                    // Set a placeholder UserId - will be updated when Firebase UID is available
+                    HttpContext.Session.SetString("UserId", regUser.Username);
+                    await Task.Delay(500);
                     return Json(new LoginResponse
                     {
                         Success = true,
-                        Message = "Login successful! Redirecting...",
+                        Message = $"{regUser.UserType.ToUpper()} login successful! Redirecting...",
                         RedirectUrl = "/Home/Landing"
                     });
                 }
-                else
+
+                // No matching user found
+                return Json(new LoginResponse
                 {
-                    return Json(new LoginResponse
-                    {
-                        Success = false,
-                        Message = "Invalid credentials. Please try again."
-                    });
-                }
+                    Success = false,
+                    Message = "Invalid credentials. Please try again."
+                });
             }
             catch (Exception ex)
             {
@@ -229,17 +239,38 @@ _logger = logger;
                 // Simulate registration delay
                 await Task.Delay(800);
 
-                // In production, create user in database
-                // Example:
-                // var user = new ApplicationUser
-                // {
-                //     UserName = request.Username,
-                //     Email = request.Email,
-                //     FullName = request.FullName
-                // };
-                // var result = await _userManager.CreateAsync(user, request.Password);
+                // Registration persistence is handled on the client using Firebase Auth + Firestore.
+                // Server-side Firestore writes have been intentionally removed to avoid storing service account credentials
+                // on this project. If you later want server-side persistence, reintroduce admin SDK usage here.
 
-                // For demo, accept all valid registrations
+                // For demo, persist user in an in-memory list so server-side login can use AccountType
+                try
+                {
+                    // Prevent duplicate username/email
+                    if (_registeredUsers.Any(u => u.Username == request.Username || u.Email == request.Email))
+                    {
+                        return Json(new RegisterResponse { Success = false, Message = "Username or email already in use." });
+                    }
+
+                    string HashPassword(string pwd)
+                    {
+                        using var sha = SHA256.Create();
+                        var bytes = Encoding.UTF8.GetBytes(pwd ?? string.Empty);
+                        var hash = sha.ComputeHash(bytes);
+                        return Convert.ToHexString(hash);
+                    }
+
+                    var userHash = HashPassword(request.Password);
+                    var userType = string.IsNullOrWhiteSpace(request.AccountType) ? "Buyer" : request.AccountType;
+
+                    _registeredUsers.Add(new RegisteredUser(request.Username, userHash, userType.ToLowerInvariant(), request.Email, request.FullName));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to persist in-memory registered user");
+                    return Json(new RegisterResponse { Success = false, Message = "Registration failed. Please try again." });
+                }
+
                 return Json(new RegisterResponse
                 {
                     Success = true,
@@ -289,6 +320,62 @@ _logger = logger;
             return RedirectToAction("Login");
         }
 
+        // Client-side helper: called after Firebase client sign-in to establish a server session
+        public class ClientLoginRequest
+        {
+            public string? Email { get; set; }
+            public string? Uid { get; set; }
+            public string? Username { get; set; }
+            public string? UserType { get; set; }
+            public string? FullName { get; set; }
+        }
+
+        [HttpPost]
+        public IActionResult ClientLogin([FromBody] ClientLoginRequest req)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(req?.Email))
+                {
+                    return Json(new LoginResponse { Success = false, Message = "Invalid request" });
+                }
+
+                // If client passed Username/UserType, prefer those (useful when server-side persistence hasn't propagated yet)
+                if (!string.IsNullOrWhiteSpace(req.Username))
+                {
+                    HttpContext.Session.SetString("IsAdmin", "false");
+                    HttpContext.Session.SetString("Username", req.Username);
+                    HttpContext.Session.SetString("UserType", (req.UserType ?? "buyer").ToLowerInvariant());
+                    HttpContext.Session.SetString("FullName", req.FullName ?? string.Empty);
+                    // Store Firebase UID as UserId
+                    HttpContext.Session.SetString("UserId", req.Uid ?? req.Username);
+                    return Json(new LoginResponse { Success = true, Message = "Server session established" });
+                }
+
+                // Find registered user by email as fallback
+                var regUser = _registeredUsers.FirstOrDefault(u => string.Equals(u.Email, req.Email, StringComparison.OrdinalIgnoreCase));
+                if (regUser == null)
+                {
+                    return Json(new LoginResponse { Success = false, Message = "No server-side profile found for this account" });
+                }
+
+                // Set server session values
+                HttpContext.Session.SetString("IsAdmin", "false");
+                HttpContext.Session.SetString("Username", regUser.Username);
+                HttpContext.Session.SetString("UserType", regUser.UserType);
+                HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+                // Store Firebase UID as UserId
+                HttpContext.Session.SetString("UserId", req.Uid ?? regUser.Username);
+
+                return Json(new LoginResponse { Success = true, Message = "Server session established" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ClientLogin error");
+                return Json(new LoginResponse { Success = false, Message = "Server error" });
+            }
+        }
+
      // ========== CRUD OPERATIONS FOR LISTINGS ==========
         
         [HttpGet]
@@ -309,6 +396,12 @@ _logger = logger;
      listing.Id = _listings.Any() ? _listings.Max(l => l.Id) + 1 : 1;
      listing.CreatedDate = DateTime.Now;
          listing.IsActive = true;
+         
+         // Capture seller info from session
+         listing.SellerUsername = HttpContext.Session.GetString("Username") ?? "Anonymous";
+         listing.SellerFullName = HttpContext.Session.GetString("FullName") ?? "Unknown";
+         listing.SellerUserId = HttpContext.Session.GetString("UserId") ?? "";
+         
    _listings.Add(listing);
        
    return Json(new { success = true, message = "Listing created successfully!", listing });

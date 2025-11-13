@@ -1,0 +1,323 @@
+@model List<IPTSYSTEM.Models.Listing>
+@{
+    ViewData["Title"] = "Browse";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/browse.css" asp-append-version="true" />
+}
+
+<!-- Browse Page - Carousell Style Grid -->
+<section class="browse-page">
+    <div class="container-fluid p-0">
+        <!-- Header with Search & Filters -->
+        <div class="browse-header">
+            <div class="browse-header-content">
+                <h1 class="browse-title">Browse</h1>
+                
+                <!-- Search Bar and Filter on same row -->
+                <div class="search-filter-row">
+                    <!-- Search Bar -->
+                    <div class="search-container">
+                        <input type="text" 
+                               id="searchInput" 
+                               class="search-input" 
+                               placeholder="Search items..."
+                               onkeyup="filterListings()">
+                        <i class="bi bi-search search-icon"></i>
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div class="filter-container">
+                        <select id="categoryFilter" class="filter-select" onchange="filterListings()">
+                            <option value="">All Categories</option>
+                            <option value="Electronics">Electronics</option>
+                            <option value="Fashion">Fashion</option>
+                            <option value="Home & Living">Home & Living</option>
+                            <option value="Books">Books</option>
+                            <option value="Sports">Sports</option>
+                            <option value="Furniture">Furniture</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Listings Grid -->
+        <div class="browse-grid" id="listingsContainer">
+            <div class="loading-state">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Loading products...</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Product Detail Modal -->
+<div class="modal fade" id="productDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content product-detail-modal">
+            <div class="modal-header border-0">
+                <h2 class="modal-title" id="productTitle">Product Details</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Product Image Carousel -->
+                <div class="product-detail-image mb-4">
+                    <img id="detailProductImage" src="" alt="Product" class="img-fluid">
+                    <span id="detailConditionBadge" class="condition-badge"></span>
+                </div>
+
+                <!-- Product Info -->
+                <div class="product-detail-info">
+                    <h3 id="detailProductTitle" class="product-detail-title"></h3>
+                    <p id="detailProductCategory" class="product-detail-category"></p>
+                    <h2 id="detailProductPrice" class="product-detail-price"></h2>
+                    <p id="detailProductDescription" class="product-detail-description"></p>
+
+                    <!-- Seller Card -->
+                    <div class="seller-card">
+                        <div class="seller-card-header">
+                            <h4>Seller Information</h4>
+                        </div>
+                        <div class="seller-card-body">
+                            <div class="seller-card-info">
+                                <div class="seller-avatar-large">
+                                    <span id="detailSellerAvatar" class="avatar-initial-large">U</span>
+                                </div>
+                                <div class="seller-details-full">
+                                    <p id="detailSellerName" class="seller-name-full"></p>
+                                    <p id="detailSellerUsername" class="seller-username-full"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Details -->
+                    <div class="product-details-section">
+                        <h4>Condition</h4>
+                        <p id="detailConditionText" class="detail-value"></p>
+                    </div>
+
+                    <div class="product-details-section">
+                        <h4>Posted on</h4>
+                        <p id="detailPostedDate" class="detail-value"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer border-0 gap-2">
+                <button type="button" class="btn-detail-message" onclick="messageSeller()">
+                    <i class="bi bi-chat-dots"></i>
+                    Message Seller
+                </button>
+                <button type="button" class="btn-detail-select" onclick="selectProduct()">
+                    <i class="bi bi-check-circle"></i>
+                    Select
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script src="~/js/seller-products.js"></script>
+    <script>
+        // Store current product detail
+        let currentProductDetail = null;
+        let allProducts = [];
+
+        // Initialize Browse page - load products from Firebase
+        async function initializeBrowse() {
+            try {
+                console.log('Fetching all products from Firebase...');
+                const result = await window.firebaseFetchAllProducts();
+                
+                if (result.success && result.products) {
+                    allProducts = result.products;
+                    console.log(`Loaded ${allProducts.length} products`);
+                    displayProducts(allProducts);
+                } else {
+                    console.error('Failed to fetch products:', result.message);
+                    document.getElementById('listingsContainer').innerHTML = 
+                        `<div class="empty-state"><i class="bi bi-inbox"></i><h3>Error loading products</h3><p>${result.message || 'Please try again later'}</p></div>`;
+                }
+            } catch (error) {
+                console.error('Error in initializeBrowse:', error);
+                document.getElementById('listingsContainer').innerHTML = 
+                    `<div class="empty-state"><i class="bi bi-inbox"></i><h3>Error loading products</h3><p>An unexpected error occurred</p></div>`;
+            }
+        }
+
+        function displayProducts(products) {
+            const container = document.getElementById('listingsContainer');
+            
+            if (!products || products.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <h3>No listings found</h3>
+                        <p>Try adjusting your filters or search term</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            products.forEach(product => {
+                const card = createProductCard(product);
+                container.appendChild(card);
+            });
+        }
+
+        function createProductCard(product) {
+            const card = document.createElement('div');
+            card.className = 'listing-card';
+            card.id = `listing-${product.id}`;
+            card.setAttribute('data-category', product.category || '');
+            card.setAttribute('data-title', product.title || '');
+            card.setAttribute('data-description', product.description || '');
+            
+            const condition = product.condition || 'New';
+            const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
+            const imageUrl = product.imageUrl || product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            
+            // Handle seller name - try multiple possible field names
+            let sellerName = product.full_name || product.SellerFullName || product.seller_name || product.username || product.SellerUsername || 'Unknown Seller';
+            let sellerUsername = product.username || product.SellerUsername || product.user_email || '';
+            let sellerId = product.user_id || product.SellerUserId || '';
+            
+            // If we got a full name, extract initial from that
+            let sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+
+            console.log('Product data:', { 
+              title: product.title, 
+              sellerName, 
+              sellerUsername, 
+              sellerId,
+              originalFields: Object.keys(product)
+            });
+
+            const html = `
+                <div class="listing-image-wrapper">
+                    <img src="${imageUrl}" 
+                         alt="${product.title || 'Product'}" 
+                         class="listing-image"
+                         onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'"
+                         onclick="openProductDetail('${product.id}')">
+                    <span class="condition-badge badge-${conditionClass}">
+                        ${condition}
+                    </span>
+                </div>
+                <div class="listing-seller-info">
+                    <div class="seller-avatar">
+                        <span class="avatar-initial">${sellerInitial}</span>
+                    </div>
+                    <div class="seller-details">
+                        <p class="seller-name">${sellerName}</p>
+                        <p class="seller-username">${sellerUsername}</p>
+                    </div>
+                    <a href="/Home/SellerProfile?id=${sellerId}&name=${encodeURIComponent(sellerName)}&username=${encodeURIComponent(sellerUsername)}" class="seller-link" title="View seller profile"></a>
+                </div>
+                <div class="listing-body">
+                    <h3 class="listing-title">${product.title || 'Untitled'}</h3>
+                    <p class="listing-description">${(product.description || 'No description available').substring(0, 80)}${(product.description || '').length > 80 ? '...' : ''}</p>
+                    <p class="listing-category">${product.category || 'Uncategorized'}</p>
+                    <p class="listing-price">₱${parseFloat(product.price || 0).toFixed(2)}</p>
+                </div>
+                <div class="listing-buttons">
+                    <button class="btn-message" onclick="openProductDetail('${product.id}'); setTimeout(() => messageSeller(), 500)">
+                        Message
+                    </button>
+                    <button class="btn-select" onclick="openProductDetail('${product.id}')">
+                        Select
+                    </button>
+                </div>
+            `;
+
+            card.innerHTML = html;
+            return card;
+        }
+
+        function openProductDetail(productId) {
+            const product = allProducts.find(p => p.id === productId);
+            if (!product) {
+                console.error('Product not found:', productId);
+                return;
+            }
+
+            const condition = product.condition || 'New';
+            // Try multiple field names for seller data
+            const sellerName = product.full_name || product.SellerFullName || product.seller_name || product.username || product.SellerUsername || 'Unknown Seller';
+            const sellerUsername = product.username || product.SellerUsername || product.user_email || '';
+            const sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+            const imageUrl = product.imageUrl || product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
+
+            console.log('Opening product detail:', { productId, sellerName, sellerUsername });
+
+            // Populate modal
+            document.getElementById('productTitle').textContent = product.title || 'Product';
+            document.getElementById('detailProductTitle').textContent = product.title || 'Product';
+            document.getElementById('detailProductCategory').textContent = product.category || 'Uncategorized';
+            document.getElementById('detailProductPrice').textContent = `₱${parseFloat(product.price || 0).toFixed(2)}`;
+            document.getElementById('detailProductDescription').textContent = product.description || 'No description available';
+            document.getElementById('detailProductImage').src = imageUrl;
+            document.getElementById('detailConditionBadge').textContent = condition;
+            document.getElementById('detailConditionBadge').className = `condition-badge badge-${conditionClass}`;
+            document.getElementById('detailConditionText').textContent = condition;
+            document.getElementById('detailSellerName').textContent = sellerName;
+            document.getElementById('detailSellerUsername').textContent = sellerUsername;
+            document.getElementById('detailSellerAvatar').textContent = sellerInitial;
+            
+            const createdDate = product.date_created ? new Date(product.date_created.seconds * 1000).toLocaleDateString() : new Date().toLocaleDateString();
+            document.getElementById('detailPostedDate').textContent = createdDate;
+
+            // Store current product
+            currentProductDetail = { id: productId, title: product.title, sellerName, sellerUsername };
+
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('productDetailModal'));
+            modal.show();
+        }
+
+        function messageSeller() {
+            if (currentProductDetail) {
+                alert(`Message seller: ${currentProductDetail.sellerName}`);
+                // window.location.href = `/Home/Messages?seller=${currentProductDetail.sellerUsername}`;
+            }
+        }
+
+        function selectProduct() {
+            if (currentProductDetail) {
+                alert(`Selected: ${currentProductDetail.title}`);
+                // In production: handle selection, add to cart, or proceed to purchase
+            }
+        }
+
+        function filterListings() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const categoryFilter = document.getElementById('categoryFilter').value;
+
+            const filtered = allProducts.filter(product => {
+                const title = (product.title || '').toLowerCase();
+                const description = (product.description || '').toLowerCase();
+                const category = product.category || '';
+
+                const matchesSearch = title.includes(searchInput) || description.includes(searchInput);
+                const matchesCategory = !categoryFilter || category === categoryFilter;
+
+                return matchesSearch && matchesCategory;
+            });
+
+            displayProducts(filtered);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initializeBrowse);
+    </script>
+}

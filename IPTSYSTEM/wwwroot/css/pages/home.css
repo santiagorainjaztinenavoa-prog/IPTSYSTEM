@@ -270,6 +270,8 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    min-width: 300px;
+    max-width: 340px;
 }
 
 .item-card:hover {
@@ -279,11 +281,11 @@
 }
 
 .item-image-wrapper {
-    position: relative;
- width: 100%;
-    padding-top: 85%;
-    overflow: hidden;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+     position: relative;
+     width: 100%;
+    padding-top: 80%;
+     overflow: hidden;
+     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
 }
 
 .item-image {
@@ -361,7 +363,7 @@ position: absolute;
 }
 
 .item-details {
-    padding: 26px;
+    padding: 24px;
     flex: 1;
     display: flex;
   flex-direction: column;

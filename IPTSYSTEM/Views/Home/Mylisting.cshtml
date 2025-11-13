@@ -1,104 +1,48 @@
-﻿@model List<IPTSYSTEM.Models.Listing>
-@{
+﻿@{
  ViewData["Title"] = "My Listings";
 }
 
 @section Styles {
     <link rel="stylesheet" href="~/css/pages/mylistings.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/listing-form.css" asp-append-version="true" />
 }
 
 <!-- My Listings Page - Modern Minimalist Design -->
-<section class="my-listings-page">
+<section class="my-listings-page" 
+         data-user-name="@(Context.Session.GetString("Username") ?? "")"
+         data-user-fullname="@(Context.Session.GetString("FullName") ?? "")"
+         data-user-id="@(Context.Session.GetString("UserId") ?? "")"
+         data-user-type="@(Context.Session.GetString("UserType") ?? "seller")">
   <div class="container py-5">
         <!-- Page Header - Clean & Simple -->
         <div class="page-header mb-5">
-         <div class="d-flex justify-content-between align-items-center">
-             <div>
-            <h1 class="page-title">My Listings</h1>
-  <p class="page-subtitle">Manage your products</p>
-       </div>
-                <button class="btn-add-new" onclick="openListingModal()">
-             <i class="bi bi-plus-circle me-2"></i>
-   Add New Listing
-        </button>
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-4">
+                    <div>
+                        <h1 class="page-title">My Listings</h1>
+                        <p class="page-subtitle">Manage your products</p>
+                    </div>
+                </div>
+                @if (Context.Session.GetString("UserType") == "seller" || Context.Session.GetString("UserType") == "admin")
+                {
+                    <button class="btn-add-new" onclick="openListingModal()">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        Add New Listing
+                    </button>
+                }
             </div>
-    </div>
+        </div>
 
         <!-- Listings Grid - Minimalist Cards -->
         <div class="listings-grid" id="listings-container">
-            @if (Model != null && Model.Any())
-            {
-     @foreach (var listing in Model)
-         {
-     <div class="listing-card-minimal" 
-  id="listing-@listing.Id"
-           data-category="@listing.Category"
-  data-condition="@listing.Condition"
- data-price="@listing.Price"
-    data-title="@listing.Title">
-           
-   <!-- Product Image -->
-               <div class="product-image-wrapper">
-              <img src="@listing.ImageUrl" 
-  alt="@listing.Title" 
- class="product-image"
-        onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
-         
-     <!-- Condition Badge -->
-     <span class="condition-badge badge-@listing.Condition.Replace(" ", "-").ToLower()">
-    @listing.Condition
-   </span>
-  </div>
-
-         <!-- Product Info -->
-  <div class="product-info">
-        <h3 class="product-title">@listing.Title</h3>
-    <p class="product-description">@listing.Description</p>
-          
-    <!-- Price & Category -->
-       <div class="product-meta">
-        <span class="product-price">$@listing.Price</span>
-            <span class="product-category">@listing.Category</span>
-      </div>
-
-           <!-- Action Buttons -->
-          <div class="product-actions">
- <button class="btn-action btn-edit-minimal" 
-                 onclick="editListing(@listing.Id)"
-          title="Edit">
-             <i class="bi bi-pencil"></i>
-     Edit
-     </button>
-                <button class="btn-action btn-delete-minimal" 
-     onclick="deleteListing(@listing.Id, '@listing.Title')"
-       title="Delete">
-     <i class="bi bi-trash"></i>
-         </button>
-         </div>
-         </div>
- </div>
-      }
-     }
-            else
-            {
-   <!-- Empty State -->
-       <div class="empty-state-minimal">
-        <i class="bi bi-inbox"></i>
-         <h3>No listings yet</h3>
-   <p>Create your first listing to get started!</p>
-      <button class="btn-add-new" onclick="openListingModal()">
-             <i class="bi bi-plus-circle me-2"></i>
-                Add Your First Listing
-        </button>
-    </div>
-      }
+            <!-- Loaded dynamically from Firebase -->
         </div>
     </div>
 </section>
 
 <!-- Add/Edit Listing Modal -->
 <div class="modal fade" id="listingModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content modern-modal">
             <div class="modal-header border-0">
                 <div>
@@ -162,6 +106,7 @@
     <label for="title" class="form-label">Title *</label>
 <input type="text" 
  class="form-control minimal-input" 
+ name="title"
  id="title" 
  placeholder="e.g., iPhone 13 Pro Max 256GB" 
         required
@@ -172,6 +117,7 @@
      <div class="mb-4">
     <label for="description" class="form-label">Description *</label>
     <textarea class="form-control minimal-input" 
+     name="description"
      id="description" 
           rows="3" 
          placeholder="Describe your item..." 
@@ -185,6 +131,7 @@
       <label for="price" class="form-label">Price ($) *</label>
       <input type="number" 
  class="form-control minimal-input" 
+ name="price"
     id="price" 
      placeholder="0.00" 
         step="0.01" 
@@ -195,7 +142,7 @@
 <!-- Category -->
  <div class="col-md-6">
           <label for="category" class="form-label">Category *</label>
-         <select class="form-select minimal-input" id="category" required>
+         <select class="form-select minimal-input" name="category" id="category" required>
     <option value="">Select category</option>
      <option value="Electronics">Electronics</option>
      <option value="Fashion">Fashion</option>
@@ -224,12 +171,14 @@
            <label class="condition-option" for="conditionFair">Fair</label>
          </div>
   </div>
+  
+    <!-- Hidden imageUrl field (already defined at top of form) -->
   </form>
    </div>
           <div class="modal-footer border-0">
          <button type="button" class="btn-modal-cancel" data-bs-dismiss="modal">Cancel</button>
-    <button type="button" class="btn-modal-save" onclick="saveListing()">
-        <span id="saveButtonText">Save Listing</span>
+    <button type="button" class="btn-modal-save btn-save-listing" onclick="saveListing()">
+        <span id="saveButtonText">Add Listing</span>
     </button>
     </div>
         </div>
@@ -247,6 +196,44 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script>
+        // Wait for Firebase functions to be available
+        function waitForFirebaseFunctions() {
+            if (typeof window.firebaseCreateListing === 'function') {
+                console.log('Firebase functions ready');
+                // Get user info from page data attributes
+                const section = document.querySelector('.my-listings-page');
+                var username = section.getAttribute('data-user-name') || '';
+                var fullName = section.getAttribute('data-user-fullname') || '';
+                var userId = section.getAttribute('data-user-id') || '';
+                var userType = section.getAttribute('data-user-type') || 'seller';
+                
+                // If UserId is empty, fallback to username
+                if (!userId || userId === '') {
+                    userId = username;
+                    console.log('⚠️  UserId was empty, using username as fallback:', userId);
+                }
+                
+                sessionStorage.setItem('Username', username);
+                sessionStorage.setItem('FullName', fullName);
+                sessionStorage.setItem('UserId', userId);
+                sessionStorage.setItem('UserType', userType);
+                
+                console.log('Session data stored:', { username, fullName, userId, userType });
+                
+                // NOW load listings from Firebase
+                if (typeof window.loadListingsFromFirebase === 'function') {
+                    console.log('Loading listings from Firebase...');
+                    window.loadListingsFromFirebase();
+                }
+            } else {
+                setTimeout(waitForFirebaseFunctions, 100);
+            }
+        }
+        waitForFirebaseFunctions();
+    </script>
+    <script src="~/js/listing-form.js"></script>
     <script src="~/js/listings-manager.js"></script>
     <script src="~/js/listings-enhanced.js"></script>
 }
