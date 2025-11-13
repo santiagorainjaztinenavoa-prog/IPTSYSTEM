@@ -344,6 +344,30 @@ hideSaveLoadingState();
      } else {
      showToast(result.message || `Failed to ${actionText} listing`, 'error');
  }
+        // Mirror data into Firestore (if client Firebase helpers are available)
+        try {
+            if (result.success && typeof window.firebaseCreateListing === 'function') {
+                // For create action, server returns `listing` object; for update, use listingData
+                const serverListing = result.listing || listingData;
+                const fbPayload = {
+                    id: serverListing.id ?? serverListing.Id ?? listingData.id,
+                    title: serverListing.title ?? serverListing.Title ?? listingData.title,
+                    description: serverListing.description ?? serverListing.Description ?? listingData.description,
+                    price: serverListing.price ?? serverListing.Price ?? listingData.price,
+                    category: serverListing.category ?? serverListing.Category ?? listingData.category,
+                    condition: serverListing.condition ?? serverListing.Condition ?? listingData.condition,
+                    imageUrl: serverListing.imageUrl ?? serverListing.ImageUrl ?? listingData.imageUrl
+                };
+
+                if (isUpdate && typeof window.firebaseUpdateListing === 'function') {
+                    await window.firebaseUpdateListing(fbPayload);
+                } else if (!isUpdate && typeof window.firebaseCreateListing === 'function') {
+                    await window.firebaseCreateListing(fbPayload);
+                }
+            }
+        } catch (e) {
+            console.debug('Firestore mirroring error:', e);
+        }
         
   } catch (error) {
         hideSaveLoadingState();
@@ -463,9 +487,18 @@ if (card) {
         // If card not found, just reload
        setTimeout(() => window.location.reload(), 1000);
     }
-    } else {
+        } else {
             showToast(result.message || 'Failed to delete listing', 'error');
- }
+        }
+
+        // Also attempt to delete from Firestore if helper exists
+        try {
+            if (result.success && typeof window.firebaseDeleteListing === 'function') {
+                await window.firebaseDeleteListing(id);
+            }
+        } catch (e) {
+            console.debug('Firestore delete mirror error:', e);
+        }
         
     } catch (error) {
      showToast('Error deleting listing: ' + error.message, 'error');

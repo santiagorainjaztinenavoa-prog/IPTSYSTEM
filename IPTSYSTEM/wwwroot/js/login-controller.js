@@ -10,6 +10,14 @@ class LoginController {
         this.facebookLoginBtn = document.getElementById('facebookLoginBtn');
         
         this.initializeEventListeners();
+        // Debug: log whether firebaseSignIn is available at controller init
+        try {
+            console.debug('LoginController initialized. firebaseSignIn available:', typeof window.firebaseSignIn);
+            console.debug('Window firebaseRegister available:', typeof window.firebaseRegister);
+            console.debug('Loaded firebase config (if any):', typeof window.__firebaseConfig !== 'undefined' ? window.__firebaseConfig : null);
+        } catch (e) {
+            console.debug('Error while printing firebase debug info', e);
+        }
     }
 
     // Initialize all event listeners
@@ -64,8 +72,15 @@ class LoginController {
 
         try {
             // Prefer client-side Firebase sign-in if available
-            if (typeof window.firebaseSignIn === 'function') {
+            const hasFirebaseSignIn = (typeof window.firebaseSignIn === 'function');
+            const loginIdentifier = (data.emailOrUsername || '').toString().trim();
+            const isAdminLogin = loginIdentifier.toLowerCase() === 'admin@gmail.com';
+            console.debug('handleLogin: hasFirebaseSignIn =', hasFirebaseSignIn, 'isAdminLogin =', isAdminLogin);
+
+            // If this is the admin account, prefer the server-side login (admin is server-only).
+            if (hasFirebaseSignIn && !isAdminLogin) {
                 const result = await window.firebaseSignIn(data.emailOrUsername, data.password);
+                console.debug('handleLogin: firebaseSignIn returned', result);
 
                 if (result && result.success) {
                     // Try to establish a server-side session for UI personalization
@@ -105,7 +120,8 @@ class LoginController {
                     this.setLoadingState(false);
                 }
             } else {
-                // Fallback to existing server-side login
+                    // Fallback to existing server-side login (used for admin or when firebaseSignIn unavailable/declined)
+                    console.debug('handleLogin: using server-side login fallback');
                 const response = await fetch('/Home/Login', {
                     method: 'POST',
                     headers: {
@@ -116,6 +132,7 @@ class LoginController {
                 });
 
                 const result = await response.json();
+                    console.debug('handleLogin: server response', result);
 
                 if (result.success) {
                     this.showToast('Success!', result.message, 'success');

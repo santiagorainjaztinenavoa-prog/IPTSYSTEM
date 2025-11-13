@@ -418,6 +418,66 @@ width: 50%;
     align-items: center;
 }
 
+/* Profile avatar (circle with initial) */
+.profile-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #2563eb);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.06);
+}
+
+.user-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center; /* center name and role horizontally */
+    text-align: center;
+}
+
+.user-role {
+    font-size: 0.75rem;
+    color: var(--medium-gray);
+    font-weight: 600;
+    margin-top: -2px;
+}
+
+/* Header alignment tweaks for profile + logout */
+.header-actions .icon-actions {
+    align-items: center; /* ensure actions are vertically centered */
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 6px;
+}
+
+.user-welcome {
+    padding: 4px 10px; /* slightly reduced top/bottom padding for tighter alignment */
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-black);
+    background: transparent; /* remove background so name aligns better with avatar */
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.btn-logout-nav {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+}
+
 /* Loading States */
 .spinner-border-sm {
     width: 1rem;
