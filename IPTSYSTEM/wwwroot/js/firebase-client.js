@@ -372,12 +372,30 @@ window.establishServerSession = async function(email, uid) {
 // Fetch all products by a specific seller
 window.firebaseFetchSellerProducts = async function(sellerUserId) {
   try {
-    console.log('Fetching products for seller:', sellerUserId);
+    console.log('🔍 Fetching products for seller:', sellerUserId);
     const col = collection(db, 'tbl_listing');
-    const q = query(col, where('user_id', '==', sellerUserId));
-    const snaps = await getDocs(q);
     
-    console.log('Found', snaps.size, 'products for seller:', sellerUserId);
+    // Try to fetch by user_id
+    let q = query(col, where('user_id', '==', sellerUserId));
+    let snaps = await getDocs(q);
+    
+    console.log('📊 Found', snaps.size, 'products for user_id:', sellerUserId);
+    
+    // If no results and sellerUserId contains special chars, try alternative matching
+    if (snaps.size === 0 && sellerUserId.includes(' ')) {
+      console.log('⚠️  No products found with exact user_id, trying seller_name match...');
+      q = query(col, where('seller_name', '==', sellerUserId));
+      snaps = await getDocs(q);
+      console.log('📊 Found', snaps.size, 'products by seller_name');
+    }
+    
+    // If still no results, try seller_username
+    if (snaps.size === 0) {
+      console.log('⚠️  No products found, trying seller_username match...');
+      q = query(col, where('seller_username', '==', sellerUserId));
+      snaps = await getDocs(q);
+      console.log('📊 Found', snaps.size, 'products by seller_username');
+    }
     
     const products = [];
     snaps.forEach((doc) => {
@@ -391,6 +409,7 @@ window.firebaseFetchSellerProducts = async function(sellerUserId) {
       }
     });
     
+    console.log('✅ Returning', products.length, 'valid products');
     return { success: true, products, count: products.length };
   } catch (err) {
     console.error('firebaseFetchSellerProducts error', err);

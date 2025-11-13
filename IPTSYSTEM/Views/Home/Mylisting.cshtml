@@ -1,5 +1,4 @@
-﻿@model List<IPTSYSTEM.Models.Listing>
-@{
+﻿@{
  ViewData["Title"] = "My Listings";
 }
 
@@ -9,7 +8,11 @@
 }
 
 <!-- My Listings Page - Modern Minimalist Design -->
-<section class="my-listings-page">
+<section class="my-listings-page" 
+         data-user-name="@(Context.Session.GetString("Username") ?? "")"
+         data-user-fullname="@(Context.Session.GetString("FullName") ?? "")"
+         data-user-id="@(Context.Session.GetString("UserId") ?? "")"
+         data-user-type="@(Context.Session.GetString("UserType") ?? "seller")">
   <div class="container py-5">
         <!-- Page Header - Clean & Simple -->
         <div class="page-header mb-5">
@@ -32,85 +35,7 @@
 
         <!-- Listings Grid - Minimalist Cards -->
         <div class="listings-grid" id="listings-container">
-            @if (Model != null && Model.Any())
-            {
-     @foreach (var listing in Model)
-         {
-     <div class="listing-card-minimal" 
-  id="listing-@listing.Id"
-           data-category="@listing.Category"
-  data-condition="@listing.Condition"
- data-price="@listing.Price"
-    data-title="@listing.Title">
-           
-   <!-- Product Image -->
-               <div class="product-image-wrapper">
-              <img src="@listing.ImageUrl" 
-  alt="@listing.Title" 
- class="product-image"
-        onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
-         
-     <!-- Condition Badge -->
-     <span class="condition-badge badge-@listing.Condition.Replace(" ", "-").ToLower()">
-    @listing.Condition
-   </span>
-  </div>
-
-         <!-- Product Info -->
-  <div class="product-info">
-        <h3 class="product-title">@listing.Title</h3>
-    <p class="product-description">@listing.Description</p>
-          
-    <!-- Price & Category -->
-       <div class="product-meta">
-    <span class="product-price">₱@listing.Price</span>
-            <span class="product-category">@listing.Category</span>
-      </div>
-
-           <!-- Action Buttons -->
-          <div class="product-actions">
-            @if (Context.Session.GetString("UserType") == "seller")
-            {
-                <button class="btn-action btn-edit-minimal" onclick="editListing(@listing.Id)" title="Edit">
-                    <i class="bi bi-pencil"></i>
-                    Edit
-                </button>
-                <button class="btn-action btn-delete-minimal" onclick="deleteListing(@listing.Id, '@listing.Title')" title="Delete">
-                    <i class="bi bi-trash"></i>
-                </button>
-            }
-            else if (Context.Session.GetString("UserType") == "buyer")
-            {
-                <button class="btn-action btn-buy-minimal animate__animated animate__pulse" onclick="buyProduct(@listing.Id)" title="Buy" style="background:#10b981;color:#fff;font-weight:600;">
-                    <i class="bi bi-bag-check"></i>
-                    Buy
-                </button>
-                <button class="btn-action btn-message-minimal animate__animated animate__pulse" onclick="messageSeller(@listing.Id)" title="Message Seller" style="background:#2563eb;color:#fff;font-weight:600;">
-                    <i class="bi bi-chat-dots"></i>
-                    Message Seller
-                </button>
-            }
-          </div>
-         </div>
- </div>
-      }
-     }
-            else
-            {
-   <!-- Empty State -->
-       <div class="empty-state-minimal">
-        <i class="bi bi-inbox"></i>
-         <h3>No listings yet</h3>
-   <p>Create your first listing to get started!</p>
-      @if (Context.Session.GetString("UserType") == "seller" || Context.Session.GetString("UserType") == "admin")
-      {
-          <button class="btn-add-new" onclick="openListingModal()">
-              <i class="bi bi-plus-circle me-2"></i>
-              Add Your First Listing
-          </button>
-      }
-    </div>
-      }
+            <!-- Loaded dynamically from Firebase -->
         </div>
     </div>
 </section>
@@ -277,16 +202,31 @@
         function waitForFirebaseFunctions() {
             if (typeof window.firebaseCreateListing === 'function') {
                 console.log('Firebase functions ready');
-                // Store user info in sessionStorage for use in listing cards
-                const username = '@Context.Session.GetString("Username")';
-                const fullName = '@Context.Session.GetString("FullName")';
-                const userId = '@Context.Session.GetString("UserId")';
+                // Get user info from page data attributes
+                const section = document.querySelector('.my-listings-page');
+                var username = section.getAttribute('data-user-name') || '';
+                var fullName = section.getAttribute('data-user-fullname') || '';
+                var userId = section.getAttribute('data-user-id') || '';
+                var userType = section.getAttribute('data-user-type') || 'seller';
+                
+                // If UserId is empty, fallback to username
+                if (!userId || userId === '') {
+                    userId = username;
+                    console.log('⚠️  UserId was empty, using username as fallback:', userId);
+                }
                 
                 sessionStorage.setItem('Username', username);
                 sessionStorage.setItem('FullName', fullName);
                 sessionStorage.setItem('UserId', userId);
+                sessionStorage.setItem('UserType', userType);
                 
-                console.log('Session data:', { username, fullName, userId });
+                console.log('Session data stored:', { username, fullName, userId, userType });
+                
+                // NOW load listings from Firebase
+                if (typeof window.loadListingsFromFirebase === 'function') {
+                    console.log('Loading listings from Firebase...');
+                    window.loadListingsFromFirebase();
+                }
             } else {
                 setTimeout(waitForFirebaseFunctions, 100);
             }

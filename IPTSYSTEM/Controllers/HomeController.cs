@@ -120,6 +120,7 @@ _logger = logger;
                     HttpContext.Session.SetString("UserType", "admin");
                     // Also set a display name for admin to show in header
                     HttpContext.Session.SetString("FullName", "Admin");
+                    HttpContext.Session.SetString("UserId", "admin-user-id");
                     
                     // Simulate authentication delay
                     await Task.Delay(500);
@@ -142,6 +143,8 @@ _logger = logger;
                     HttpContext.Session.SetString("UserType", regUser.UserType);
                     // Persist full name in session so layout can show avatar initial and proper display name
                     HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+                    // Set a placeholder UserId - will be updated when Firebase UID is available
+                    HttpContext.Session.SetString("UserId", regUser.Username);
                     await Task.Delay(500);
                     return Json(new LoginResponse
                     {
@@ -344,6 +347,8 @@ _logger = logger;
                     HttpContext.Session.SetString("Username", req.Username);
                     HttpContext.Session.SetString("UserType", (req.UserType ?? "buyer").ToLowerInvariant());
                     HttpContext.Session.SetString("FullName", req.FullName ?? string.Empty);
+                    // Store Firebase UID as UserId
+                    HttpContext.Session.SetString("UserId", req.Uid ?? req.Username);
                     return Json(new LoginResponse { Success = true, Message = "Server session established" });
                 }
 
@@ -359,6 +364,8 @@ _logger = logger;
                 HttpContext.Session.SetString("Username", regUser.Username);
                 HttpContext.Session.SetString("UserType", regUser.UserType);
                 HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+                // Store Firebase UID as UserId
+                HttpContext.Session.SetString("UserId", req.Uid ?? regUser.Username);
 
                 return Json(new LoginResponse { Success = true, Message = "Server session established" });
             }
