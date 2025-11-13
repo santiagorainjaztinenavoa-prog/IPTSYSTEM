@@ -5,7 +5,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs, addDoc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // Your web app's Firebase configuration (public)
 const firebaseConfig = {
@@ -46,17 +46,137 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
       email: email || '',
       username: username || '',
       account_type: accountType || 'Buyer',
+      phone_number: '',
+      user_id: uid,
       date_created: serverTimestamp()
     });
 
-    console.info('Firebase registration succeeded', { uid });
-    return { success: true, uid };
+    // Read back to verify the document was written and return the profile
+    try {
+      const createdSnap = await getDoc(doc(db, 'users', uid));
+      if (!createdSnap.exists()) {
+        console.warn('User doc not found immediately after setDoc', { uid });
+        return { success: false, code: 'user-doc-missing', message: 'User created in Auth but profile document not found after write.' };
+      }
+
+      console.info('Firebase registration succeeded', { uid });
+      return { success: true, uid, profile: createdSnap.data() };
+    } catch (re) {
+      console.error('Error verifying created user document', re);
+      return { success: false, code: 'user-doc-verify-failed', message: re?.message || String(re) };
+    }
   } catch (err) {
     // Return standardized error info for the UI
     const code = err?.code || null;
     const message = err?.message || String(err);
     console.error('Firebase register error', { code, message, err });
     return { success: false, code, message };
+  }
+};
+
+// Create a listing document in Firestore. If `listing.product_id` is provided (server id), store it
+// so server<->firestore records can be correlated.
+// (listing helpers implemented below using addDoc/updateDoc/deleteDoc)
+
+// The required Firestore helpers are already imported above from the firebase-firestore module.
+// (Avoid re-importing to prevent duplicate identifier errors.)
+
+// Proper create using addDoc
+window.firebaseCreateListing = async function(listing) {
+  try {
+    const user = auth.currentUser;
+    if (!user) return { success: false, message: 'User not signed in' };
+
+    const payload = {
+      title: listing.title || '',
+      description: listing.description || '',
+      price: listing.price || 0,
+      category: listing.category || '',
+      condition: listing.condition || '',
+      imageUrl: listing.imageUrl || '',
+      user_id: user.uid,
+      product_id: listing.id ?? null,
+      date_created: serverTimestamp()
+    };
+
+    const col = collection(db, 'listings');
+    const docRefAdded = await addDoc(col, payload);
+
+    // If product_id wasn't provided, set product_id to the generated doc id
+    if (!payload.product_id) {
+      await updateDoc(doc(db, 'listings', docRefAdded.id), { product_id: docRefAdded.id });
+    }
+
+    return { success: true, id: docRefAdded.id };
+  } catch (err) {
+    console.error('firebaseCreateListing error', err);
+    return { success: false, message: err?.message || String(err) };
+  }
+};
+
+// Update listing by matching product_id (server id) or by doc id
+window.firebaseUpdateListing = async function(listing) {
+  try {
+  const col = collection(db, 'listings');
+  // Try to find doc by product_id
+  const q = query(col, where('product_id', '==', listing.id));
+  const snaps = await getDocs(q);
+    if (snaps.size === 0) {
+      // maybe listing.id is the firestore doc id
+  const docReference = doc(db, 'listings', String(listing.id));
+      await updateDoc(docReference, {
+        title: listing.title,
+        description: listing.description,
+        price: listing.price,
+        category: listing.category,
+        condition: listing.condition,
+        imageUrl: listing.imageUrl || ''
+      });
+      return { success: true };
+    }
+
+    // Update all matching docs
+    for (const d of snaps.docs) {
+      await updateDoc(doc(db, 'listings', d.id), {
+        title: listing.title,
+        description: listing.description,
+        price: listing.price,
+        category: listing.category,
+        condition: listing.condition,
+        imageUrl: listing.imageUrl || ''
+      });
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('firebaseUpdateListing error', err);
+    return { success: false, message: err?.message || String(err) };
+  }
+};
+
+// Delete listing by product_id or doc id
+window.firebaseDeleteListing = async function(productIdOrDocId) {
+  try {
+  const col = collection(db, 'listings');
+  const q = query(col, where('product_id', '==', productIdOrDocId));
+  const snaps = await getDocs(q);
+    if (snaps.size === 0) {
+      // try deleting by doc id
+      try {
+  await deleteDoc(doc(db, 'listings', String(productIdOrDocId)));
+        return { success: true };
+      } catch (e) {
+        return { success: false, message: 'No matching listing found' };
+      }
+    }
+
+    for (const d of snaps.docs) {
+  await deleteDoc(doc(db, 'listings', d.id));
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('firebaseDeleteListing error', err);
+    return { success: false, message: err?.message || String(err) };
   }
 };
 
@@ -73,9 +193,35 @@ window.firebaseSignIn = async function(email, password) {
     const userDocRef = doc(db, 'users', uid);
     const snap = await getDoc(userDocRef);
     if (!snap.exists()) {
-      // No profile document - sign the user out and return an error
-      try { await signOut(auth); } catch (e) { /* ignore */ }
-      return { success: false, code: 'user-doc-not-found', message: 'User authenticated but profile not found in Firestore.' };
+      // No profile document - attempt to auto-create a minimal profile document so
+      // users that were created in Auth but missing a profile can still use the app.
+      try {
+        console.warn('Profile document missing for uid, attempting to create minimal profile', { uid });
+        await setDoc(userDocRef, {
+          first_name: userCred.user.displayName ? userCred.user.displayName.split(' ')[0] : '',
+          last_name: userCred.user.displayName ? userCred.user.displayName.split(' ').slice(1).join(' ') : '',
+          email: userCred.user.email || '',
+          username: (userCred.user.email ? userCred.user.email.split('@')[0] : uid),
+          account_type: 'Buyer',
+          phone_number: '',
+          user_id: uid,
+          date_created: serverTimestamp()
+        });
+
+        // Re-read the profile
+        const newSnap = await getDoc(userDocRef);
+        if (newSnap.exists()) {
+          return { success: true, uid, profile: newSnap.data(), migrated: true };
+        } else {
+          // Couldn't verify the document after write
+          try { await signOut(auth); } catch (e) { /* ignore */ }
+          return { success: false, code: 'user-doc-missing-after-create', message: 'Authenticated but profile could not be created in Firestore.' };
+        }
+      } catch (createErr) {
+        console.error('Failed to auto-create user profile document', createErr);
+        try { await signOut(auth); } catch (e) { /* ignore */ }
+        return { success: false, code: createErr?.code || 'user-doc-create-failed', message: createErr?.message || String(createErr) };
+      }
     }
 
     return { success: true, uid, profile: snap.data() };

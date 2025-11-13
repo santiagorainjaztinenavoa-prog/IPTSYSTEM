@@ -118,14 +118,21 @@ _logger = logger;
 
                 bool isAdmin = false;
                 
-                // Check if logging in as admin
-                if (request.EmailOrUsername.ToLower() == ADMIN_USERNAME && request.Password == ADMIN_PASSWORD)
+                // Check if logging in as admin (trim and compare case-insensitively for username/email)
+                var loginIdentifier = request.EmailOrUsername?.Trim() ?? string.Empty;
+                var loginPassword = request.Password?.Trim() ?? string.Empty;
+
+                if (string.Equals(loginIdentifier, ADMIN_USERNAME, StringComparison.OrdinalIgnoreCase) && string.Equals(loginPassword, ADMIN_PASSWORD, StringComparison.Ordinal))
                 {
                     isAdmin = true;
                     
                     // Set admin session
                     HttpContext.Session.SetString("IsAdmin", "true");
                     HttpContext.Session.SetString("Username", ADMIN_USERNAME);
+                    // Mark admin user type for display in header
+                    HttpContext.Session.SetString("UserType", "admin");
+                    // Also set a display name for admin to show in header
+                    HttpContext.Session.SetString("FullName", "Admin");
                     
                     // Simulate authentication delay
                     await Task.Delay(500);
@@ -139,13 +146,15 @@ _logger = logger;
                 }
 
                 // Check registered users (server-side fallback registration)
-                var hashed = HashPassword(request.Password);
-                var regUser = _registeredUsers.FirstOrDefault(u => (u.Username == request.EmailOrUsername || u.Email == request.EmailOrUsername) && u.PasswordHash == hashed);
+                var hashed = HashPassword(loginPassword);
+                var regUser = _registeredUsers.FirstOrDefault(u => (string.Equals(u.Username, loginIdentifier, StringComparison.OrdinalIgnoreCase) || string.Equals(u.Email, loginIdentifier, StringComparison.OrdinalIgnoreCase)) && u.PasswordHash == hashed);
                 if (regUser != null)
                 {
                     HttpContext.Session.SetString("IsAdmin", "false");
                     HttpContext.Session.SetString("Username", regUser.Username);
                     HttpContext.Session.SetString("UserType", regUser.UserType);
+                    // Persist full name in session so layout can show avatar initial and proper display name
+                    HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
                     await Task.Delay(500);
                     return Json(new LoginResponse
                     {
