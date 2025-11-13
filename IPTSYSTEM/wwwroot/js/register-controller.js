@@ -55,6 +55,7 @@ class RegisterController {
         const firstName = (formData.get('FirstName') || '').toString().trim();
         const lastName = (formData.get('LastName') || '').toString().trim();
         const accountType = (formData.get('AccountType') || '').toString();
+        const phoneNumber = (formData.get('PhoneNumber') || '').toString().trim();
         const data = {
             // Combine first and last name into fullName for server-side compatibility
             fullName: `${firstName} ${lastName}`.trim(),
@@ -62,7 +63,8 @@ class RegisterController {
             username: formData.get('Username'),
             password: formData.get('Password'),
             confirmPassword: formData.get('ConfirmPassword'),
-            agreeToTerms: formData.get('AgreeToTerms') !== null
+            agreeToTerms: formData.get('AgreeToTerms') !== null,
+            phoneNumber: phoneNumber
         };
 
         // Client-side validation
@@ -76,7 +78,7 @@ class RegisterController {
         try {
             // Prefer client-side Firebase registration if available
             if (typeof window.firebaseRegister === 'function') {
-                const result = await window.firebaseRegister(firstName, lastName, data.email, data.password, data.username, accountType);
+                const result = await window.firebaseRegister(firstName, lastName, data.email, data.password, data.username, accountType, phoneNumber);
 
                 if (result && result.success) {
                     // Also notify server fallback so server can track registered users for demo login
@@ -94,7 +96,8 @@ class RegisterController {
                                 Username: data.username,
                                 Password: data.password,
                                 ConfirmPassword: data.confirmPassword,
-                                AgreeToTerms: data.agreeToTerms
+                                AgreeToTerms: data.agreeToTerms,
+                                PhoneNumber: phoneNumber
                             })
                         });
                     } catch (ex) {
@@ -134,7 +137,16 @@ class RegisterController {
                         'Content-Type': 'application/json',
                         'RequestVerificationToken': formData.get('__RequestVerificationToken')
                     },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify({
+                        AccountType: accountType,
+                        FullName: data.fullName,
+                        Email: data.email,
+                        Username: data.username,
+                        Password: data.password,
+                        ConfirmPassword: data.confirmPassword,
+                        AgreeToTerms: data.agreeToTerms,
+                        PhoneNumber: phoneNumber
+                    })
                 });
 
                 const result = await response.json();
@@ -191,6 +203,19 @@ class RegisterController {
         // Terms agreement validation
         if (!data.agreeToTerms) {
             this.showToast('Validation Error', 'You must agree to the Terms and Conditions', 'warning');
+            return false;
+        }
+
+        // Phone number validation
+        if (!data.phoneNumber || data.phoneNumber.trim().length === 0) {
+            this.showToast('Validation Error', 'Phone number is required', 'warning');
+            return false;
+        }
+
+        // Basic phone number format validation (at least 10 digits)
+        const phoneRegex = /^[\d\s\-\+\(\)]{10,20}$/;
+        if (!phoneRegex.test(data.phoneNumber)) {
+            this.showToast('Validation Error', 'Please enter a valid phone number', 'warning');
             return false;
         }
 

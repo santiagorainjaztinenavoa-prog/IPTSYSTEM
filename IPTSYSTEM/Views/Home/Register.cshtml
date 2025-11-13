@@ -95,6 +95,22 @@
                     <span asp-validation-for="Username" class="text-danger"></span>
                 </div>
 
+                <!-- Phone Number Field -->
+                <div class="form-group">
+                    <label class="form-label">Phone Number <span class="required-asterisk">*</span></label>
+                    <div class="input-with-icon">
+                        <i class="bi bi-telephone input-icon"></i>
+                        <input name="PhoneNumber" 
+                               id="PhoneNumber"
+                               type="tel"
+                               class="form-control" 
+                               placeholder="Enter your phone number" 
+                               autocomplete="tel"
+                               required />
+                    </div>
+                    <span class="text-danger" data-valmsg-for="PhoneNumber" data-valmsg-replace="true"></span>
+                </div>
+
                 <!-- Password Field -->
                 <div class="form-group">
                     <label asp-for="Password" class="form-label">Password <span class="required-asterisk">*</span></label>

@@ -69,7 +69,7 @@ async function tryAutoSignInFromSession() {
 window.tryAutoSignInFromSession = tryAutoSignInFromSession;
 
 // Expose a simple register helper used by the page
-window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType) {
+window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType, phoneNumber) {
   try {
     // create user in Firebase Auth
     const userCred = await createUserWithEmailAndPassword(auth, email, password);
@@ -82,7 +82,7 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
       email: email || '',
       username: username || '',
       account_type: accountType || 'Buyer',
-      phone_number: '',
+      phone_number: phoneNumber || '',
       user_id: uid,
       date_created: serverTimestamp()
     });

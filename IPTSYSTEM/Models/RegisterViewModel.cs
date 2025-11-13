@@ -20,7 +20,6 @@ namespace IPTSYSTEM.Models
         [Required(ErrorMessage = "Username is required")]
         [Display(Name = "Username")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3 and 50 characters")]
-        [RegularExpression(@"^[a-zA-Z0-9_]+$", ErrorMessage = "Username can only contain letters, numbers, and underscores")]
         public string Username { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Password is required")]
@@ -36,8 +35,12 @@ namespace IPTSYSTEM.Models
         public string ConfirmPassword { get; set; } = string.Empty;
 
         [Display(Name = "I agree to the Terms and Conditions")]
-        [Range(typeof(bool), "true", "true", ErrorMessage = "You must agree to the Terms and Conditions")]
         public bool AgreeToTerms { get; set; }
+
+        [Required(ErrorMessage = "Phone number is required")]
+        [StringLength(20, MinimumLength = 10, ErrorMessage = "Phone number must be between 10 and 20 characters")]
+        [Display(Name = "Phone Number")]
+        public string PhoneNumber { get; set; } = string.Empty;
     }
 
     public class RegisterRequest
@@ -49,6 +52,7 @@ namespace IPTSYSTEM.Models
         public string Password { get; set; } = string.Empty;
         public string ConfirmPassword { get; set; } = string.Empty;
         public bool AgreeToTerms { get; set; }
+        public string PhoneNumber { get; set; } = string.Empty;
     }
 
     public class RegisterResponse
