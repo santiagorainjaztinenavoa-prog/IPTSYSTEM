@@ -238,6 +238,7 @@ class RegisterController {
         const lastName = (formData.get('LastName') || '').toString().trim();
         const accountType = (formData.get('AccountType') || '').toString();
         const phoneNumber = (formData.get('PhoneNumber') || '').toString().trim();
+<<<<<<< HEAD
         const region = (formData.get('Region') || '').toString();
         const province = (formData.get('Province') || '').toString();
         const city = (formData.get('City') || '').toString();
@@ -246,6 +247,8 @@ class RegisterController {
         const streetAddress = (formData.get('StreetAddress') || '').toString();
         const composedAddress = (formData.get('Address') || this.addressDisplay?.value || '').toString();
 
+=======
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
         const data = {
             // Combine first and last name into fullName for server-side compatibility
             fullName: `${firstName} ${lastName}`.trim(),
@@ -254,6 +257,7 @@ class RegisterController {
             password: formData.get('Password'),
             confirmPassword: formData.get('ConfirmPassword'),
             agreeToTerms: formData.get('AgreeToTerms') !== null,
+<<<<<<< HEAD
             phoneNumber: phoneNumber,
             region,
             province,
@@ -262,6 +266,9 @@ class RegisterController {
             postalCode,
             streetAddress,
             address: composedAddress
+=======
+            phoneNumber: phoneNumber
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
         };
 
         // Client-side validation
@@ -275,6 +282,7 @@ class RegisterController {
         try {
             // Prefer client-side Firebase registration if available
             if (typeof window.firebaseRegister === 'function') {
+<<<<<<< HEAD
                 const result = await window.firebaseRegister(
                     firstName,
                     lastName,
@@ -291,6 +299,9 @@ class RegisterController {
                     streetAddress,
                     composedAddress
                 );
+=======
+                const result = await window.firebaseRegister(firstName, lastName, data.email, data.password, data.username, accountType, phoneNumber);
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
 
                 if (result && result.success) {
                     // Also notify server fallback so server can track registered users for demo login
@@ -309,6 +320,7 @@ class RegisterController {
                                 Password: data.password,
                                 ConfirmPassword: data.confirmPassword,
                                 AgreeToTerms: data.agreeToTerms,
+<<<<<<< HEAD
                                 PhoneNumber: phoneNumber,
                                 Region: region,
                                 Province: province,
@@ -317,6 +329,9 @@ class RegisterController {
                                 PostalCode: postalCode,
                                 StreetAddress: streetAddress,
                                 Address: composedAddress
+=======
+                                PhoneNumber: phoneNumber
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
                             })
                         });
                     } catch (ex) {
@@ -364,6 +379,7 @@ class RegisterController {
                         Password: data.password,
                         ConfirmPassword: data.confirmPassword,
                         AgreeToTerms: data.agreeToTerms,
+<<<<<<< HEAD
                         PhoneNumber: phoneNumber,
                         Region: region,
                         Province: province,
@@ -372,6 +388,9 @@ class RegisterController {
                         PostalCode: postalCode,
                         StreetAddress: streetAddress,
                         Address: composedAddress
+=======
+                        PhoneNumber: phoneNumber
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
                     })
                 });
 
@@ -445,12 +464,15 @@ class RegisterController {
             return false;
         }
 
+<<<<<<< HEAD
         // Address selections
         if (!data.region || !data.city || !data.barangay) {
             this.showToast('Validation Error', 'Please select Region, City/Municipality and Barangay', 'warning');
             return false;
         }
 
+=======
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
         return true;
     }
 

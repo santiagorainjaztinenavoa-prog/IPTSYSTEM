@@ -199,8 +199,12 @@ async function tryAutoSignInFromSession() {
 window.tryAutoSignInFromSession = tryAutoSignInFromSession;
 
 // Expose a simple register helper used by the page
+<<<<<<< HEAD
 // Extended to include location/address fields
 window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType, phoneNumber, region, province, city, barangay, postalCode, streetAddress, composedAddress) {
+=======
+window.firebaseRegister = async function(firstName, lastName, email, password, username, accountType, phoneNumber) {
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
   try {
     // create user in Firebase Auth
     const userCred = await createUserWithEmailAndPassword(auth, email, password);
@@ -214,6 +218,7 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
       username: username || '',
       account_type: accountType || 'Buyer',
       phone_number: phoneNumber || '',
+<<<<<<< HEAD
       region: region || '',
       province: province || '',
       city: city || '',
@@ -221,6 +226,8 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
       postal_code: postalCode || '',
       street_address: streetAddress || '',
       address_full: composedAddress || '',
+=======
+>>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
       user_id: uid,
       date_created: serverTimestamp()
     });
