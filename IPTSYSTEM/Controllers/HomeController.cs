@@ -5,6 +5,8 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using IPTSYSTEM.Data;
 using Microsoft.EntityFrameworkCore;
+using IPTSYSTEM.Firebase; // added
+using Microsoft.AspNetCore.Authorization;
 
 namespace IPTSYSTEM.Controllers
 {
@@ -21,13 +23,15 @@ namespace IPTSYSTEM.Controllers
         }
         private readonly ILogger<HomeController> _logger;
         private readonly AppDbContext _db;
+        private readonly FirestoreService _firestore; // new
 
         private static List<Listing> _listings = new List<Listing>();
 
-        public HomeController(ILogger<HomeController> logger, AppDbContext db)
+        public HomeController(ILogger<HomeController> logger, AppDbContext db, FirestoreService firestore)
         {
             _logger = logger;
             _db = db;
+            _firestore = firestore;
         }
 
         public IActionResult Index() => View("Landing");
@@ -105,12 +109,32 @@ namespace IPTSYSTEM.Controllers
                 if (request.Password.Length < 6) return Json(new RegisterResponse { Success = false, Message = "Password must be at least 6 characters" });
                 if (request.Password != request.ConfirmPassword) return Json(new RegisterResponse { Success = false, Message = "Passwords do not match" });
                 if (!request.AgreeToTerms) return Json(new RegisterResponse { Success = false, Message = "You must agree to the Terms and Conditions" });
-                await Task.Delay(800);
+                await Task.Delay(200);
                 if (_registeredUsers.Any(u => u.Username == request.Username || u.Email == request.Email))
                     return Json(new RegisterResponse { Success = false, Message = "Username or email already in use." });
+
                 var userHash = HashPassword(request.Password);
                 var userType = string.IsNullOrWhiteSpace(request.AccountType) ? "Buyer" : request.AccountType;
                 _registeredUsers.Add(new RegisteredUser(request.Username, userHash, userType.ToLowerInvariant(), request.Email, request.FullName));
+
+                // Attempt server-side mirroring to Firestore (non-fatal if fails)
+                _ = _firestore.MirrorUserAsync(request.Username, new
+                {
+                    username = request.Username,
+                    email = request.Email,
+                    full_name = request.FullName,
+                    account_type = userType.ToLowerInvariant(),
+                    phone_number = request.PhoneNumber,
+                    region = request.Region,
+                    province = request.Province,
+                    city = request.City,
+                    barangay = request.Barangay,
+                    postal_code = request.PostalCode,
+                    street_address = request.StreetAddress,
+                    address_full = request.Address,
+                    date_created_server = DateTime.UtcNow
+                });
+
                 return Json(new RegisterResponse { Success = true, Message = "Account created successfully! Redirecting to login...", RedirectUrl = "/Home/Login" });
             }
             catch (Exception ex)
@@ -160,7 +184,7 @@ namespace IPTSYSTEM.Controllers
             }
         }
 
-        // LISTINGS CRUD (still in-memory)
+        // LISTINGS CRUD (in-memory + Firestore mirror)
         [HttpGet]
         public IActionResult GetListing(int id)
         {
@@ -180,6 +204,22 @@ namespace IPTSYSTEM.Controllers
                 listing.SellerFullName = HttpContext.Session.GetString("FullName") ?? "Unknown";
                 listing.SellerUserId = HttpContext.Session.GetString("UserId") ?? "";
                 _listings.Add(listing);
+
+                _ = _firestore.MirrorListingAsync(listing.Id, new
+                {
+                    product_id = listing.Id,
+                    title = listing.Title,
+                    description = listing.Description,
+                    price = listing.Price,
+                    category = listing.Category,
+                    condition = listing.Condition,
+                    imageUrl = listing.ImageUrl,
+                    user_id = listing.SellerUserId,
+                    seller_username = listing.SellerUsername,
+                    seller_name = listing.SellerFullName,
+                    date_created_server = DateTime.UtcNow
+                });
+
                 return Json(new { success = true, message = "Listing created successfully!", listing });
             }
             catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
@@ -197,6 +237,22 @@ namespace IPTSYSTEM.Controllers
                 existingListing.Category = listing.Category;
                 existingListing.Condition = listing.Condition;
                 existingListing.ImageUrl = listing.ImageUrl;
+
+                _ = _firestore.MirrorListingAsync(existingListing.Id, new
+                {
+                    product_id = existingListing.Id,
+                    title = existingListing.Title,
+                    description = existingListing.Description,
+                    price = existingListing.Price,
+                    category = existingListing.Category,
+                    condition = existingListing.Condition,
+                    imageUrl = existingListing.ImageUrl,
+                    user_id = existingListing.SellerUserId,
+                    seller_username = existingListing.SellerUsername,
+                    seller_name = existingListing.SellerFullName,
+                    date_updated_server = DateTime.UtcNow
+                });
+
                 return Json(new { success = true, message = "Listing updated successfully!", listing = existingListing });
             }
             catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
@@ -209,12 +265,20 @@ namespace IPTSYSTEM.Controllers
                 var listing = _listings.FirstOrDefault(l => l.Id == id);
                 if (listing == null) return Json(new { success = false, message = "Listing not found" });
                 listing.IsActive = false;
+
+                _ = _firestore.MirrorListingAsync(listing.Id, new
+                {
+                    product_id = listing.Id,
+                    is_active = false,
+                    date_deleted_server = DateTime.UtcNow
+                });
+
                 return Json(new { success = true, message = "Listing deleted successfully!" });
             }
             catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
         }
 
-        // MESSAGING (now using EF Core)
+        // Messaging and bot logic unchanged...
         [HttpGet]
         public IActionResult GetMessages(int conversationId)
         {
@@ -342,5 +406,26 @@ namespace IPTSYSTEM.Controllers
 
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error() => View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SeedAddresses()
+        {
+            try
+            {
+                // Simple guard: allow only admin session
+                if (HttpContext.Session.GetString("IsAdmin") != "true")
+                {
+                    return Json(new { success = false, message = "Unauthorized" });
+                }
+                var result = await _firestore.SeedPhilippineGeoAsync(includeBarangays: true);
+                return Json(new { success = result.ok, message = result.message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SeedAddresses error");
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
     }
 }

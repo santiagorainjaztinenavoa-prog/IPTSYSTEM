@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using IPTSYSTEM.Firebase;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,9 @@ builder.Services.AddSession(options =>
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
 });
+
+// Firestore server-side mirroring (optional). Requires GOOGLE_APPLICATION_CREDENTIALS env var.
+builder.Services.AddSingleton<FirestoreService>();
 
 var app = builder.Build();
 

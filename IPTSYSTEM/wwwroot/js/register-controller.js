@@ -1,5 +1,4 @@
 // ========== REGISTER CONTROLLER - Handles Registration Logic ==========
-
 class RegisterController {
     constructor() {
         this.form = document.getElementById('registerForm');
@@ -29,7 +28,34 @@ class RegisterController {
 
         // Firebase geo helper (populated by firebase-client.js)
         this.geo = window.firebaseGeo || null;
-
+        // Fallback static minimal PH geo data (NCR and sample others)
+        this.fallbackGeo = {
+            regions: [
+                { code: 'NCR', name: 'National Capital Region' },
+                { code: 'REG4A', name: 'CALABARZON' }
+            ],
+            provincesByRegion: {
+                'REG4A': [
+                    { code: 'CAV', name: 'Cavite', regionCode: 'REG4A' },
+                    { code: 'LAG', name: 'Laguna', regionCode: 'REG4A' }
+                ]
+            },
+            citiesByRegion: {
+                'NCR': [
+                    { code: 'MNL', name: 'Manila', regionCode: 'NCR' },
+                    { code: 'QZN', name: 'Quezon City', regionCode: 'NCR' }
+                ]
+            },
+            citiesByProvince: {
+                'CAV': [ { code: 'IMUS', name: 'Imus', provinceCode: 'CAV', regionCode: 'REG4A' } ],
+                'LAG': [ { code: 'SCLR', name: 'Santa Clara (Sample)', provinceCode: 'LAG', regionCode: 'REG4A' } ]
+            },
+            barangaysByCity: {
+                'MNL': [ { code: 'BRGY1', name: 'Barangay 1' }, { code: 'BRGY2', name: 'Barangay 2' } ],
+                'QZN': [ { code: 'BRGYQ1', name: 'Commonwealth' } ],
+                'IMUS': [ { code: 'IMUS1', name: 'Tanzang Luma' } ]
+            }
+        };
         this.initializeEventListeners();
         this.loadRegions();
     }
@@ -75,30 +101,26 @@ class RegisterController {
     // ========== GEO DATA LOADING (Firebase) ==========
     async loadRegions() {
         if (!this.regionSelect) return;
-        if (!this.geo?.loadRegions) {
-            console.warn('firebaseGeo not available. Ensure firebase-client.js loaded first.');
-            return;
-        }
+        let regions = [];
         try {
-            this.regionSelect.innerHTML = '<option value="">Region</option>';
-            const regions = await this.geo.loadRegions();
-            (regions || [])
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                .forEach(r => {
-                    const opt = document.createElement('option');
-                    opt.value = r.code; // region code (PSGC or custom)
-                    opt.textContent = r.name || r.code;
-                    opt.dataset.name = r.name || '';
-                    this.regionSelect.appendChild(opt);
-                });
-        } catch (e) {
-            console.warn('Failed to load regions from Firebase', e);
+            if (this.geo?.loadRegions) {
+                regions = await this.geo.loadRegions();
+            }
+        } catch (e) { console.warn('Geo loadRegions failed, will use fallback', e); }
+        if (!Array.isArray(regions) || regions.length === 0) {
+            console.warn('Using fallback region data (Firestore empty or not seeded)');
+            regions = this.fallbackGeo.regions;
         }
+        this.regionSelect.innerHTML = '<option value="">Region</option>';
+        regions.sort((a,b)=> (a.name||'').localeCompare(b.name||''))
+            .forEach(r=>{
+                const opt=document.createElement('option');
+                opt.value=r.code; opt.textContent=r.name||r.code; opt.dataset.name=r.name||''; this.regionSelect.appendChild(opt);
+            });
     }
 
     async onRegionChange() {
-        const code = this.regionSelect.value;
-        const name = this.regionSelect.selectedOptions[0]?.dataset?.name || '';
+        const code = this.regionSelect.value; const name = this.regionSelect.selectedOptions[0]?.dataset?.name || '';
         // Reflect hidden
         if (this.regionHidden) this.regionHidden.value = name;
 
@@ -106,112 +128,59 @@ class RegisterController {
         this.provinceSelect.innerHTML = '<option value="">Province</option>';
         this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
         this.barangaySelect.innerHTML = '<option value="">Barangay</option>';
-        this.provinceSelect.disabled = true;
-        this.citySelect.disabled = true;
-        this.barangaySelect.disabled = true;
+        this.provinceSelect.disabled = true; this.citySelect.disabled = true; this.barangaySelect.disabled = true;
 
-        this.updateAddressDisplay();
-        if (!code || !this.geo) return;
-
-        // Load provinces from Firebase. Some regions (e.g., NCR) may have no provinces -> load cities by region
-        try {
-            const provinces = await this.geo.loadProvincesByRegion(code);
-            if (!Array.isArray(provinces) || provinces.length === 0) {
-                await this.loadCitiesByRegion(code);
-                return;
-            }
-
+        this.updateAddressDisplay(); if (!code) return;
+        // Try Firestore provinces
+        let provinces = [];
+        try { if (this.geo?.loadProvincesByRegion) provinces = await this.geo.loadProvincesByRegion(code); } catch { /* ignore */ }
+        if ((!provinces || provinces.length===0) && this.fallbackGeo.provincesByRegion[code]) {
+            provinces = this.fallbackGeo.provincesByRegion[code];
+        }
+        if (provinces && provinces.length>0) {
             this.provinceSelect.disabled = false;
-            provinces
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.code;
-                    opt.textContent = p.name;
-                    opt.dataset.name = p.name;
-                    this.provinceSelect.appendChild(opt);
-                });
-        } catch (e) {
-            console.warn('Failed to load provinces from Firebase', e);
+            provinces.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{ const opt=document.createElement('option'); opt.value=p.code; opt.textContent=p.name; opt.dataset.name=p.name; this.provinceSelect.appendChild(opt); });
+        } else {
+            // No provinces (e.g. NCR) -> load cities by region
+            await this.loadCitiesByRegion(code);
         }
     }
 
     async loadCitiesByRegion(regionCode) {
-        if (!this.geo) return;
-        try {
-            this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
-            const cities = await this.geo.loadCitiesByRegion(regionCode);
-            this.citySelect.disabled = false;
-            (cities || [])
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.code;
-                    opt.textContent = c.name;
-                    opt.dataset.name = c.name;
-                    this.citySelect.appendChild(opt);
-                });
-        } catch (e) {
-            console.warn('Failed to load cities by region from Firebase', e);
+        let cities = [];
+        try { if (this.geo?.loadCitiesByRegion) cities = await this.geo.loadCitiesByRegion(regionCode); } catch { }
+        if ((!cities || cities.length===0) && this.fallbackGeo.citiesByRegion[regionCode]) {
+            cities = this.fallbackGeo.citiesByRegion[regionCode];
         }
+        this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
+        this.citySelect.disabled = false;
+        (cities||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{ const opt=document.createElement('option'); opt.value=c.code; opt.textContent=c.name; opt.dataset.name=c.name; this.citySelect.appendChild(opt); });
     }
 
     async onProvinceChange() {
-        const provinceCode = this.provinceSelect.value;
-        const name = this.provinceSelect.selectedOptions[0]?.dataset?.name || '';
+        const provinceCode = this.provinceSelect.value; const name = this.provinceSelect.selectedOptions[0]?.dataset?.name || '';
         if (this.provinceHidden) this.provinceHidden.value = name;
-
         // Reset children
         this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
         this.barangaySelect.innerHTML = '<option value="">Barangay</option>';
-        this.citySelect.disabled = true;
-        this.barangaySelect.disabled = true;
-
-        this.updateAddressDisplay();
-        if (!provinceCode || !this.geo) return;
-
-        try {
-            const cities = await this.geo.loadCitiesByProvince(provinceCode);
-            this.citySelect.disabled = false;
-            (cities || [])
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.code;
-                    opt.textContent = c.name;
-                    opt.dataset.name = c.name;
-                    this.citySelect.appendChild(opt);
-                });
-        } catch (e) {
-            console.warn('Failed to load cities from Firebase', e);
-        }
+        this.citySelect.disabled = true; this.barangaySelect.disabled = true; this.updateAddressDisplay(); if (!provinceCode) return;
+        let cities = [];
+        try { if (this.geo?.loadCitiesByProvince) cities = await this.geo.loadCitiesByProvince(provinceCode); } catch { }
+        if ((!cities || cities.length===0) && this.fallbackGeo.citiesByProvince[provinceCode]) cities = this.fallbackGeo.citiesByProvince[provinceCode];
+        this.citySelect.disabled = false;
+        (cities||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{ const opt=document.createElement('option'); opt.value=c.code; opt.textContent=c.name; opt.dataset.name=c.name; this.citySelect.appendChild(opt); });
     }
 
     async onCityChange() {
-        const cityCode = this.citySelect.value;
-        const name = this.citySelect.selectedOptions[0]?.dataset?.name || '';
+        const cityCode = this.citySelect.value; const name = this.citySelect.selectedOptions[0]?.dataset?.name || '';
         if (this.cityHidden) this.cityHidden.value = name;
-
         this.barangaySelect.innerHTML = '<option value="">Barangay</option>';
-        this.barangaySelect.disabled = true;
-        this.updateAddressDisplay();
-        if (!cityCode || !this.geo) return;
-
-        try {
-            const brgys = await this.geo.loadBarangaysByCity(cityCode);
-            this.barangaySelect.disabled = false;
-            (brgys || [])
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach(b => {
-                    const opt = document.createElement('option');
-                    opt.value = b.code;
-                    opt.textContent = b.name;
-                    opt.dataset.name = b.name;
-                    this.barangaySelect.appendChild(opt);
-                });
-        } catch (e) {
-            console.warn('Failed to load barangays from Firebase', e);
-        }
+        this.barangaySelect.disabled = true; this.updateAddressDisplay(); if (!cityCode) return;
+        let brgys = [];
+        try { if (this.geo?.loadBarangaysByCity) brgys = await this.geo.loadBarangaysByCity(cityCode); } catch { }
+        if ((!brgys || brgys.length===0) && this.fallbackGeo.barangaysByCity[cityCode]) brgys = this.fallbackGeo.barangaysByCity[cityCode];
+        this.barangaySelect.disabled = false;
+        (brgys||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(b=>{ const opt=document.createElement('option'); opt.value=b.code; opt.textContent=b.name; opt.dataset.name=b.name; this.barangaySelect.appendChild(opt); });
     }
 
     updateAddressDisplay() {
@@ -238,7 +207,6 @@ class RegisterController {
         const lastName = (formData.get('LastName') || '').toString().trim();
         const accountType = (formData.get('AccountType') || '').toString();
         const phoneNumber = (formData.get('PhoneNumber') || '').toString().trim();
-<<<<<<< HEAD
         const region = (formData.get('Region') || '').toString();
         const province = (formData.get('Province') || '').toString();
         const city = (formData.get('City') || '').toString();
@@ -247,8 +215,6 @@ class RegisterController {
         const streetAddress = (formData.get('StreetAddress') || '').toString();
         const composedAddress = (formData.get('Address') || this.addressDisplay?.value || '').toString();
 
-=======
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
         const data = {
             // Combine first and last name into fullName for server-side compatibility
             fullName: `${firstName} ${lastName}`.trim(),
@@ -257,7 +223,6 @@ class RegisterController {
             password: formData.get('Password'),
             confirmPassword: formData.get('ConfirmPassword'),
             agreeToTerms: formData.get('AgreeToTerms') !== null,
-<<<<<<< HEAD
             phoneNumber: phoneNumber,
             region,
             province,
@@ -266,9 +231,6 @@ class RegisterController {
             postalCode,
             streetAddress,
             address: composedAddress
-=======
-            phoneNumber: phoneNumber
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
         };
 
         // Client-side validation
@@ -282,7 +244,6 @@ class RegisterController {
         try {
             // Prefer client-side Firebase registration if available
             if (typeof window.firebaseRegister === 'function') {
-<<<<<<< HEAD
                 const result = await window.firebaseRegister(
                     firstName,
                     lastName,
@@ -299,9 +260,6 @@ class RegisterController {
                     streetAddress,
                     composedAddress
                 );
-=======
-                const result = await window.firebaseRegister(firstName, lastName, data.email, data.password, data.username, accountType, phoneNumber);
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
 
                 if (result && result.success) {
                     // Also notify server fallback so server can track registered users for demo login
@@ -320,7 +278,6 @@ class RegisterController {
                                 Password: data.password,
                                 ConfirmPassword: data.confirmPassword,
                                 AgreeToTerms: data.agreeToTerms,
-<<<<<<< HEAD
                                 PhoneNumber: phoneNumber,
                                 Region: region,
                                 Province: province,
@@ -329,9 +286,6 @@ class RegisterController {
                                 PostalCode: postalCode,
                                 StreetAddress: streetAddress,
                                 Address: composedAddress
-=======
-                                PhoneNumber: phoneNumber
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
                             })
                         });
                     } catch (ex) {
@@ -379,7 +333,6 @@ class RegisterController {
                         Password: data.password,
                         ConfirmPassword: data.confirmPassword,
                         AgreeToTerms: data.agreeToTerms,
-<<<<<<< HEAD
                         PhoneNumber: phoneNumber,
                         Region: region,
                         Province: province,
@@ -388,9 +341,6 @@ class RegisterController {
                         PostalCode: postalCode,
                         StreetAddress: streetAddress,
                         Address: composedAddress
-=======
-                        PhoneNumber: phoneNumber
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
                     })
                 });
 
@@ -464,15 +414,12 @@ class RegisterController {
             return false;
         }
 
-<<<<<<< HEAD
         // Address selections
         if (!data.region || !data.city || !data.barangay) {
             this.showToast('Validation Error', 'Please select Region, City/Municipality and Barangay', 'warning');
             return false;
         }
 
-=======
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
         return true;
     }
 

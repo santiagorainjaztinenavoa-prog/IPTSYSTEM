@@ -41,7 +41,6 @@ namespace IPTSYSTEM.Models
         [StringLength(20, MinimumLength = 10, ErrorMessage = "Phone number must be between 10 and 20 characters")]
         [Display(Name = "Phone Number")]
         public string PhoneNumber { get; set; } = string.Empty;
-<<<<<<< HEAD
 
         // Address fields
         [Display(Name = "Region")]
@@ -58,8 +57,6 @@ namespace IPTSYSTEM.Models
         public string StreetAddress { get; set; } = string.Empty;
         [Display(Name = "Address")]
         public string Address { get; set; } = string.Empty; // Composed Region, Province, City, Barangay
-=======
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
     }
 
     public class RegisterRequest
@@ -72,7 +69,6 @@ namespace IPTSYSTEM.Models
         public string ConfirmPassword { get; set; } = string.Empty;
         public bool AgreeToTerms { get; set; }
         public string PhoneNumber { get; set; } = string.Empty;
-<<<<<<< HEAD
 
         // Address fields (optional server-side)
         public string Region { get; set; } = string.Empty;
@@ -82,8 +78,6 @@ namespace IPTSYSTEM.Models
         public string PostalCode { get; set; } = string.Empty;
         public string StreetAddress { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty; // Composed
-=======
->>>>>>> e2e18df5de7dad35e0ef9ccd03e19d9e7a9fe69d
     }
 
     public class RegisterResponse
