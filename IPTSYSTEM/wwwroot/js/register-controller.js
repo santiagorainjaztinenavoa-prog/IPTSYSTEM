@@ -1,5 +1,4 @@
 // ========== REGISTER CONTROLLER - Handles Registration Logic ==========
-
 class RegisterController {
     constructor() {
         this.form = document.getElementById('registerForm');
@@ -11,8 +10,54 @@ class RegisterController {
         this.confirmPasswordIcon = document.getElementById('confirmPasswordIcon');
         this.googleRegisterBtn = document.getElementById('googleRegisterBtn');
         this.facebookRegisterBtn = document.getElementById('facebookRegisterBtn');
-        
+
+        // Address elements
+        this.regionSelect = document.getElementById('regionSelect');
+        this.provinceSelect = document.getElementById('provinceSelect');
+        this.citySelect = document.getElementById('citySelect');
+        this.barangaySelect = document.getElementById('barangaySelect');
+        this.addressDisplay = document.getElementById('AddressDisplay');
+        this.postalCodeInput = document.getElementById('PostalCode');
+        this.streetAddressInput = document.getElementById('StreetAddress');
+
+        // Hidden mirror inputs for posting to server
+        this.regionHidden = document.getElementById('Region');
+        this.provinceHidden = document.getElementById('Province');
+        this.cityHidden = document.getElementById('City');
+        this.barangayHidden = document.getElementById('Barangay');
+
+        // Firebase geo helper (populated by firebase-client.js)
+        this.geo = window.firebaseGeo || null;
+        // Fallback static minimal PH geo data (NCR and sample others)
+        this.fallbackGeo = {
+            regions: [
+                { code: 'NCR', name: 'National Capital Region' },
+                { code: 'REG4A', name: 'CALABARZON' }
+            ],
+            provincesByRegion: {
+                'REG4A': [
+                    { code: 'CAV', name: 'Cavite', regionCode: 'REG4A' },
+                    { code: 'LAG', name: 'Laguna', regionCode: 'REG4A' }
+                ]
+            },
+            citiesByRegion: {
+                'NCR': [
+                    { code: 'MNL', name: 'Manila', regionCode: 'NCR' },
+                    { code: 'QZN', name: 'Quezon City', regionCode: 'NCR' }
+                ]
+            },
+            citiesByProvince: {
+                'CAV': [ { code: 'IMUS', name: 'Imus', provinceCode: 'CAV', regionCode: 'REG4A' } ],
+                'LAG': [ { code: 'SCLR', name: 'Santa Clara (Sample)', provinceCode: 'LAG', regionCode: 'REG4A' } ]
+            },
+            barangaysByCity: {
+                'MNL': [ { code: 'BRGY1', name: 'Barangay 1' }, { code: 'BRGY2', name: 'Barangay 2' } ],
+                'QZN': [ { code: 'BRGYQ1', name: 'Commonwealth' } ],
+                'IMUS': [ { code: 'IMUS1', name: 'Tanzang Luma' } ]
+            }
+        };
         this.initializeEventListeners();
+        this.loadRegions();
     }
 
     // Initialize all event listeners
@@ -45,6 +90,112 @@ class RegisterController {
         if (this.confirmPasswordInput) {
             this.confirmPasswordInput.addEventListener('input', () => this.validatePasswordMatch());
         }
+
+        // Address cascading
+        if (this.regionSelect) this.regionSelect.addEventListener('change', () => this.onRegionChange());
+        if (this.provinceSelect) this.provinceSelect.addEventListener('change', () => this.onProvinceChange());
+        if (this.citySelect) this.citySelect.addEventListener('change', () => this.onCityChange());
+        if (this.barangaySelect) this.barangaySelect.addEventListener('change', () => this.updateAddressDisplay());
+    }
+
+    // ========== GEO DATA LOADING (Firebase) ==========
+    async loadRegions() {
+        if (!this.regionSelect) return;
+        let regions = [];
+        try {
+            if (this.geo?.loadRegions) {
+                regions = await this.geo.loadRegions();
+            }
+        } catch (e) { console.warn('Geo loadRegions failed, will use fallback', e); }
+        if (!Array.isArray(regions) || regions.length === 0) {
+            console.warn('Using fallback region data (Firestore empty or not seeded)');
+            regions = this.fallbackGeo.regions;
+        }
+        this.regionSelect.innerHTML = '<option value="">Region</option>';
+        regions.sort((a,b)=> (a.name||'').localeCompare(b.name||''))
+            .forEach(r=>{
+                const opt=document.createElement('option');
+                opt.value=r.code; opt.textContent=r.name||r.code; opt.dataset.name=r.name||''; this.regionSelect.appendChild(opt);
+            });
+    }
+
+    async onRegionChange() {
+        const code = this.regionSelect.value; const name = this.regionSelect.selectedOptions[0]?.dataset?.name || '';
+        // Reflect hidden
+        if (this.regionHidden) this.regionHidden.value = name;
+
+        // Reset children
+        this.provinceSelect.innerHTML = '<option value="">Province</option>';
+        this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
+        this.barangaySelect.innerHTML = '<option value="">Barangay</option>';
+        this.provinceSelect.disabled = true; this.citySelect.disabled = true; this.barangaySelect.disabled = true;
+
+        this.updateAddressDisplay(); if (!code) return;
+        // Try Firestore provinces
+        let provinces = [];
+        try { if (this.geo?.loadProvincesByRegion) provinces = await this.geo.loadProvincesByRegion(code); } catch { /* ignore */ }
+        if ((!provinces || provinces.length===0) && this.fallbackGeo.provincesByRegion[code]) {
+            provinces = this.fallbackGeo.provincesByRegion[code];
+        }
+        if (provinces && provinces.length>0) {
+            this.provinceSelect.disabled = false;
+            provinces.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{ const opt=document.createElement('option'); opt.value=p.code; opt.textContent=p.name; opt.dataset.name=p.name; this.provinceSelect.appendChild(opt); });
+        } else {
+            // No provinces (e.g. NCR) -> load cities by region
+            await this.loadCitiesByRegion(code);
+        }
+    }
+
+    async loadCitiesByRegion(regionCode) {
+        let cities = [];
+        try { if (this.geo?.loadCitiesByRegion) cities = await this.geo.loadCitiesByRegion(regionCode); } catch { }
+        if ((!cities || cities.length===0) && this.fallbackGeo.citiesByRegion[regionCode]) {
+            cities = this.fallbackGeo.citiesByRegion[regionCode];
+        }
+        this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
+        this.citySelect.disabled = false;
+        (cities||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{ const opt=document.createElement('option'); opt.value=c.code; opt.textContent=c.name; opt.dataset.name=c.name; this.citySelect.appendChild(opt); });
+    }
+
+    async onProvinceChange() {
+        const provinceCode = this.provinceSelect.value; const name = this.provinceSelect.selectedOptions[0]?.dataset?.name || '';
+        if (this.provinceHidden) this.provinceHidden.value = name;
+        // Reset children
+        this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
+        this.barangaySelect.innerHTML = '<option value="">Barangay</option>';
+        this.citySelect.disabled = true; this.barangaySelect.disabled = true; this.updateAddressDisplay(); if (!provinceCode) return;
+        let cities = [];
+        try { if (this.geo?.loadCitiesByProvince) cities = await this.geo.loadCitiesByProvince(provinceCode); } catch { }
+        if ((!cities || cities.length===0) && this.fallbackGeo.citiesByProvince[provinceCode]) cities = this.fallbackGeo.citiesByProvince[provinceCode];
+        this.citySelect.disabled = false;
+        (cities||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{ const opt=document.createElement('option'); opt.value=c.code; opt.textContent=c.name; opt.dataset.name=c.name; this.citySelect.appendChild(opt); });
+    }
+
+    async onCityChange() {
+        const cityCode = this.citySelect.value; const name = this.citySelect.selectedOptions[0]?.dataset?.name || '';
+        if (this.cityHidden) this.cityHidden.value = name;
+        this.barangaySelect.innerHTML = '<option value="">Barangay</option>';
+        this.barangaySelect.disabled = true; this.updateAddressDisplay(); if (!cityCode) return;
+        let brgys = [];
+        try { if (this.geo?.loadBarangaysByCity) brgys = await this.geo.loadBarangaysByCity(cityCode); } catch { }
+        if ((!brgys || brgys.length===0) && this.fallbackGeo.barangaysByCity[cityCode]) brgys = this.fallbackGeo.barangaysByCity[cityCode];
+        this.barangaySelect.disabled = false;
+        (brgys||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(b=>{ const opt=document.createElement('option'); opt.value=b.code; opt.textContent=b.name; opt.dataset.name=b.name; this.barangaySelect.appendChild(opt); });
+    }
+
+    updateAddressDisplay() {
+        const regionName = this.regionSelect?.selectedOptions[0]?.dataset?.name || '';
+        const provinceName = this.provinceSelect?.selectedOptions[0]?.dataset?.name || '';
+        const cityName = this.citySelect?.selectedOptions[0]?.dataset?.name || '';
+        const barangayName = this.barangaySelect?.selectedOptions[0]?.dataset?.name || '';
+
+        if (this.regionHidden) this.regionHidden.value = regionName || '';
+        if (this.provinceHidden) this.provinceHidden.value = provinceName || '';
+        if (this.cityHidden) this.cityHidden.value = cityName || '';
+        if (this.barangayHidden) this.barangayHidden.value = barangayName || '';
+
+        const parts = [regionName, provinceName, cityName, barangayName].filter(Boolean);
+        if (this.addressDisplay) this.addressDisplay.value = parts.join(', ');
     }
 
     // Handle registration form submission
@@ -56,6 +207,14 @@ class RegisterController {
         const lastName = (formData.get('LastName') || '').toString().trim();
         const accountType = (formData.get('AccountType') || '').toString();
         const phoneNumber = (formData.get('PhoneNumber') || '').toString().trim();
+        const region = (formData.get('Region') || '').toString();
+        const province = (formData.get('Province') || '').toString();
+        const city = (formData.get('City') || '').toString();
+        const barangay = (formData.get('Barangay') || '').toString();
+        const postalCode = (formData.get('PostalCode') || '').toString();
+        const streetAddress = (formData.get('StreetAddress') || '').toString();
+        const composedAddress = (formData.get('Address') || this.addressDisplay?.value || '').toString();
+
         const data = {
             // Combine first and last name into fullName for server-side compatibility
             fullName: `${firstName} ${lastName}`.trim(),
@@ -64,7 +223,14 @@ class RegisterController {
             password: formData.get('Password'),
             confirmPassword: formData.get('ConfirmPassword'),
             agreeToTerms: formData.get('AgreeToTerms') !== null,
-            phoneNumber: phoneNumber
+            phoneNumber: phoneNumber,
+            region,
+            province,
+            city,
+            barangay,
+            postalCode,
+            streetAddress,
+            address: composedAddress
         };
 
         // Client-side validation
@@ -78,7 +244,22 @@ class RegisterController {
         try {
             // Prefer client-side Firebase registration if available
             if (typeof window.firebaseRegister === 'function') {
-                const result = await window.firebaseRegister(firstName, lastName, data.email, data.password, data.username, accountType, phoneNumber);
+                const result = await window.firebaseRegister(
+                    firstName,
+                    lastName,
+                    data.email,
+                    data.password,
+                    data.username,
+                    accountType,
+                    phoneNumber,
+                    region,
+                    province,
+                    city,
+                    barangay,
+                    postalCode,
+                    streetAddress,
+                    composedAddress
+                );
 
                 if (result && result.success) {
                     // Also notify server fallback so server can track registered users for demo login
@@ -97,7 +278,14 @@ class RegisterController {
                                 Password: data.password,
                                 ConfirmPassword: data.confirmPassword,
                                 AgreeToTerms: data.agreeToTerms,
-                                PhoneNumber: phoneNumber
+                                PhoneNumber: phoneNumber,
+                                Region: region,
+                                Province: province,
+                                City: city,
+                                Barangay: barangay,
+                                PostalCode: postalCode,
+                                StreetAddress: streetAddress,
+                                Address: composedAddress
                             })
                         });
                     } catch (ex) {
@@ -145,7 +333,14 @@ class RegisterController {
                         Password: data.password,
                         ConfirmPassword: data.confirmPassword,
                         AgreeToTerms: data.agreeToTerms,
-                        PhoneNumber: phoneNumber
+                        PhoneNumber: phoneNumber,
+                        Region: region,
+                        Province: province,
+                        City: city,
+                        Barangay: barangay,
+                        PostalCode: postalCode,
+                        StreetAddress: streetAddress,
+                        Address: composedAddress
                     })
                 });
 
@@ -216,6 +411,12 @@ class RegisterController {
         const phoneRegex = /^[\d\s\-\+\(\)]{10,20}$/;
         if (!phoneRegex.test(data.phoneNumber)) {
             this.showToast('Validation Error', 'Please enter a valid phone number', 'warning');
+            return false;
+        }
+
+        // Address selections
+        if (!data.region || !data.city || !data.barangay) {
+            this.showToast('Validation Error', 'Please select Region, City/Municipality and Barangay', 'warning');
             return false;
         }
 
