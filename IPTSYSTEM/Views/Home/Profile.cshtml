@@ -1,0 +1,153 @@
+@model IPTSYSTEM.Models.UserProfileViewModel
+@{
+    ViewData["Title"] = "My Profile";
+    var initial = string.IsNullOrWhiteSpace(Model.FullName)
+        ? (string.IsNullOrWhiteSpace(Model.Username) ? "?" : Model.Username.Substring(0,1).ToUpperInvariant())
+        : Model.FullName.Substring(0,1).ToUpperInvariant();
+}
+
+<section class="profile-page py-4">
+    <div class="container" id="profileRoot" data-email="@Model.Email" data-phone="@Model.PhoneNumber" data-backup="@Model.BackupEmail" data-emergency="@Model.EmergencyPhone">
+        <!-- New profile photo header section -->
+        <h1 class="h3 mb-4">Edit profile</h1>
+        <div class="row align-items-start mb-4" id="photoSection">
+            <div class="col-auto">
+                <div id="profileAvatar" class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold" style="width:160px;height:160px;font-size:64px; user-select:none; background-size:cover; background-position:center;">
+                    @initial
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h5 class="fw-semibold mb-2">Profile photo</h5>
+                <p class="text-muted mb-3">Clear frontal face photos are an important way for buyers and sellers to learn about each other.</p>
+                <button type="button" class="btn btn-outline-secondary" id="uploadPhotoBtn">Upload a photo</button>
+                <input type="file" id="photoInput" accept="image/*" class="d-none" />
+                <div class="small text-muted mt-2" id="photoStatus" style="display:none;"></div>
+            </div>
+        </div>
+        <!-- Existing profile form -->
+        <h1 class="h4 mb-1">My Profile</h1>
+        <p class="text-muted mb-4">Manage and protect your account</p>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form id="profileForm" asp-controller="Home" asp-action="UpdateProfile" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="row">
+                        <div class="col-lg-12">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Username</label>
+                                <input type="text" class="form-control" id="Username" name="Username" value="@Model.Username" />
+                                <div class="invalid-feedback" id="UsernameError">Please enter username</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Name</label>
+                                <input type="text" class="form-control" id="FullName" name="FullName" value="@Model.FullName" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Primary Email</label>
+                                <div class="d-flex align-items-center">
+                                    <span class="me-2" id="EmailMasked"></span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Backup / Emergency Email (optional)</label>
+                                <input type="email" class="form-control" id="BackupEmail" name="BackupEmail" value="@Model.BackupEmail" placeholder="Add backup email" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Primary Phone</label>
+                                <div class="d-flex align-items-center">
+                                    <span class="me-2" id="PhoneMasked"></span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Emergency / Backup Phone (optional)</label>
+                                <input type="tel" class="form-control" id="EmergencyPhone" name="EmergencyPhone" value="@Model.EmergencyPhone" placeholder="Add emergency phone" />
+                            </div>
+                            <button type="submit" class="btn btn-primary px-4" id="saveProfileBtn">Save</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="mt-3" id="profileStatus" style="display:none;"></div>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+(function(){
+    const root = document.getElementById('profileRoot');
+    const form = document.getElementById('profileForm');
+    const usernameInput = document.getElementById('Username');
+    const fullNameInput = document.getElementById('FullName');
+    const backupEmailInput = document.getElementById('BackupEmail');
+    const emergencyPhoneInput = document.getElementById('EmergencyPhone');
+    const statusEl = document.getElementById('profileStatus');
+    const saveBtn = document.getElementById('saveProfileBtn');
+
+    // Photo upload logic
+    const avatar = document.getElementById('profileAvatar');
+    const photoBtn = document.getElementById('uploadPhotoBtn');
+    const photoInput = document.getElementById('photoInput');
+    const photoStatus = document.getElementById('photoStatus');
+    photoBtn.addEventListener('click', ()=> photoInput.click());
+    photoInput.addEventListener('change', ()=>{
+        if(photoInput.files && photoInput.files[0]){
+            const file = photoInput.files[0];
+            if(!file.type.startsWith('image/')){ photoStatus.style.display='block'; photoStatus.textContent='Please select an image file.'; return; }
+            const reader = new FileReader();
+            reader.onload = e => {
+                avatar.style.backgroundImage = `url('${e.target.result}')`;
+                avatar.textContent='';
+                photoStatus.style.display='block';
+                photoStatus.textContent='Preview loaded (not yet saved).';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    const initialEmail = root.getAttribute('data-email') || '';
+    const initialPhone = root.getAttribute('data-phone') || '';
+
+    function maskEmail(email){
+        if(!email) return '';
+        const atChar = String.fromCharCode(64);
+        const atIndex = email.indexOf(atChar);
+        if(atIndex <= 2) return email;
+        const user = email.substring(0, atIndex);
+        const domain = email.substring(atIndex + 1);
+        return user.substring(0,2) + '********' + atChar + domain;
+    }
+    function maskPhone(ph){ if(!ph) return ''; if(ph.length < 4) return ph; return '********' + ph.slice(-2); }
+
+    document.getElementById('EmailMasked').textContent = maskEmail(initialEmail);
+    document.getElementById('PhoneMasked').textContent = maskPhone(initialPhone);
+
+    form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        usernameInput.classList.remove('is-invalid');
+        if(!usernameInput.value.trim()){ usernameInput.classList.add('is-invalid'); return; }
+        saveBtn.disabled=true; saveBtn.textContent='Saving...';
+        try {
+            const payload={
+                Username: usernameInput.value.trim(),
+                FullName: fullNameInput.value.trim(),
+                PhoneNumber: '',
+                BackupEmail: backupEmailInput.value.trim(),
+                EmergencyPhone: emergencyPhoneInput.value.trim()
+            };
+            const resp= await fetch(form.getAttribute('action'), { method:'POST', headers:{ 'Content-Type':'application/json','RequestVerificationToken':document.querySelector('input[name="__RequestVerificationToken"]').value }, body: JSON.stringify(payload) });
+            const data = await resp.json();
+            statusEl.style.display='block';
+            statusEl.className=data.success? 'alert alert-success':'alert alert-danger';
+            statusEl.textContent=data.message||'Update failed';
+        } catch(err){ statusEl.style.display='block'; statusEl.className='alert alert-danger'; statusEl.textContent=err.message||String(err); }
+        finally { saveBtn.disabled=false; saveBtn.textContent='Save'; }
+    });
+})();
+</script>
+}
+
+@functions{
+    private string MaskEmail(string email){ if(string.IsNullOrWhiteSpace(email)) return string.Empty; var parts=email.Split('@'); if(parts.Length!=2) return email; var user=parts[0]; if(user.Length<=2) return email; return user.Substring(0,2)+"********@"+parts[1]; }
+    private string MaskPhone(string phone){ if(string.IsNullOrWhiteSpace(phone)) return string.Empty; if(phone.Length<4) return phone; return new string('*', phone.Length-2)+ phone[^2..]; }
+}

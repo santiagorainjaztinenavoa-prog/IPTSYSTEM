@@ -1,5 +1,7 @@
 ﻿@{
     ViewData["Title"] = "Categories - Browse by Collection";
+    var counts = ViewBag.CategoryCounts as System.Collections.Generic.Dictionary<string, int> ?? new System.Collections.Generic.Dictionary<string, int>();
+    int CountFor(string key) => counts.TryGetValue(key, out var v) ? v : 0;
 }
 
 @section Styles {
@@ -19,91 +21,126 @@
         <div class="row g-4">
          <!-- Electronics -->
             <div class="col-12 col-sm-6 col-lg-3">
-            <a href="#" class="category-card">
+            <a href="@Url.Action("Browse", "Home", new { category = "Electronics" })" class="category-card" data-category="Electronics">
    <div class="category-icon-wrapper">
     <i class="bi bi-laptop category-icon"></i>
                     </div>
         <h3 class="category-name">Electronics</h3>
-     <p class="category-count">245 items</p>
+     <p class="category-count">@CountFor("Electronics") items</p>
        </a>
       </div>
 
         <!-- Fashion -->
       <div class="col-12 col-sm-6 col-lg-3">
-   <a href="#" class="category-card">
+   <a href="@Url.Action("Browse", "Home", new { category = "Fashion" })" class="category-card" data-category="Fashion">
           <div class="category-icon-wrapper">
      <i class="bi bi-bag category-icon"></i>
      </div>
   <h3 class="category-name">Fashion</h3>
-        <p class="category-count">892 items</p>
+        <p class="category-count">@CountFor("Fashion") items</p>
      </a>
      </div>
 
           <!-- Home & Living -->
     <div class="col-12 col-sm-6 col-lg-3">
-       <a href="#" class="category-card">
+       <a href="@Url.Action("Browse", "Home", new { category = "Home & Living" })" class="category-card" data-category="Home & Living">
             <div class="category-icon-wrapper">
              <i class="bi bi-house-door category-icon"></i>
               </div>
-             <h3 class="category-name">Home & Living</h3>
-  <p class="category-count">567 items</p>
+             <h3 class="category-name">Home &amp; Living</h3>
+  <p class="category-count">@CountFor("Home & Living") items</p>
   </a>
    </div>
 
      <!-- Books -->
             <div class="col-12 col-sm-6 col-lg-3">
-             <a href="#" class="category-card">
+             <a href="@Url.Action("Browse", "Home", new { category = "Books" })" class="category-card" data-category="Books">
             <div class="category-icon-wrapper">
         <i class="bi bi-book category-icon"></i>
     </div>
         <h3 class="category-name">Books</h3>
-           <p class="category-count">423 items</p>
+           <p class="category-count">@CountFor("Books") items</p>
     </a>
      </div>
 
  <!-- Sports -->
        <div class="col-12 col-sm-6 col-lg-3">
- <a href="#" class="category-card">
+ <a href="@Url.Action("Browse", "Home", new { category = "Sports" })" class="category-card" data-category="Sports">
    <div class="category-icon-wrapper">
        <i class="bi bi-trophy category-icon"></i>
 </div>
            <h3 class="category-name">Sports</h3>
-    <p class="category-count">318 items</p>
+    <p class="category-count">@CountFor("Sports") items</p>
       </a>
        </div>
 
             <!-- Toys & Games -->
             <div class="col-12 col-sm-6 col-lg-3">
-      <a href="#" class="category-card">
+      <a href="@Url.Action("Browse", "Home", new { category = "Toys & Games" })" class="category-card" data-category="Toys & Games">
    <div class="category-icon-wrapper">
               <i class="bi bi-controller category-icon"></i>
      </div>
-       <h3 class="category-name">Toys & Games</h3>
-    <p class="category-count">256 items</p>
+       <h3 class="category-name">Toys &amp; Games</h3>
+    <p class="category-count">@CountFor("Toys & Games") items</p>
     </a>
             </div>
 
   <!-- Furniture -->
  <div class="col-12 col-sm-6 col-lg-3">
-    <a href="#" class="category-card">
+    <a href="@Url.Action("Browse", "Home", new { category = "Furniture" })" class="category-card" data-category="Furniture">
            <div class="category-icon-wrapper">
 <i class="bi bi-lamp category-icon"></i>
           </div>
      <h3 class="category-name">Furniture</h3>
-   <p class="category-count">189 items</p>
+   <p class="category-count">@CountFor("Furniture") items</p>
     </a>
          </div>
 
      <!-- Beauty -->
             <div class="col-12 col-sm-6 col-lg-3">
-                <a href="#" class="category-card">
+                <a href="@Url.Action("Browse", "Home", new { category = "Beauty" })" class="category-card" data-category="Beauty">
          <div class="category-icon-wrapper">
            <i class="bi bi-stars category-icon"></i>
             </div>
           <h3 class="category-name">Beauty</h3>
-       <p class="category-count">445 items</p>
+       <p class="category-count">@CountFor("Beauty") items</p>
               </a>
          </div>
         </div>
     </div>
 </section>
+
+@section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script>
+        // Populate counts using client-side Firestore if server counts are zero
+        (function waitForFirebase(){
+            if (typeof window.firebaseFetchProductsByCategory !== 'function') {
+                setTimeout(waitForFirebase, 150);
+                return;
+            }
+
+            async function refreshCounts() {
+                const cards = document.querySelectorAll('.category-card');
+                for (const card of cards) {
+                    const cat = card.getAttribute('data-category');
+                    const el = card.querySelector('.category-count');
+                    if (!cat || !el) continue;
+                    try {
+                        const res = await window.firebaseFetchProductsByCategory(cat);
+                        if (res && res.success) {
+                            el.textContent = `${res.count} items`;
+                        } else {
+                            // fallback to existing server rendered number if available
+                            // do nothing
+                        }
+                    } catch (e) {
+                        console.debug('Failed fetch count for', cat, e?.message || e);
+                    }
+                }
+            }
+
+            refreshCounts();
+        })();
+    </script>
+}

@@ -1,0 +1,129 @@
+@model IPTSYSTEM.Models.UserProfileViewModel
+@{
+    ViewData["Title"] = "Account Settings";
+    var initial = string.IsNullOrWhiteSpace(Model.FullName)
+        ? (string.IsNullOrWhiteSpace(Model.Username) ? "?" : Model.Username.Substring(0,1).ToUpperInvariant())
+        : Model.FullName.Substring(0,1).ToUpperInvariant();
+}
+
+@section Styles {
+<style>
+    .settings-layout { display:flex; align-items:flex-start; gap:2.5rem; justify-content:flex-start; }
+    .settings-nav { width:180px; padding-top:4px; }
+    .settings-nav a { display:block; padding:6px 0; margin:0 0 14px; text-decoration:none; font-size:.95rem; font-weight:600; color:#444; border-left:3px solid transparent; transition:.15s; }
+    .settings-nav a:hover { color:#0a58ca; }
+    .settings-nav a.active { color:#0d6efd; border-left-color:#0d6efd; }
+
+    .settings-content { flex:1 1 auto; display:flex; flex-direction:column; align-items:center; }
+    .panel-section { width:100%; max-width:620px; background:#fff; border:1px solid #e4e7eb; border-radius:8px; padding:34px 40px 42px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+    .panel-section h1 { font-size:2rem; font-weight:700; margin:0 0 1.75rem; }
+    .panel-section.d-none { display:none !important; }
+
+    .settings-input { border-radius:8px; }
+    .btn-save { background:#0d6efd; color:#fff; font-weight:600; border-radius:8px; padding:10px 26px; border:0; }
+    .btn-save:hover { background:#0a58ca; }
+    .btn-save:disabled { opacity:.65; }
+
+    #profilePhotoRow { display:flex; align-items:flex-start; gap:2rem; margin-bottom:2rem; }
+    #profileAvatar { width:160px; height:160px; border-radius:50%; background:#6f49c6; color:#fff; font-size:64px; font-weight:600; display:flex; align-items:center; justify-content:center; user-select:none; background-size:cover; background-position:center; }
+
+    .add-group-btn { background:none; border:0; color:#0d6efd; font-weight:600; display:flex; align-items:center; gap:.45rem; cursor:pointer; padding:0; margin:0 0 .5rem; }
+    .add-group-btn:hover { text-decoration:underline; }
+    .contact-extra { border:1px solid #d0d7de; border-radius:6px; padding:12px 14px 10px; margin-bottom:14px; background:#fafbfc; }
+    .contact-extra h6 { font-size:.70rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin:0 0 6px; color:#555; }
+    .remove-contact { background:none; border:0; color:#dc3545; font-size:.7rem; float:right; cursor:pointer; }
+    .remove-contact:hover { text-decoration:underline; }
+
+    #passwordPanel form .form-label { font-weight:500; }
+    #passwordPanel .btn-save { margin-top:4px; }
+</style>
+}
+
+<section class="py-4" id="settingsRoot" data-email="@Model.Email" data-phone="@Model.PhoneNumber">
+    <div class="settings-layout">
+        <div class="settings-nav">
+            <a class="active" data-target="profilePanel">Edit profile</a>
+            <a data-target="passwordPanel">Change password</a>
+        </div>
+
+        <div class="settings-content">
+            <div id="profilePanel" class="panel-section">
+                <h1>Edit profile</h1>
+
+                <div id="profilePhotoRow">
+                    <div><div id="profileAvatar">@initial</div></div>
+                    <div class="flex-grow-1">
+                        <h5 class="fw-semibold mb-2">Profile photo</h5>
+                        <p class="text-muted mb-3">Clear frontal face photos are an important way for buyers and sellers to learn about each other.</p>
+                        <button type="button" class="btn btn-outline-secondary" id="uploadPhotoBtn">Upload a photo</button>
+                        <input type="file" id="photoInput" accept="image/*" class="d-none" />
+                        <div class="small text-muted mt-2" id="photoStatus" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <form id="profileForm" asp-controller="Home" asp-action="UpdateProfile" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control settings-input" id="Username" name="Username" value="@Model.Username" />
+                        <div class="invalid-feedback" id="UsernameError">Please enter username</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control settings-input" id="FullName" name="FullName" value="@Model.FullName" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Primary Email</label>
+                        <div class="d-flex align-items-center"><span id="EmailMasked"></span></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="button" id="addEmailBtn" class="add-group-btn"><span class="me-1">&#x2795;</span> Email</button>
+                        <div id="extraEmailsContainer"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Primary Phone</label>
+                        <div class="d-flex align-items-center"><span id="PhoneMasked"></span></div>
+                    </div>
+                    <div class="mb-3">
+                        <button type="button" id="addPhoneBtn" class="add-group-btn"><span class="me-1">&#x2795;</span> Phone</button>
+                        <div id="extraPhonesContainer"></div>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-save" id="saveProfileBtn">Save</button>
+                    </div>
+                </form>
+                <div class="mt-3" id="profileStatus" style="display:none;"></div>
+            </div>
+
+            <div id="passwordPanel" class="panel-section d-none">
+                <h1>Change password</h1>
+                <form id="changePwdForm" asp-controller="Home" asp-action="UpdatePassword" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label for="CurrentPassword" class="form-label">Current password</label>
+                        <input id="CurrentPassword" name="CurrentPassword" type="password" class="form-control settings-input" placeholder="Current password" autocomplete="current-password" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="NewPassword" class="form-label">New password</label>
+                        <input id="NewPassword" name="NewPassword" type="password" class="form-control settings-input" placeholder="New password" autocomplete="new-password" />
+                    </div>
+                    <div class="mb-4">
+                        <label for="ConfirmPassword" class="form-label">Confirm password</label>
+                        <input id="ConfirmPassword" name="ConfirmPassword" type="password" class="form-control settings-input" placeholder="Confirm password" autocomplete="new-password" />
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button id="savePwdBtn" type="submit" class="btn btn-save">Save Changes</button>
+                    </div>
+                </form>
+                <div id="pwdStatus" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+<script src="~/js/account-settings.js"></script>
+}
