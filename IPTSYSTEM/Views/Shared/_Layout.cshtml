@@ -48,15 +48,15 @@
                                 <span>Categories</span>
                             </a>
                         </li>
-                        @if (Context.Session.GetString("UserType") == "buyer")
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Browse" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Browse">
-                                    <span>Browse</span>
-                                </a>
-                            </li>
-                        }
-                        else
+
+                        <li class="nav-item">
+                            <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Browse" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Browse">
+                                <span>Browse</span>
+                            </a>
+                        </li>
+
+                        @* Keep My Listings for sellers (non-buyers) *@
+                        @if ((Context.Session.GetString("UserType") ?? string.Empty) != "buyer")
                         {
                             <li class="nav-item">
                                 <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Mylisting" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Mylisting">
@@ -64,6 +64,7 @@
                                 </a>
                             </li>
                         }
+
                         <li class="nav-item">
                             <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Messages" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Messages">
                                 <span>Messages</span>
@@ -122,6 +123,12 @@
                                         </div>
                                     </a>
                                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
+                                        <li>
+                                            <a class="dropdown-item" asp-controller="Home" asp-action="AccountSettings">
+                                                <i class="bi bi-person-gear me-2"></i>Account Settings
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider" /></li>
                                         <li>
                                             <form method="post" asp-controller="Home" asp-action="Logout" class="m-0">
                                                 @Html.AntiForgeryToken()

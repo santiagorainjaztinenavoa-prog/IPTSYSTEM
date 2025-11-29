@@ -1,4 +1,5 @@
-﻿@{
+﻿@model List<IPTSYSTEM.Models.Listing>
+@{
     ViewData["Title"] = "Recommerce - Your Trusted Marketplace";
 }
 
@@ -59,111 +60,65 @@
  Newest First
                 </button>
      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="sortDropdown">
-       <li><a class="dropdown-item" href="#">Newest First</a></li>
-        <li><a class="dropdown-item" href="#">Price: Low to High</a></li>
-     <li><a class="dropdown-item" href="#">Price: High to Low</a></li>
-     <li><a class="dropdown-item" href="#">Most Popular</a></li>
-    </ul>
+       <li><a class="dropdown-item" href="#" onclick="sortCards('newest')">Newest First</a></li>
+       <li><a class="dropdown-item" href="#" onclick="sortCards('priceLow')">Price: Low to High</a></li>
+       <li><a class="dropdown-item" href="#" onclick="sortCards('priceHigh')">Price: High to Low</a></li>
+     </ul>
   </div>
         </div>
 
         <!-- Items Grid -->
-        <div class="row g-4">
-       <!-- Item 1: iPhone 13 Pro Max -->
-      <div class="col-12 col-sm-6 col-lg-3">
-          <div class="item-card">
-    <div class="item-image-wrapper">
-                 <img src="https://images.unsplash.com/photo-1632661674596-df8be070a5c5?w=500&h=500&fit=crop" alt="iPhone 13 Pro Max" class="item-image">
-  <span class="item-badge badge-like-new">Like New</span>
-     <button class="btn-wishlist">
-            <i class="bi bi-heart"></i>
-                   </button>
-     </div>
-             <div class="item-details">
-        <h3 class="item-title">iPhone 13 Pro Max</h3>
-         <p class="item-description">Barely used iPhone 13 Pro Max. 256GB, Pacific Blue. Comes with original box and...</p>
-    <div class="item-footer">
-  <span class="item-price">₱899</span>
-     <div class="item-rating">
-    <i class="bi bi-star-fill text-success"></i>
-           <span class="rating-value">4.8</span>
-        </div>
-          </div>
-             </div>
-       </div>
-            </div>
-
-     <!-- Item 2: Vintage Denim Jacket -->
-      <div class="col-12 col-sm-6 col-lg-3">
-             <div class="item-card">
-        <div class="item-image-wrapper">
-        <img src="https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500&h=500&fit=crop" alt="Vintage Denim Jacket" class="item-image">
-         <span class="item-badge badge-good">Good</span>
-       <button class="btn-wishlist">
-   <i class="bi bi-heart"></i>
-        </button>
-        </div>
-           <div class="item-details">
-              <h3 class="item-title">Vintage Denim Jacket</h3>
-            <p class="item-description">Classic 90s style denim jacket, size M. Perfect condition with minimal wear.</p>
-        <div class="item-footer">
-          <span class="item-price">₱45</span>
-   <div class="item-rating">
-              <i class="bi bi-star-fill text-success"></i>
-     <span class="rating-value">4.5</span>
-   </div>
-         </div>
-            </div>
-       </div>
-    </div>
-
-   <!-- Item 3: Modern Table Lamp -->
-        <div class="col-12 col-sm-6 col-lg-3">
-      <div class="item-card">
-       <div class="item-image-wrapper">
-      <img src="https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&h=500&fit=crop" alt="Modern Table Lamp" class="item-image">
-     <span class="item-badge badge-new">New</span>
-               <button class="btn-wishlist">
-             <i class="bi bi-heart"></i>
-      </button>
-       </div>
-             <div class="item-details">
-              <h3 class="item-title">Modern Table Lamp</h3>
- <p class="item-description">Beautiful minimalist table lamp with adjustable brightness. White and gold...</p>
-  <div class="item-footer">
-          <span class="item-price">₱35</span>
-       <div class="item-rating">
-           <i class="bi bi-star-fill text-success"></i>
- <span class="rating-value">5</span>
+        <div class="row g-4" id="latestItemsGrid">
+            @if (Model == null || !Model.Any())
+            {
+                <div class="col-12">
+                    <div class="empty-state text-center p-5 border rounded-3">
+                        <i class="bi bi-inbox"></i>
+                        <h3 class="mt-2">No items yet</h3>
+                        <p>Be the first to list an item.</p>
+                    </div>
                 </div>
-      </div>
-    </div>
-         </div>
-            </div>
-
-        <!-- Item 4: Harry Potter Complete Set -->
-       <div class="col-12 col-sm-6 col-lg-3">
-     <div class="item-card">
-             <div class="item-image-wrapper">
-      <img src="https://images.unsplash.com/photo-1615799998603-7c6270a45196?w=500&h=500&fit=crop" alt="Harry Potter Complete Set" class="item-image">
-            <span class="item-badge badge-good">Good</span>
-                 <button class="btn-wishlist">
-    <i class="bi bi-heart"></i>
-       </button>
- </div>
-             <div class="item-details">
-   <h3 class="item-title">Harry Potter Complete Set</h3>
-      <p class="item-description">All 7 Harry Potter books in hardcover. Great condition, perfect for collectors.</p>
-      <div class="item-footer">
-          <span class="item-price">₱85</span>
-    <div class="item-rating">
-     <i class="bi bi-star-fill text-success"></i>
-             <span class="rating-value">4.7</span>
-     </div>
-     </div>
-                  </div>
-  </div>
-            </div>
+            }
+            else
+            {
+                foreach (var item in Model)
+                {
+                    var condition = string.IsNullOrWhiteSpace(item.Condition) ? "New" : item.Condition;
+                    var conditionClass = condition.ToLowerInvariant().Replace(" ", "-");
+                    var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop" : item.ImageUrl;
+                    <div class="col-12 col-sm-6 col-lg-3" data-created="@item.CreatedDate.Ticks" data-price="@item.Price">
+                        <div class="item-card">
+                            <div class="item-image-wrapper">
+                                <img src="@imageUrl" alt="@item.Title" class="item-image">
+                                <span class="item-badge badge-@conditionClass">@condition</span>
+                                <button class="btn-wishlist"><i class="bi bi-heart"></i></button>
+                            </div>
+                            <div class="item-details">
+                                <h3 class="item-title">@item.Title</h3>
+                                <p class="item-description">@((item.Description ?? "").Length > 80 ? (item.Description.Substring(0,80) + "...") : (item.Description ?? ""))</p>
+                                <div class="item-footer">
+                                    <span class="item-price">₱@item.Price.ToString("0.00")</span>
+                                    <div class="item-rating"><i class="bi bi-star-fill text-success"></i><span class="rating-value">5</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
         </div>
-  </div>
+    </div>
 </section>
+
+@section Scripts {
+    <script>
+        function sortCards(mode) {
+            const grid = document.getElementById('latestItemsGrid');
+            const cards = Array.from(grid.children);
+            let sorter;
+            if (mode === 'priceLow') sorter = (a,b) => (+a.dataset.price) - (+b.dataset.price);
+            else if (mode === 'priceHigh') sorter = (a,b) => (+b.dataset.price) - (+a.dataset.price);
+            else sorter = (a,b) => (+b.dataset.created) - (+a.dataset.created);
+            cards.sort(sorter).forEach(c => grid.appendChild(c));
+        }
+    </script>
+}

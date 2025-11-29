@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
+using IPTSYSTEM.Models;
 
 namespace IPTSYSTEM.Firebase
 {
@@ -65,6 +66,81 @@ namespace IPTSYSTEM.Firebase
             {
                 _logger.LogError(ex, "Failed to mirror listing {ListingId}", serverListingId);
             }
+        }
+
+        // New: fetch all listings from Firestore and map to server Listing model
+        public async Task<List<Listing>> GetAllListingsAsync()
+        {
+            var result = new List<Listing>();
+            if (!IsInitialized) return result;
+            try
+            {
+                var col = _db.Collection("tbl_listing");
+                await foreach (var docRef in col.ListDocumentsAsync())
+                {
+                    try
+                    {
+                        var snap = await docRef.GetSnapshotAsync();
+                        if (!snap.Exists) continue;
+                        var dict = snap.ToDictionary();
+                        var listing = new Listing();
+
+                        // id (try product_id or document id)
+                        if (dict.TryGetValue("product_id", out var pid) && pid != null)
+                        {
+                            if (int.TryParse(pid.ToString(), out var iid)) listing.Id = iid;
+                        }
+                        else if (int.TryParse(docRef.Id, out var did))
+                        {
+                            listing.Id = did;
+                        }
+
+                        if (dict.TryGetValue("title", out var t) && t != null) listing.Title = t.ToString() ?? string.Empty;
+                        if (dict.TryGetValue("description", out var d) && d != null) listing.Description = d.ToString() ?? string.Empty;
+
+                        // price may be double/long/string
+                        if (dict.TryGetValue("price", out var p) && p != null)
+                        {
+                            if (p is double dp) listing.Price = Convert.ToDecimal(dp);
+                            else if (p is float fp) listing.Price = Convert.ToDecimal(fp);
+                            else if (p is long lp) listing.Price = Convert.ToDecimal(lp);
+                            else if (decimal.TryParse(p.ToString(), out var dec)) listing.Price = dec;
+                        }
+
+                        if (dict.TryGetValue("category", out var c) && c != null) listing.Category = c.ToString() ?? string.Empty;
+                        if (dict.TryGetValue("condition", out var cond) && cond != null) listing.Condition = cond.ToString() ?? string.Empty;
+                        if (dict.TryGetValue("imageUrl", out var img) && img != null) listing.ImageUrl = img.ToString() ?? string.Empty;
+                        if (dict.TryGetValue("seller_username", out var sun) && sun != null) listing.SellerUsername = sun.ToString() ?? string.Empty;
+                        if (dict.TryGetValue("seller_name", out var sname) && sname != null) listing.SellerFullName = sname.ToString() ?? string.Empty;
+                        if (dict.TryGetValue("user_id", out var uid) && uid != null) listing.SellerUserId = uid.ToString() ?? string.Empty;
+
+                        // is_active
+                        if (dict.TryGetValue("is_active", out var ia) && ia is bool ib) listing.IsActive = ib;
+
+                        // date_created_server may be Timestamp or string
+                        if (dict.TryGetValue("date_created_server", out var dcs) && dcs != null)
+                        {
+                            if (dcs is Google.Cloud.Firestore.Timestamp ts) listing.CreatedDate = ts.ToDateTime();
+                            else if (dcs is DateTime dt) listing.CreatedDate = dt;
+                            else if (DateTime.TryParse(dcs.ToString(), out var parsed)) listing.CreatedDate = parsed;
+                        }
+
+                        result.Add(listing);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to parse listing document {DocId}", docRef.Id);
+                    }
+                }
+
+                _logger.LogInformation("Loaded {Count} listings from Firestore", result.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load listings from Firestore");
+            }
+
+            return result;
         }
 
         public async Task<(bool ok, string message)> SeedPhilippineGeoAsync(bool includeBarangays = true)
@@ -149,6 +225,22 @@ namespace IPTSYSTEM.Firebase
             {
                 _logger.LogError(ex, "Seeding PH geo failed");
                 return (false, ex.Message);
+            }
+        }
+
+        public async Task<Dictionary<string, object>?> GetUserAsync(string uid)
+        {
+            if (!IsInitialized || string.IsNullOrWhiteSpace(uid)) return null;
+            try
+            {
+                var docRef = _db.Collection("users").Document(uid);
+                var snap = await docRef.GetSnapshotAsync();
+                return snap.Exists ? snap.ToDictionary() : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load Firestore user {Uid}", uid);
+                return null;
             }
         }
     }
