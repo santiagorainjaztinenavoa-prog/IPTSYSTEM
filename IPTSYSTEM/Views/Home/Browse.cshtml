@@ -128,6 +128,16 @@
     </div>
 </div>
 
+<!-- Toast for save notifications -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11000">
+    <div id="saveToast" class="toast align-items-center border-0 bg-success text-white" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="saveToastMessage">Product saved!</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="~/js/firebase-client.js" type="module"></script>
     <script src="~/js/seller-products.js"></script>
@@ -138,6 +148,9 @@
 
         async function initializeBrowse() {
             try {
+                // Load saved product IDs first
+                await loadSavedProductIds();
+                
                 if (!allProducts || allProducts.length === 0) {
                     // fallback to firebase client
                     const res = await window.firebaseFetchAllProducts();
@@ -181,6 +194,10 @@
         }
 
         // re-use existing client-side helpers
+        // Track saved product IDs for quick lookup
+        let savedProductIds = new Set();
+        const currentUserId = '@(Context.Session.GetString("UserId") ?? "")';
+
         function createProductCard(product) {
             const id = product.id ?? product.Id;
             const title = product.title ?? product.Title;
@@ -193,6 +210,7 @@
             const sellerUsername = product.username ?? product.SellerUsername ?? product.user_email ?? '';
             const sellerId = product.user_id ?? product.SellerUserId ?? '';
             const sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+            const isSaved = savedProductIds.has(id);
 
             const card = document.createElement('div');
             card.className = 'listing-card';
@@ -207,6 +225,9 @@
                 <div class="listing-image-wrapper">
                     <img src="${imageUrl}" alt="${title || 'Product'}" class="listing-image" onclick="openProductDetail('${id}')" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
                     <span class="condition-badge badge-${conditionClass}">${condition}</span>
+                    <button class="save-btn ${isSaved ? 'saved' : ''}" onclick="toggleSaveProduct(event, '${id}')" title="${isSaved ? 'Remove from saved' : 'Save product'}">
+                        <i class="bi ${isSaved ? 'bi-heart-fill' : 'bi-heart'}"></i>
+                    </button>
                 </div>
                 <div class="listing-seller-info">
                     <div class="seller-avatar"><span class="avatar-initial">${sellerInitial}</span></div>
@@ -230,6 +251,130 @@
 
             card.innerHTML = html;
             return card;
+        }
+
+        // Toggle save/unsave product
+        async function toggleSaveProduct(event, productId) {
+            event.stopPropagation();
+            
+            console.log('🔄 Toggle save for product:', productId);
+            console.log('👤 Current user ID:', currentUserId);
+            
+            if (!currentUserId) {
+                alert('Please login to save products');
+                window.location.href = '/Home/Login';
+                return;
+            }
+            
+            const btn = event.currentTarget;
+            const icon = btn.querySelector('i');
+            const product = allProducts.find(p => (p.id && p.id == productId) || (p.Id && p.Id == productId));
+            
+            if (!product) {
+                console.error('❌ Product not found:', productId);
+                showToast('Product not found', 'error');
+                return;
+            }
+            
+            console.log('📦 Found product:', product);
+            
+            // Disable button during operation
+            btn.disabled = true;
+            
+            // Wait for Firebase to be ready
+            let retries = 0;
+            while (typeof window.firebaseToggleSaveProduct !== 'function' && retries < 20) {
+                await new Promise(r => setTimeout(r, 200));
+                retries++;
+            }
+            
+            if (typeof window.firebaseToggleSaveProduct !== 'function') {
+                console.error('❌ Firebase functions not available');
+                showToast('Service not ready. Please refresh.', 'error');
+                btn.disabled = false;
+                return;
+            }
+            
+            try {
+                const productData = {
+                    title: product.title ?? product.Title ?? '',
+                    price: product.price ?? product.Price ?? 0,
+                    imageUrl: product.imageUrl ?? product.image_url ?? product.ImageUrl ?? '',
+                    category: product.category ?? product.Category ?? '',
+                    condition: product.condition ?? product.Condition ?? '',
+                    sellerName: product.full_name ?? product.SellerFullName ?? product.seller_name ?? '',
+                    sellerUsername: product.username ?? product.SellerUsername ?? '',
+                    sellerId: product.user_id ?? product.SellerUserId ?? ''
+                };
+                
+                console.log('📤 Sending product data:', productData);
+                
+                const result = await window.firebaseToggleSaveProduct(currentUserId, productId, productData);
+                
+                console.log('📥 Toggle result:', result);
+                
+                if (result.success) {
+                    if (result.isSaved) {
+                        savedProductIds.add(productId);
+                        btn.classList.add('saved');
+                        icon.className = 'bi bi-heart-fill';
+                        btn.title = 'Remove from saved';
+                        showToast('Product saved!', 'success');
+                    } else {
+                        savedProductIds.delete(productId);
+                        btn.classList.remove('saved');
+                        icon.className = 'bi bi-heart';
+                        btn.title = 'Save product';
+                        showToast('Product removed from saved', 'info');
+                    }
+                    // Update saved count badge
+                    updateSavedBadge();
+                } else {
+                    console.error('❌ Toggle failed:', result.message);
+                    showToast('Error: ' + (result.message || 'Failed to save'), 'error');
+                }
+            } catch (err) {
+                console.error('❌ Error toggling save:', err);
+                showToast('Error saving product: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        
+        // Load saved product IDs on init
+        async function loadSavedProductIds() {
+            if (!currentUserId) return;
+            
+            try {
+                const result = await window.firebaseGetSavedProductIds(currentUserId);
+                if (result.success && result.savedIds) {
+                    savedProductIds = new Set(result.savedIds);
+                    updateSavedBadge();
+                }
+            } catch (err) {
+                console.error('Error loading saved products:', err);
+            }
+        }
+        
+        // Update saved products badge
+        function updateSavedBadge() {
+            const badge = document.querySelector('.saved-icon .icon-badge');
+            if (badge) {
+                badge.textContent = savedProductIds.size;
+                badge.style.display = savedProductIds.size > 0 ? 'flex' : 'none';
+            }
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('saveToast');
+            const toastBody = document.getElementById('saveToastMessage');
+            if (toast && toastBody) {
+                toastBody.textContent = message;
+                toast.className = `toast align-items-center border-0 bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'primary'} text-white`;
+                const bsToast = new bootstrap.Toast(toast);
+                bsToast.show();
+            }
         }
 
         function openProductDetail(productId) {

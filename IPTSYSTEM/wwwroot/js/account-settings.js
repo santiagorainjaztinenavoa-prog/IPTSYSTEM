@@ -32,6 +32,13 @@
     async function loadProfilePhotoFromFirebase() {
         if (typeof currentUserId === 'undefined' || !currentUserId) return;
         
+        // First check sessionStorage cache for instant display
+        const cachedPhotoUrl = sessionStorage.getItem('userPhotoUrl');
+        if (cachedPhotoUrl && avatar) {
+            avatar.style.backgroundImage = `url('${cachedPhotoUrl}')`;
+            avatar.textContent = '';
+        }
+        
         // Wait for Firebase to be ready
         let retries = 0;
         while (typeof window.firebaseGetUserProfile !== 'function' && retries < 20) {
@@ -46,6 +53,8 @@
                     console.log('✅ Loaded profile photo from Firebase');
                     avatar.style.backgroundImage = `url('${result.profile.photo_url}')`;
                     avatar.textContent = '';
+                    // Update cache
+                    sessionStorage.setItem('userPhotoUrl', result.profile.photo_url);
                 }
             } catch (err) {
                 console.warn('Could not load profile photo:', err);
@@ -116,6 +125,18 @@
                                 photoStatus.className = 'small text-success mt-2';
                                 photoStatus.textContent = '✅ Photo saved successfully!';
                                 avatar.style.backgroundImage = `url('${result.photoUrl}')`;
+                                
+                                // Update cached photo URL in sessionStorage
+                                sessionStorage.setItem('userPhotoUrl', result.photoUrl);
+                                
+                                // Also update navbar avatar immediately
+                                const navbarAvatar = document.getElementById('navbarAvatar');
+                                if (navbarAvatar) {
+                                    navbarAvatar.style.backgroundImage = `url('${result.photoUrl}')`;
+                                    navbarAvatar.style.backgroundSize = 'cover';
+                                    navbarAvatar.style.backgroundPosition = 'center';
+                                    navbarAvatar.innerHTML = '';
+                                }
                             } else {
                                 photoStatus.className = 'small text-danger mt-2';
                                 photoStatus.textContent = '❌ Upload failed: ' + result.message;

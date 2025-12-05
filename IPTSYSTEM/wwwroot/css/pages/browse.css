@@ -168,6 +168,53 @@
     z-index: 2;
 }
 
+/* Save/Heart Button */
+.save-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.save-btn:hover {
+    background: #ffffff;
+    transform: scale(1.1);
+}
+
+.save-btn i {
+    font-size: 1.1rem;
+    color: #6b7280;
+    transition: all 0.3s ease;
+}
+
+.save-btn:hover i {
+    color: #ef4444;
+}
+
+.save-btn.saved i {
+    color: #ef4444;
+}
+
+.save-btn.saved {
+    background: #fff1f2;
+}
+
+.save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .condition-badge.badge-new {
     background: #10b981;
 }

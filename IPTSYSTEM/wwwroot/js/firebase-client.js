@@ -598,4 +598,193 @@ window.firebaseGetUnreadCount = async function(userId) {
     }
 };
 
+// ========== SAVED PRODUCTS FUNCTIONS ==========
+// Uses tbl_saved collection - each user has their own saved products
+
+// Save a product to user's saved list (tbl_saved collection)
+window.firebaseSaveProduct = async function(userId, productId, productData) {
+    try {
+        console.log('💾 Saving product:', productId, 'for user:', userId);
+        console.log('📦 Product data:', productData);
+        
+        if (!userId || !productId) {
+            console.error('❌ Missing userId or productId');
+            return { success: false, message: 'Missing userId or productId' };
+        }
+        
+        // Document ID format: {userId}_{productId} to ensure uniqueness
+        const docId = `${userId}_${productId}`;
+        console.log('📝 Document ID:', docId);
+        
+        const savedData = {
+            user_id: userId,
+            product_id: productId,
+            title: productData.title || '',
+            price: typeof productData.price === 'number' ? productData.price : parseFloat(productData.price) || 0,
+            imageUrl: productData.imageUrl || '',
+            category: productData.category || '',
+            condition: productData.condition || '',
+            seller_name: productData.sellerName || '',
+            seller_username: productData.sellerUsername || '',
+            seller_id: productData.sellerId || '',
+            saved_at: serverTimestamp()
+        };
+        
+        console.log('📄 Data to save:', savedData);
+        
+        // Try using setDoc with merge option
+        const savedRef = doc(db, 'tbl_saved', docId);
+        await setDoc(savedRef, savedData, { merge: true });
+        
+        // Verify the save worked by reading it back
+        const verifySnap = await getDoc(savedRef);
+        if (verifySnap.exists()) {
+            console.log('✅ Product saved and verified in tbl_saved:', verifySnap.data());
+            return { success: true };
+        } else {
+            // Fallback: Try using addDoc instead
+            console.log('⚠️ setDoc may have failed, trying addDoc...');
+            const col = collection(db, 'tbl_saved');
+            const docRef = await addDoc(col, savedData);
+            console.log('✅ Product saved via addDoc with ID:', docRef.id);
+            return { success: true };
+        }
+    } catch (err) {
+        console.error('❌ firebaseSaveProduct error:', err);
+        console.error('Error code:', err?.code);
+        console.error('Error message:', err?.message);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Remove a product from user's saved list
+window.firebaseUnsaveProduct = async function(userId, productId) {
+    try {
+        console.log('🗑️ Removing saved product:', productId, 'for user:', userId);
+        
+        // Try the compound ID first
+        const savedRef = doc(db, 'tbl_saved', `${userId}_${productId}`);
+        const snap = await getDoc(savedRef);
+        
+        if (snap.exists()) {
+            await deleteDoc(savedRef);
+            console.log('✅ Product removed from tbl_saved (by compound ID)');
+            return { success: true };
+        }
+        
+        // Fallback: Query by user_id and product_id
+        const col = collection(db, 'tbl_saved');
+        const q = query(col, where('user_id', '==', userId), where('product_id', '==', productId));
+        const snaps = await getDocs(q);
+        
+        for (const docSnap of snaps.docs) {
+            await deleteDoc(doc(db, 'tbl_saved', docSnap.id));
+        }
+        
+        console.log('✅ Product removed from tbl_saved');
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseUnsaveProduct error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Check if a product is saved by user
+window.firebaseIsProductSaved = async function(userId, productId) {
+    try {
+        // Try compound ID first
+        const savedRef = doc(db, 'tbl_saved', `${userId}_${productId}`);
+        const snap = await getDoc(savedRef);
+        
+        if (snap.exists()) {
+            return { success: true, isSaved: true };
+        }
+        
+        // Fallback: Query by user_id and product_id
+        const col = collection(db, 'tbl_saved');
+        const q = query(col, where('user_id', '==', userId), where('product_id', '==', productId));
+        const snaps = await getDocs(q);
+        
+        return { success: true, isSaved: snaps.size > 0 };
+    } catch (err) {
+        console.error('❌ firebaseIsProductSaved error:', err);
+        return { success: false, isSaved: false };
+    }
+};
+
+// Get all saved products for a specific user (only their own saved items)
+window.firebaseGetSavedProducts = async function(userId) {
+    try {
+        console.log('📚 Fetching saved products from tbl_saved for user:', userId);
+        
+        const col = collection(db, 'tbl_saved');
+        const q = query(col, where('user_id', '==', userId));
+        const snaps = await getDocs(q);
+        
+        const savedProducts = [];
+        snaps.forEach((docSnap) => {
+            const data = docSnap.data();
+            savedProducts.push({ 
+                id: docSnap.id, 
+                productId: data.product_id,
+                title: data.title,
+                price: data.price,
+                imageUrl: data.imageUrl,
+                category: data.category,
+                condition: data.condition,
+                sellerName: data.seller_name,
+                sellerUsername: data.seller_username,
+                sellerId: data.seller_id,
+                savedAt: data.saved_at,
+                ...data 
+            });
+        });
+        
+        console.log('✅ Found', savedProducts.length, 'saved products for user:', userId);
+        return { success: true, products: savedProducts, count: savedProducts.length };
+    } catch (err) {
+        console.error('❌ firebaseGetSavedProducts error:', err);
+        return { success: false, products: [], message: err?.message || String(err) };
+    }
+};
+
+// Get saved product IDs for quick lookup (only for current user)
+window.firebaseGetSavedProductIds = async function(userId) {
+    try {
+        const col = collection(db, 'tbl_saved');
+        const q = query(col, where('user_id', '==', userId));
+        const snaps = await getDocs(q);
+        
+        const savedIds = [];
+        snaps.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.product_id) savedIds.push(data.product_id);
+        });
+        
+        console.log('✅ Found', savedIds.length, 'saved product IDs for user:', userId);
+        return { success: true, savedIds };
+    } catch (err) {
+        console.error('❌ firebaseGetSavedProductIds error:', err);
+        return { success: false, savedIds: [] };
+    }
+};
+
+// Toggle save/unsave product
+window.firebaseToggleSaveProduct = async function(userId, productId, productData) {
+    try {
+        const checkResult = await window.firebaseIsProductSaved(userId, productId);
+        
+        if (checkResult.isSaved) {
+            await window.firebaseUnsaveProduct(userId, productId);
+            return { success: true, isSaved: false };
+        } else {
+            await window.firebaseSaveProduct(userId, productId, productData);
+            return { success: true, isSaved: true };
+        }
+    } catch (err) {
+        console.error('❌ firebaseToggleSaveProduct error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
 export default app;
