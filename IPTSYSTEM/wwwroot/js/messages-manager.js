@@ -9,16 +9,21 @@ let notificationPermissionGranted = false;
 
 // Profile cache to minimize Firebase reads
 const profileCache = new Map();
-const PROFILE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+const PROFILE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache (increased from 5)
 let messageListenerUnsubscribe = null;
+// Track if conversations have been loaded to prevent duplicate calls
+let conversationsLoadedOnce = false;
 
 document.addEventListener('DOMContentLoaded', function () {
     toastNotification = new bootstrap.Toast(document.getElementById('toastNotification'));
     
-    // Load conversations for current user
-    loadUserConversations();
+    // Load conversations for current user (only once)
+    if (!conversationsLoadedOnce) {
+        loadUserConversations();
+        conversationsLoadedOnce = true;
+    }
     
-    // Setup message notifications
+    // Setup message notifications (uses real-time listeners - efficient)
     setupMessageNotifications();
     
     // Request notification permission

@@ -100,7 +100,7 @@
         <h6 class="mb-3">Account details</h6>
         <ul class="list-unstyled d-flex flex-column gap-2">
             <li class="d-flex align-items-center gap-2"><i class="bi bi-calendar"></i> <span>Joined @joinedText</span></li>
-            <li class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> <span>0 Followers  �  0 Following</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> <span>0 Followers  �  0 Following</span></li>
             <li class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> <span>@(Model.City ?? "Unknown City")</span></li>
         </ul>
       </div>
@@ -277,6 +277,8 @@
         var userId = section.getAttribute('data-user-id') || '';
         var userType = section.getAttribute('data-user-type') || 'seller';
         
+        console.log('🔄 Loading listings from Firebase for user:', userId || username);
+        
         // Store in sessionStorage for Firebase functions
         if (!userId || userId === '') {
             userId = username;
@@ -286,13 +288,25 @@
         sessionStorage.setItem('UserId', userId);
         sessionStorage.setItem('UserType', userType);
         
-        // Wait for Firebase functions
-        if (typeof window.loadListingsFromFirebase === 'function') {
-            await window.loadListingsFromFirebase();
-            
-            // Check if Firebase populated the container
-            if (container.children.length > 0 && !container.querySelector('.listing-skeleton')) {
-                return; // Firebase loaded successfully
+        // Wait for Firebase to be ready
+        let retries = 0;
+        while (typeof window.firebaseFetchSellerProducts !== 'function' && retries < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        
+        if (typeof window.firebaseFetchSellerProducts === 'function') {
+            try {
+                console.log('📦 Fetching seller products for:', userId);
+                const result = await window.firebaseFetchSellerProducts(userId);
+                console.log('📦 Result:', result);
+                
+                if (result.success && result.products && result.products.length > 0) {
+                    displayListings(result.products, container);
+                    return;
+                }
+            } catch (err) {
+                console.error('❌ Firebase fetch error:', err);
             }
         }
         

@@ -799,10 +799,10 @@ async function loadListingsFromFirebase() {
             return;
         }
         
-        // Get the container
-        const container = document.getElementById('listings-container');
+        // Get the container - check both possible IDs (Profile uses listingsContainer, Mylisting uses listings-container)
+        let container = document.getElementById('listings-container') || document.getElementById('listingsContainer');
         if (!container) {
-            console.error('❌ listings-container not found in DOM');
+            console.error('❌ listings container not found in DOM (tried listings-container and listingsContainer)');
             return;
         }
         
