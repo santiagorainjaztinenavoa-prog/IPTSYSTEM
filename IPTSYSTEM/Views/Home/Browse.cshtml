@@ -147,29 +147,38 @@
 
         async function initializeBrowse() {
             try {
-                // ✅ CHANGED: Don't load any products by default in Browse page
-                // Browse page is now empty - users should use their Profile/My Listings to see their items
-                console.log('Browse page initialized - showing empty state');
+                console.log('🔄 Initializing Browse page...');
                 
-                const container = document.getElementById('listingsContainer');
-                if (container) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <i class="bi bi-inbox" style="font-size: 4rem; color: #d1d5db;"></i>
-                            <h3>Browse Marketplace</h3>
-                            <p>Products from sellers will appear here</p>
-                        </div>
-                    `;
+                // Wait for Firebase to be ready
+                let retries = 0;
+                while (typeof window.firebaseFetchAllProducts !== 'function' && retries < 30) {
+                    await new Promise(r => setTimeout(r, 100));
+                    retries++;
                 }
                 
-                // If you want to load products from Firestore later, uncomment this:
-                // const res = await window.firebaseFetchAllProducts();
-                // if (res && res.success && res.products) {
-                //     allProducts = res.products;
-                //     applyFilters(false);
-                // }
+                // Fetch products from Firestore
+                if (typeof window.firebaseFetchAllProducts === 'function') {
+                    console.log('📦 Fetching products from Firestore...');
+                    const res = await window.firebaseFetchAllProducts();
+                    if (res && res.success && res.products) {
+                        allProducts = res.products;
+                        console.log('✅ Loaded', allProducts.length, 'products');
+                        applyFilters(false);
+                    } else {
+                        console.warn('⚠️ No products returned from Firestore');
+                        displayProducts([]);
+                    }
+                } else {
+                    console.warn('⚠️ Firebase not ready, showing server-provided data');
+                    if (allProducts && allProducts.length > 0) {
+                        displayProducts(allProducts);
+                    } else {
+                        displayProducts([]);
+                    }
+                }
             } catch (err) {
-                console.error('Browse init error', err);
+                console.error('❌ Browse init error:', err);
+                displayProducts([]);
             }
         }
 
@@ -317,7 +326,62 @@
             modal.show();
         }
 
-        function messageSeller() { if (currentProductDetail) alert(`Message seller: ${currentProductDetail.sellerName}`); }
+        async function messageSeller() { 
+            if (!currentProductDetail) return;
+            
+            // Get current user info from session (passed from server)
+            const buyerId = '@(Context.Session.GetString("UserId") ?? "")';
+            const buyerName = '@(Context.Session.GetString("FullName") ?? Context.Session.GetString("Username") ?? "")';
+            
+            if (!buyerId) {
+                alert('Please login to message the seller');
+                window.location.href = '/Home/Login';
+                return;
+            }
+            
+            // Find the full product to get seller info
+            const product = allProducts.find(p => (p.id && p.id == currentProductDetail.id) || (p.Id && p.Id == currentProductDetail.id));
+            if (!product) {
+                alert('Product not found');
+                return;
+            }
+            
+            const sellerId = product.user_id ?? product.SellerUserId ?? '';
+            const sellerName = product.full_name ?? product.SellerFullName ?? product.seller_name ?? 'Seller';
+            const listingId = (product.id ?? product.Id ?? '').toString();
+            const listingTitle = product.title ?? product.Title ?? 'Item';
+            
+            if (!sellerId) {
+                alert('Seller information not available');
+                return;
+            }
+            
+            if (buyerId === sellerId) {
+                alert('You cannot message yourself');
+                return;
+            }
+            
+            // Use client-side Firebase to start conversation
+            if (typeof window.firebaseStartConversation === 'function') {
+                try {
+                    const result = await window.firebaseStartConversation(
+                        buyerId, buyerName, sellerId, sellerName, listingId, listingTitle
+                    );
+                    
+                    if (result.success && result.conversation) {
+                        // Redirect to messages page with conversation ID
+                        window.location.href = '/Home/Messages?conversationId=' + result.conversation.id;
+                    } else {
+                        alert('Failed to start conversation: ' + (result.message || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Error starting conversation:', error);
+                    alert('Error starting conversation. Please try again.');
+                }
+            } else {
+                alert('Messaging service not available. Please refresh the page.');
+            }
+        }
         function selectProduct() { if (currentProductDetail) alert(`Selected: ${currentProductDetail.title}`); }
 
         // Initialize on page load

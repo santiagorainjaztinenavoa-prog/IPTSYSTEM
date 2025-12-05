@@ -13,6 +13,57 @@ const app = initializeApp(firebaseConfig);
 let analytics = null; try { analytics = getAnalytics(app); } catch (e) { console.debug('Firebase analytics not available:', e?.message || e); }
 const auth = getAuth(app); const db = getFirestore(app); const storage = getStorage(app);
 
+// ========== GLOBAL CACHE SYSTEM ==========
+// Reduces Firestore reads by caching frequently accessed data
+const CACHE_TTL = {
+    PRODUCTS: 3 * 60 * 1000,      // 3 minutes for all products
+    PROFILE: 10 * 60 * 1000,      // 10 minutes for user profiles
+    SAVED: 5 * 60 * 1000,         // 5 minutes for saved products
+    CONVERSATIONS: 2 * 60 * 1000  // 2 minutes for conversations
+};
+
+const dataCache = {
+    allProducts: { data: null, timestamp: 0 },
+    sellerProducts: new Map(),
+    profiles: new Map(),
+    savedProducts: new Map(),
+    savedIds: new Map(),
+    conversations: new Map()
+};
+
+function isCacheValid(cacheEntry, ttl) {
+    return cacheEntry && cacheEntry.timestamp && (Date.now() - cacheEntry.timestamp < ttl);
+}
+
+function setCache(cache, key, data, isMap = true) {
+    const entry = { data, timestamp: Date.now() };
+    if (isMap) {
+        cache.set(key, entry);
+    } else {
+        cache.data = data;
+        cache.timestamp = Date.now();
+    }
+}
+
+// Clear specific cache types
+window.firebaseClearCache = function(cacheType) {
+    if (cacheType === 'all') {
+        dataCache.allProducts = { data: null, timestamp: 0 };
+        dataCache.sellerProducts.clear();
+        dataCache.profiles.clear();
+        dataCache.savedProducts.clear();
+        dataCache.savedIds.clear();
+        dataCache.conversations.clear();
+    } else if (cacheType === 'products') {
+        dataCache.allProducts = { data: null, timestamp: 0 };
+        dataCache.sellerProducts.clear();
+    } else if (cacheType === 'saved') {
+        dataCache.savedProducts.clear();
+        dataCache.savedIds.clear();
+    }
+    console.log('🗑️ Cache cleared:', cacheType);
+};
+
 // -----------------------
 // Geo data (Regions/Provinces/Cities/Barangays) from Firestore
 // Expected collections (client-managed):
@@ -56,8 +107,84 @@ window.__firebaseConfig = firebaseConfig;
 window.firebaseSignIn = async function(email, password) { try { const userCred = await signInWithEmailAndPassword(auth, email, password); const uid = userCred.user.uid; const userDocRef = doc(db, 'users', uid); const snap = await getDoc(userDocRef); if (!snap.exists()) { try { console.warn('Profile document missing for uid, attempting to create minimal profile', { uid }); await setDoc(userDocRef, { first_name: userCred.user.displayName ? userCred.user.displayName.split(' ')[0] : '', last_name: userCred.user.displayName ? userCred.user.displayName.split(' ').slice(1).join(' ') : '', email: userCred.user.email || '', username: (userCred.user.email ? userCred.user.email.split('@')[0] : uid), account_type: 'Buyer', phone_number: '', user_id: uid, date_created: serverTimestamp() }); const newSnap = await getDoc(userDocRef); if (newSnap.exists()) { return { success: true, uid, profile: newSnap.data(), migrated: true }; } else { try { await signOut(auth); } catch { } return { success: false, code: 'user-doc-missing-after-create', message: 'Authenticated but profile could not be created in Firestore.' }; } } catch (createErr) { console.error('Failed to auto-create user profile document', createErr); try { await signOut(auth); } catch { } return { success: false, code: createErr?.code || 'user-doc-create-failed', message: createErr?.message || String(createErr) }; } } return { success: true, uid, profile: snap.data() }; } catch (err) { const code = err?.code || null; const message = err?.message || String(err); console.error('Firebase signIn error', { code, message, err }); return { success: false, code, message }; } };
 window.firebaseUserExistsByEmail = async function(email) { try { const q = query(collection(db, 'users'), where('email', '==', email)); const snap = await getDocs(q); return snap.size > 0; } catch (err) { console.error('Error checking user exists by email', err); return false; } };
 window.establishServerSession = async function(email, uid) { try { let profile = null; try { const userDocRef = doc(db, 'users', uid); const s = await getDoc(userDocRef); if (s.exists()) profile = s.data(); } catch (e) { console.debug('Could not load user profile for server session:', e); } const payload = { Email: email, Uid: uid, Username: profile?.username || null, UserType: profile?.account_type || null, FullName: profile?.first_name || profile?.last_name ? `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() : null }; const resp = await fetch('/Home/ClientLogin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(payload) }); return await resp.json(); } catch (e) { console.error('Failed to establish server session', e); return { success: false, message: e?.message || String(e) }; } };
-window.firebaseFetchSellerProducts = async function(sellerUserId) { try { console.log('🔍 Fetching products for seller:', sellerUserId); const col = collection(db, 'tbl_listing'); let q = query(col, where('user_id', '==', sellerUserId)); let snaps = await getDocs(q); console.log('📊 Found', snaps.size, 'products for user_id:', sellerUserId); if (snaps.size === 0 && sellerUserId.includes(' ')) { console.log('⚠️  No products found with exact user_id, trying seller_name match...'); q = query(col, where('seller_name', '==', sellerUserId)); snaps = await getDocs(q); console.log('📊 Found', snaps.size, 'products by seller_name'); } if (snaps.size === 0) { console.log('⚠️  No products found, trying seller_username match...'); q = query(col, where('seller_username', '==', sellerUserId)); snaps = await getDocs(q); console.log('📊 Found', snaps.size, 'products by seller_username'); } const products = []; snaps.forEach((docSnap) => { const data = docSnap.data(); if (data.title && typeof data.title === 'string' && data.title.trim() !== '') { products.push({ id: docSnap.id, ...data }); } }); console.log('✅ Returning', products.length, 'valid products'); return { success: true, products, count: products.length }; } catch (err) { console.error('firebaseFetchSellerProducts error', err); return { success: false, message: err?.message || String(err), products: [] }; } };
-window.firebaseFetchAllProducts = async function() { try { console.log('Fetching all active products'); const col = collection(db, 'tbl_listing'); const snaps = await getDocs(col); console.log('Found', snaps.size, 'total products'); const products = []; snaps.forEach((docSnap) => { const data = docSnap.data(); if (data.title && typeof data.title === 'string' && data.title.trim() !== '') { if (data.is_active !== false) { products.push({ id: docSnap.id, ...data }); } } }); return { success: true, products, count: products.length }; } catch (err) { console.error('firebaseFetchAllProducts error', err); return { success: false, message: err?.message || String(err), products: [] }; } };
+window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh = false) {
+    try {
+        // Check cache first
+        const cached = dataCache.sellerProducts.get(sellerUserId);
+        if (!forceRefresh && isCacheValid(cached, CACHE_TTL.PRODUCTS)) {
+            console.log('📦 Using cached seller products for:', sellerUserId);
+            return { success: true, products: cached.data, count: cached.data.length, cached: true };
+        }
+        
+        console.log('🔍 Fetching products for seller:', sellerUserId);
+        const col = collection(db, 'tbl_listing');
+        let q = query(col, where('user_id', '==', sellerUserId));
+        let snaps = await getDocs(q);
+        console.log('📊 Found', snaps.size, 'products for user_id:', sellerUserId);
+        
+        if (snaps.size === 0 && sellerUserId.includes(' ')) {
+            console.log('⚠️  No products found with exact user_id, trying seller_name match...');
+            q = query(col, where('seller_name', '==', sellerUserId));
+            snaps = await getDocs(q);
+            console.log('📊 Found', snaps.size, 'products by seller_name');
+        }
+        if (snaps.size === 0) {
+            console.log('⚠️  No products found, trying seller_username match...');
+            q = query(col, where('seller_username', '==', sellerUserId));
+            snaps = await getDocs(q);
+            console.log('📊 Found', snaps.size, 'products by seller_username');
+        }
+        
+        const products = [];
+        snaps.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
+                products.push({ id: docSnap.id, ...data });
+            }
+        });
+        
+        // Cache results
+        setCache(dataCache.sellerProducts, sellerUserId, products);
+        
+        console.log('✅ Returning', products.length, 'valid products');
+        return { success: true, products, count: products.length };
+    } catch (err) {
+        console.error('firebaseFetchSellerProducts error', err);
+        return { success: false, message: err?.message || String(err), products: [] };
+    }
+};
+window.firebaseFetchAllProducts = async function(forceRefresh = false) {
+    try {
+        // Check cache first (unless force refresh)
+        if (!forceRefresh && isCacheValid(dataCache.allProducts, CACHE_TTL.PRODUCTS)) {
+            console.log('📦 Using cached products (' + dataCache.allProducts.data.length + ' items)');
+            return { success: true, products: dataCache.allProducts.data, count: dataCache.allProducts.data.length, cached: true };
+        }
+        
+        console.log('🔄 Fetching all active products from Firestore');
+        const col = collection(db, 'tbl_listing');
+        const snaps = await getDocs(col);
+        console.log('Found', snaps.size, 'total products');
+        
+        const products = [];
+        snaps.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
+                if (data.is_active !== false) {
+                    products.push({ id: docSnap.id, ...data });
+                }
+            }
+        });
+        
+        // Cache the results
+        setCache(dataCache.allProducts, null, products, false);
+        
+        return { success: true, products, count: products.length };
+    } catch (err) {
+        console.error('firebaseFetchAllProducts error', err);
+        return { success: false, message: err?.message || String(err), products: [] };
+    }
+};
 window.firebaseFetchProductById = async function(productId) { try { console.log('Fetching product:', productId); const docRef = doc(db, 'tbl_listing', productId); const snap = await getDoc(docRef); if (!snap.exists()) { console.warn('Product not found:', productId); return { success: false, message: 'Product not found' }; } const product = { id: snap.id, ...snap.data() }; console.log('Product found:', product); return { success: true, product }; } catch (err) { console.error('firebaseFetchProductById error', err); return { success: false, message: err?.message || String(err) }; } };
 
 // ========== MESSAGING FUNCTIONS ==========
@@ -102,9 +229,16 @@ window.firebaseStartConversation = async function(buyerId, buyerName, sellerId, 
     }
 };
 
-// Get user conversations
-window.firebaseGetUserConversations = async function(userId) {
+// Get user conversations (with caching)
+window.firebaseGetUserConversations = async function(userId, forceRefresh = false) {
     try {
+        // Check cache first
+        const cached = dataCache.conversations.get(userId);
+        if (!forceRefresh && isCacheValid(cached, CACHE_TTL.CONVERSATIONS)) {
+            console.log('💬 Using cached conversations for:', userId);
+            return { success: true, conversations: cached.data, cached: true };
+        }
+        
         console.log('🔥 Getting conversations for user:', userId);
         const conversationsCol = collection(db, 'conversations');
         const conversations = [];
@@ -158,6 +292,9 @@ window.firebaseGetUserConversations = async function(userId) {
             };
             return getTime(b.lastMessageTime) - getTime(a.lastMessageTime);
         });
+        
+        // Cache the results
+        setCache(dataCache.conversations, userId, conversations);
         
         console.log('✅ Total conversations found:', conversations.length);
         return { success: true, conversations };
@@ -416,9 +553,16 @@ window.firebaseUploadProfilePhoto = async function(userId, file) {
     }
 };
 
-// Get user profile from Firebase
-window.firebaseGetUserProfile = async function(userId) {
+// Get user profile from Firebase (with caching)
+window.firebaseGetUserProfile = async function(userId, forceRefresh = false) {
     try {
+        // Check cache first
+        const cached = dataCache.profiles.get(userId);
+        if (!forceRefresh && isCacheValid(cached, CACHE_TTL.PROFILE)) {
+            console.log('👤 Using cached profile for:', userId);
+            return { success: true, profile: cached.data, cached: true };
+        }
+        
         console.log('🔥 Getting profile for user:', userId);
         const userRef = doc(db, 'users', userId);
         const snap = await getDoc(userRef);
@@ -427,7 +571,11 @@ window.firebaseGetUserProfile = async function(userId) {
             return { success: false, message: 'User not found' };
         }
         
-        return { success: true, profile: snap.data() };
+        const profile = snap.data();
+        // Cache the profile
+        setCache(dataCache.profiles, userId, profile);
+        
+        return { success: true, profile };
     } catch (err) {
         console.error('❌ firebaseGetUserProfile error:', err);
         return { success: false, message: err?.message || String(err) };
@@ -612,6 +760,10 @@ window.firebaseSaveProduct = async function(userId, productId, productData) {
             return { success: false, message: 'Missing userId or productId' };
         }
         
+        // Clear saved cache for this user (will be refreshed on next fetch)
+        dataCache.savedProducts.delete(userId);
+        dataCache.savedIds.delete(userId);
+        
         // Document ID format: {userId}_{productId} to ensure uniqueness
         const docId = `${userId}_${productId}`;
         console.log('📝 Document ID:', docId);
@@ -661,6 +813,10 @@ window.firebaseSaveProduct = async function(userId, productId, productData) {
 window.firebaseUnsaveProduct = async function(userId, productId) {
     try {
         console.log('🗑️ Removing saved product:', productId, 'for user:', userId);
+        
+        // Clear saved cache for this user
+        dataCache.savedProducts.delete(userId);
+        dataCache.savedIds.delete(userId);
         
         // Try the compound ID first
         const savedRef = doc(db, 'tbl_saved', `${userId}_${productId}`);
@@ -712,9 +868,16 @@ window.firebaseIsProductSaved = async function(userId, productId) {
     }
 };
 
-// Get all saved products for a specific user (only their own saved items)
-window.firebaseGetSavedProducts = async function(userId) {
+// Get all saved products for a specific user (only their own saved items) - with caching
+window.firebaseGetSavedProducts = async function(userId, forceRefresh = false) {
     try {
+        // Check cache first
+        const cached = dataCache.savedProducts.get(userId);
+        if (!forceRefresh && isCacheValid(cached, CACHE_TTL.SAVED)) {
+            console.log('💾 Using cached saved products for:', userId);
+            return { success: true, products: cached.data, count: cached.data.length, cached: true };
+        }
+        
         console.log('📚 Fetching saved products from tbl_saved for user:', userId);
         
         const col = collection(db, 'tbl_saved');
@@ -740,6 +903,9 @@ window.firebaseGetSavedProducts = async function(userId) {
             });
         });
         
+        // Cache the results
+        setCache(dataCache.savedProducts, userId, savedProducts);
+        
         console.log('✅ Found', savedProducts.length, 'saved products for user:', userId);
         return { success: true, products: savedProducts, count: savedProducts.length };
     } catch (err) {
@@ -748,9 +914,16 @@ window.firebaseGetSavedProducts = async function(userId) {
     }
 };
 
-// Get saved product IDs for quick lookup (only for current user)
-window.firebaseGetSavedProductIds = async function(userId) {
+// Get saved product IDs for quick lookup (only for current user) - with caching
+window.firebaseGetSavedProductIds = async function(userId, forceRefresh = false) {
     try {
+        // Check cache first
+        const cached = dataCache.savedIds.get(userId);
+        if (!forceRefresh && isCacheValid(cached, CACHE_TTL.SAVED)) {
+            console.log('💾 Using cached saved IDs for:', userId);
+            return { success: true, savedIds: cached.data, cached: true };
+        }
+        
         const col = collection(db, 'tbl_saved');
         const q = query(col, where('user_id', '==', userId));
         const snaps = await getDocs(q);
@@ -760,6 +933,9 @@ window.firebaseGetSavedProductIds = async function(userId) {
             const data = docSnap.data();
             if (data.product_id) savedIds.push(data.product_id);
         });
+        
+        // Cache the results
+        setCache(dataCache.savedIds, userId, savedIds);
         
         console.log('✅ Found', savedIds.length, 'saved product IDs for user:', userId);
         return { success: true, savedIds };

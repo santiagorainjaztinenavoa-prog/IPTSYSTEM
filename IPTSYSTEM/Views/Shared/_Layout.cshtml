@@ -162,51 +162,62 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     
-    @* Global message notification check and avatar loading *@
+    @* Global message notification check and avatar loading - OPTIMIZED to reduce Firebase reads *@
     @if (Context.Session.GetString("UserId") != null)
     {
         <script>
             const globalUserId = '@Context.Session.GetString("UserId")';
+            // Track initialization to prevent duplicate calls
+            window._globalFeaturesInitialized = false;
         </script>
         <script type="module" src="~/js/firebase-client.js"></script>
         <script>
-            // Wait for Firebase to be ready and load avatar
+            // Wait for Firebase to be ready and load avatar - OPTIMIZED with sessionStorage caching
             async function initGlobalFeatures() {
+                // Prevent duplicate initialization
+                if (window._globalFeaturesInitialized) return;
+                window._globalFeaturesInitialized = true;
+                
                 const navbarAvatar = document.getElementById('navbarAvatar');
                 
-                // First, check if we have a cached profile picture URL
+                // First, check if we have a cached profile picture URL (use this immediately)
                 const cachedPhotoUrl = sessionStorage.getItem('userPhotoUrl');
-                if (cachedPhotoUrl && navbarAvatar) {
+                const cacheTimestamp = parseInt(sessionStorage.getItem('userPhotoUrlTimestamp') || '0');
+                const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+                const cacheValid = cachedPhotoUrl && (Date.now() - cacheTimestamp < CACHE_TTL);
+                
+                if (cacheValid && navbarAvatar) {
                     applyAvatarImage(navbarAvatar, cachedPhotoUrl);
+                    console.log('✅ Using cached avatar (no Firebase read)');
                 }
                 
                 // Wait for Firebase functions to be available
                 let retries = 0;
-                while (typeof window.firebaseGetUserProfile !== 'function' && retries < 50) {
-                    await new Promise(r => setTimeout(r, 100));
+                while (typeof window.firebaseGetUserProfile !== 'function' && retries < 30) {
+                    await new Promise(r => setTimeout(r, 150));
                     retries++;
                 }
                 
-                // Load navbar avatar from Firebase (and update cache)
-                if (navbarAvatar && globalUserId && typeof window.firebaseGetUserProfile === 'function') {
+                // Only fetch from Firebase if cache is invalid/expired
+                if (!cacheValid && navbarAvatar && globalUserId && typeof window.firebaseGetUserProfile === 'function') {
                     try {
                         const result = await window.firebaseGetUserProfile(globalUserId);
                         if (result.success && result.profile && result.profile.photo_url) {
                             const photoUrl = result.profile.photo_url;
                             applyAvatarImage(navbarAvatar, photoUrl);
-                            // Cache the photo URL
+                            // Cache the photo URL with timestamp
                             sessionStorage.setItem('userPhotoUrl', photoUrl);
-                            console.log('✅ Navbar avatar loaded and cached');
+                            sessionStorage.setItem('userPhotoUrlTimestamp', Date.now().toString());
+                            console.log('✅ Avatar loaded from Firebase and cached');
                         }
                     } catch (err) {
                         console.warn('Could not load navbar avatar:', err);
                     }
                 }
                 
-                // Setup message notifications
+                // Setup message notifications (uses real-time listener - efficient)
                 if (typeof window.firebaseListenForNewMessages === 'function') {
                     window.firebaseListenForNewMessages(globalUserId, function(notification) {
-                        // Update badge
                         const badge = document.querySelector('.messages-badge');
                         if (badge) {
                             const current = parseInt(badge.textContent) || 0;
@@ -216,7 +227,7 @@
                     });
                 }
                 
-                // Load saved products count
+                // Load saved products count (with cache - won't make extra reads)
                 updateGlobalSavedBadge();
             }
             
@@ -229,9 +240,9 @@
                 element.innerHTML = '';
             }
             
-            // Run when DOM is ready
+            // Run when DOM is ready (only once)
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initGlobalFeatures);
+                document.addEventListener('DOMContentLoaded', initGlobalFeatures, { once: true });
             } else {
                 initGlobalFeatures();
             }
@@ -557,8 +568,20 @@ async function removeSavedProduct(productId) {
                 setTimeout(() => card.remove(), 200);
             }
             
-            // Update badge
-            updateGlobalSavedBadge();
+            // Update cached count in sessionStorage (decrement by 1)
+            const cachedCount = parseInt(sessionStorage.getItem('savedProductsCount') || '0');
+            if (cachedCount > 0) {
+                sessionStorage.setItem('savedProductsCount', (cachedCount - 1).toString());
+                sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
+            }
+            
+            // Update badge immediately from local state (no Firebase read)
+            const badge = document.querySelector('.saved-icon .icon-badge');
+            if (badge) {
+                const newCount = Math.max(0, cachedCount - 1);
+                badge.textContent = newCount;
+                badge.style.display = newCount > 0 ? 'flex' : 'none';
+            }
             
             // Check if grid is now empty after animation
             setTimeout(() => {
@@ -589,15 +612,37 @@ async function updateGlobalSavedBadge() {
     const userId = typeof globalUserId !== 'undefined' ? globalUserId : null;
     if (!userId) return;
     
+    // Check sessionStorage cache first to reduce Firebase reads
+    const cachedCount = sessionStorage.getItem('savedProductsCount');
+    const cacheTimestamp = parseInt(sessionStorage.getItem('savedProductsCountTimestamp') || '0');
+    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+    
+    const badge = document.querySelector('.saved-icon .icon-badge');
+    
+    // Use cached value immediately if valid
+    if (cachedCount !== null && (Date.now() - cacheTimestamp < CACHE_TTL)) {
+        if (badge) {
+            const count = parseInt(cachedCount) || 0;
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'flex' : 'none';
+        }
+        console.log('📦 Using cached saved count:', cachedCount);
+        return;
+    }
+    
     // Wait for Firebase to be ready
     if (typeof window.firebaseGetSavedProductIds !== 'function') return;
     
     try {
         const result = await window.firebaseGetSavedProductIds(userId);
         if (result.success) {
-            const badge = document.querySelector('.saved-icon .icon-badge');
+            const count = result.savedIds ? result.savedIds.length : 0;
+            
+            // Cache the count
+            sessionStorage.setItem('savedProductsCount', count.toString());
+            sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
+            
             if (badge) {
-                const count = result.savedIds ? result.savedIds.length : 0;
                 badge.textContent = count;
                 badge.style.display = count > 0 ? 'flex' : 'none';
             }
