@@ -125,5 +125,11 @@
 </section>
 
 @section Scripts {
+<script>
+    // Pass server-side data to JavaScript
+    const currentUserId = '@Context.Session.GetString("UserId")' || '';
+    const currentPhotoUrl = '@Model.ProfileImageUrl' || '';
+</script>
+<script type="module" src="~/js/firebase-client.js"></script>
 <script src="~/js/account-settings.js"></script>
 }
