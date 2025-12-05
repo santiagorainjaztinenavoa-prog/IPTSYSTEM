@@ -44,6 +44,15 @@
                             @if (string.IsNullOrWhiteSpace(sel)) { <option value="" selected>All Categories</option> } else { <option value="">All Categories</option> }
                         </select>
                     </div>
+
+                    <!-- Sort Filter -->
+                    <div class="filter-container">
+                        <select id="sortFilter" class="filter-select" onchange="applyFilters()">
+                            <option value="newest" selected>Newest First</option>
+                            <option value="price-low">Price: Low to High</option>
+                            <option value="price-high">Price: High to Low</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
@@ -138,26 +147,70 @@
 
         async function initializeBrowse() {
             try {
-                if (!allProducts || allProducts.length === 0) {
-                    // fallback to firebase client
-                    const res = await window.firebaseFetchAllProducts();
-                    if (res && res.success && res.products) {
-                        allProducts = res.products;
-                    }
+                // ✅ CHANGED: Don't load any products by default in Browse page
+                // Browse page is now empty - users should use their Profile/My Listings to see their items
+                console.log('Browse page initialized - showing empty state');
+                
+                const container = document.getElementById('listingsContainer');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="bi bi-inbox" style="font-size: 4rem; color: #d1d5db;"></i>
+                            <h3>Browse Marketplace</h3>
+                            <p>Products from sellers will appear here</p>
+                        </div>
+                    `;
                 }
-                displayProducts(allProducts);
+                
+                // If you want to load products from Firestore later, uncomment this:
+                // const res = await window.firebaseFetchAllProducts();
+                // if (res && res.success && res.products) {
+                //     allProducts = res.products;
+                //     applyFilters(false);
+                // }
             } catch (err) {
                 console.error('Browse init error', err);
             }
         }
 
-        function applyFilters() {
-            const q = document.getElementById('searchInput').value.trim();
+        // Apply filters client-side and optionally update the URL without reloading
+        function applyFilters(updateUrl = true) {
+            const q = document.getElementById('searchInput').value.trim().toLowerCase();
             const category = document.getElementById('categoryFilter').value;
-            const params = new URLSearchParams();
-            if (q) params.set('q', q);
-            if (category) params.set('category', category);
-            window.location.search = params.toString();
+            const sort = document.getElementById('sortFilter').value;
+
+            const filtered = (allProducts || []).filter(p => {
+                const title = (p.title ?? p.Title ?? '').toString().toLowerCase();
+                const description = (p.description ?? p.Description ?? '').toString().toLowerCase();
+                const cat = (p.category ?? p.Category ?? '').toString();
+
+                const matchesQuery = !q || title.includes(q) || description.includes(q);
+                const matchesCategory = !category || category === '' || cat.toLowerCase() === category.toLowerCase();
+
+                return matchesQuery && matchesCategory;
+            });
+
+            // Sort the filtered results
+            filtered.sort((a, b) => {
+                if (sort === 'price-low') {
+                    return (a.price ?? a.Price ?? 0) - (b.price ?? b.Price ?? 0);
+                } else if (sort === 'price-high') {
+                    return (b.price ?? b.Price ?? 0) - (a.price ?? a.Price ?? 0);
+                } else {
+                    // Default to newest first (assuming date_created is available and in proper format)
+                    return (b.date_created?.seconds || 0) - (a.date_created?.seconds || 0);
+                }
+            });
+
+            displayProducts(filtered);
+
+            if (updateUrl) {
+                const params = new URLSearchParams();
+                if (q) params.set('q', q);
+                if (category) params.set('category', category);
+                const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+                history.replaceState(null, '', newUrl);
+            }
         }
 
         function displayProducts(products) {
@@ -181,7 +234,7 @@
         }
 
         // re-use existing client-side helpers
-        function createProductCard(product) {
+        function createProductCard(product = {}) {
             const id = product.id ?? product.Id;
             const title = product.title ?? product.Title;
             const description = product.description ?? product.Description;

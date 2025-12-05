@@ -239,5 +239,5 @@ class SellerProductsManager {
 // Create global instance
 window.sellerProductsManager = new SellerProductsManager();
 
-// Export for use in modules
-export { SellerProductsManager };
+// In non-module scripts, expose class on window for reuse
+window.SellerProductsManager = SellerProductsManager;
