@@ -55,16 +55,6 @@
                             </a>
                         </li>
 
-                        @* Keep My Listings for sellers (non-buyers) *@
-                        @if ((Context.Session.GetString("UserType") ?? string.Empty) != "buyer")
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Mylisting" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Mylisting">
-                                    <span>My Listings</span>
-                                </a>
-                            </li>
-                        }
-
                         <li class="nav-item">
                             <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Messages" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Messages" style="position: relative;">
                                 <span>Messages</span>
@@ -73,16 +63,8 @@
                         </li>
                     </ul>
 
-                    <!-- Right Side - Search + Icons -->
+                    <!-- Right Side - Icons only (search removed) -->
                     <div class="header-actions d-flex align-items-center gap-3">
-                        <!-- Search Bar -->
-                        <form class="modern-search d-none d-lg-flex" role="search" asp-controller="Home" asp-action="Landing" method="get">
-                            <div class="search-container">
-                                <i class="bi bi-search search-icon-left"></i>
-                                <input name="q" type="search" class="search-input-modern" placeholder="Search items..." aria-label="Search" />
-                            </div>
-                        </form>
-
                         <!-- Icon Actions -->
                         <div class="icon-actions d-flex align-items-center gap-2">
                             @* Saved Products icon for both user types *@
@@ -125,6 +107,11 @@
                                         </div>
                                     </a>
                                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
+                                        <li>
+                                            <a class="dropdown-item" asp-controller="Home" asp-action="Profile">
+                                                <i class="bi bi-person me-2"></i>Profile
+                                            </a>
+                                        </li>
                                         <li>
                                             <a class="dropdown-item" asp-controller="Home" asp-action="AccountSettings">
                                                 <i class="bi bi-person-gear me-2"></i>Account Settings

@@ -228,45 +228,22 @@ function openListingModal() {
 // Edit existing listing
 async function editListing(id) {
     try {
-showLoadingState();
-      
- // For Firebase listings, fetch from Firestore
-        if (typeof window.firebaseFetchProductById === 'function') {
-            const result = await window.firebaseFetchProductById(id);
-            
-            if (!result.success) {
-                throw new Error('Failed to fetch listing from Firebase');
-            }
-            
-            const listing = result.product;
-            
-            // Update modal title
-            const modalTitle = document.getElementById('modalTitle');
-            const saveButtonText = document.getElementById('saveButtonText');
-            
-            if (modalTitle) modalTitle.textContent = 'Edit Listing';
-            if (saveButtonText) saveButtonText.textContent = 'Update Listing';
-            
-            // Populate form fields
-            populateForm(listing);
-            
-            // Show preview image
-            if (listing.imageUrl) {
-                updateImagePreview(listing.imageUrl);
-            }
-            
-            hideLoadingState();
-            
-            if (listingModal) listingModal.show();
-        } else {
-            // Fall back to server-side fetch
-            const response = await fetch(`/Home/GetListing?id=${id}`);
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch listing details');
-            }
-            
-            const listing = await response.json();
+        showLoadingState();
+        console.log('🔍 Attempting to edit listing:', id);
+        
+        // Try to get the listing from the current page first (faster)
+        const existingCard = document.getElementById(`listing-${id}`);
+        if (existingCard) {
+            console.log('✅ Found listing in page DOM');
+            const listing = {
+                id: id,
+                title: existingCard.getAttribute('data-title') || existingCard.querySelector('.product-title')?.textContent ||'',
+                description: existingCard.getAttribute('data-description') || existingCard.querySelector('.product-description')?.textContent || '',
+                price: parseFloat(existingCard.getAttribute('data-price') || existingCard.querySelector('.product-price')?.textContent.replace(/[^0-9.]/g, '') || '0'),
+                category: existingCard.getAttribute('data-category') || existingCard.querySelector('.product-category')?.textContent || '',
+                condition: existingCard.getAttribute('data-condition') || 'New',
+                imageUrl: existingCard.querySelector('.product-image')?.src || ''
+            };
             
             // Update modal title
             const modalTitle = document.getElementById('modalTitle');
@@ -286,30 +263,108 @@ showLoadingState();
             hideLoadingState();
             
             if (listingModal) listingModal.show();
+            return;
         }
         
+        // Try Firebase fetch
+        if (typeof window.firebaseFetchProductById === 'function') {
+            console.log('📡 Fetching from Firebase...');
+            const result = await window.firebaseFetchProductById(id);
+            
+            if (result && result.success && result.product) {
+                console.log('✅ Found listing in Firebase');
+                const listing = result.product;
+                
+                // Update modal title
+                const modalTitle = document.getElementById('modalTitle');
+                const saveButtonText = document.getElementById('saveButtonText');
+                
+                if (modalTitle) modalTitle.textContent = 'Edit Listing';
+                if (saveButtonText) saveButtonText.textContent = 'Update Listing';
+                
+                // Populate form fields
+                populateForm(listing);
+                
+                // Show preview image
+                if (listing.imageUrl) {
+                    updateImagePreview(listing.imageUrl);
+                }
+                
+                hideLoadingState();
+                
+                if (listingModal) listingModal.show();
+                return;
+            }
+        }
+        
+        // Fall back to server-side fetch if not found in DOM or Firebase
+        console.log('📡 Fetching from server API...');
+        const response = await fetch(`/Home/GetListing?id=${id}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch listing details');
+        }
+        
+        const listing = await response.json();
+        
+        // Update modal title
+        const modalTitle = document.getElementById('modalTitle');
+        const saveButtonText = document.getElementById('saveButtonText');
+        
+        if (modalTitle) modalTitle.textContent = 'Edit Listing';
+        if (saveButtonText) saveButtonText.textContent = 'Update Listing';
+        
+        // Populate form fields
+        populateForm(listing);
+        
+        // Show preview image
+        if (listing.imageUrl || listing.ImageUrl) {
+            updateImagePreview(listing.imageUrl || listing.ImageUrl);
+        }
+        
+        hideLoadingState();
+        
+        if (listingModal) listingModal.show();
+        
     } catch (error) {
-     hideLoadingState();
+        hideLoadingState();
         showToast('Error loading listing: ' + error.message, 'error');
-   console.error('Edit listing error:', error);
+        console.error('Edit listing error:', error);
     }
 }
 
 // Populate form with listing data
 function populateForm(listing) {
+    console.log('📝 Populating form with listing:', listing);
+    
     // Set all form fields (handle both server and Firebase formats)
     setFieldValue('listingId', listing.id || listing.Id || listing.product_id || '');
- setFieldValue('title', listing.title || listing.Title || '');
+    setFieldValue('title', listing.title || listing.Title || '');
     setFieldValue('description', listing.description || listing.Description || '');
     setFieldValue('price', listing.price || listing.Price || 0);
     setFieldValue('category', listing.category || listing.Category || '');
+    
+    // Set image URL in hidden field
+    const imageUrl = listing.imageUrl || listing.image_url || listing.ImageUrl || '';
+    setFieldValue('imageUrl', imageUrl);
+    
+    // Show image preview if imageUrl exists
+    if (imageUrl) {
+        console.log('📷 Showing image preview:', imageUrl);
+        updateImagePreview(imageUrl);
+    } else {
+        console.log('⚠️ No image URL found in listing');
+        resetImagePreview();
+    }
     
     // Set condition radio button
     const condition = listing.condition || listing.Condition || '';
     const conditionInput = document.querySelector(`input[name="condition"][value="${condition}"]`);
     if (conditionInput) {
-   conditionInput.checked = true;
+        conditionInput.checked = true;
     }
+    
+    console.log('✅ Form populated successfully');
 }
 
 // Helper to set field value safely
@@ -345,7 +400,46 @@ try {
         showSaveLoadingState();
   
     // Determine if creating or updating
-   const isUpdate = listingData.id > 0;
+   // NOTE: listingId may be a numeric server ID or a non-numeric Firestore document ID.
+   const rawId = (document.getElementById('listingId') && document.getElementById('listingId').value) ? document.getElementById('listingId').value : '';
+   const numericId = parseInt(rawId || '0');
+   const isFirebaseId = rawId && isNaN(numericId);
+   const isUpdate = !isFirebaseId && listingData.id > 0;
+
+  // If this is a Firestore-only listing (non-numeric id) and firebaseUpdateListing is available,
+  // update directly in Firestore to avoid creating a new server-side listing.
+  if (isFirebaseId && typeof window.firebaseUpdateListing === 'function') {
+        try {
+            const fbPayload = {
+                id: rawId,
+                title: listingData.title,
+                description: listingData.description,
+                price: listingData.price,
+                category: listingData.category,
+                condition: listingData.condition,
+                imageUrl: listingData.imageUrl
+            };
+            const fbResult = await window.firebaseUpdateListing(fbPayload);
+            hideSaveLoadingState();
+            if (fbResult && fbResult.success) {
+                showToast('Listing updated successfully!', 'success');
+                // Attempt to update UI cards if helper exists
+                if (typeof updateListingOnPage === 'function') {
+                    try { updateListingOnPage(Object.assign({}, listingData, { product_id: rawId })); } catch (e) { }
+                }
+                if (listingModal) listingModal.hide();
+                setTimeout(() => window.location.reload(), 800);
+                return;
+            } else {
+                showToast((fbResult && fbResult.message) ? fbResult.message : 'Failed to update listing in Firestore', 'error');
+                // fallthrough to server update as a last resort
+            }
+        } catch (e) {
+            console.error('Firestore update failed:', e);
+            // continue to attempt server-side update below if applicable
+        }
+    }
+
   const url = isUpdate ? '/Home/UpdateListing' : '/Home/CreateListing';
         const actionText = isUpdate ? 'updated' : 'created';
         
@@ -489,10 +583,10 @@ showToast('Please select a condition', 'warning');
 
 function deleteListing(id, title) {
     // Create a better confirmation dialog
-  const confirmMessage = `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`;
+    const confirmMessage = `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`;
     
-if (confirm(confirmMessage)) {
-   performDelete(id, title);
+    if (confirm(confirmMessage)) {
+        performDelete(id, title);
     }
 }
 
@@ -743,7 +837,13 @@ async function loadListingsFromFirebase() {
         
         // Build the HTML for all products
         const html = products.map(product => `
-            <div class="listing-card-minimal" id="listing-${product.id}" data-category="${product.category || ''}" data-condition="${product.condition || ''}" data-price="${product.price || 0}" data-title="${product.title || ''}">
+            <div class="listing-card-minimal" 
+                 id="listing-${product.id}" 
+                 data-category="${product.category || ''}" 
+                 data-condition="${product.condition || ''}" 
+                 data-price="${product.price || 0}" 
+                 data-title="${escapeHtml(product.title || '')}"
+                 data-description="${escapeHtml(product.description || '')}">
                 <!-- Product Image -->
                 <div class="product-image-wrapper">
                     <img src="${product.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" alt="${product.title || 'Product'}" class="product-image" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
@@ -760,13 +860,13 @@ async function loadListingsFromFirebase() {
                     
                     <!-- Price & Category -->
                     <div class="product-meta">
-                        <span class="product-price">₱${product.price || 0}</span>
+                        <span class="product-price">₱${parseFloat(product.price || 0).toFixed(2)}</span>
                         <span class="product-category">${product.category || 'Uncategorized'}</span>
                     </div>
                     
                     <!-- Action Buttons -->
                     <div class="product-actions">
-                        ${userType === 'seller' ? `
+                        ${userType === 'seller' || userType === 'admin' ? `
                             <button class="btn-action btn-edit-minimal" onclick="editListing('${product.id}')" title="Edit">
                                 <i class="bi bi-pencil"></i>
                                 Edit
@@ -809,3 +909,4 @@ window.editListing = editListing;
 window.saveListing = saveListing;
 window.deleteListing = deleteListing;
 window.removeImage = removeImage;
+window.loadListingsFromFirebase = loadListingsFromFirebase;

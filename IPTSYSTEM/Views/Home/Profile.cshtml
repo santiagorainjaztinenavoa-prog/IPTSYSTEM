@@ -4,150 +4,437 @@
     var initial = string.IsNullOrWhiteSpace(Model.FullName)
         ? (string.IsNullOrWhiteSpace(Model.Username) ? "?" : Model.Username.Substring(0,1).ToUpperInvariant())
         : Model.FullName.Substring(0,1).ToUpperInvariant();
+    
+    // Calculate days since joined
+    var daysSinceJoined = 12;
+    var joinedText = daysSinceJoined < 30 ? $"{daysSinceJoined}d" : $"{daysSinceJoined / 30}m {daysSinceJoined % 30}d";
+    
+    var userType = Context.Session.GetString("UserType") ?? "buyer";
+    var username = Context.Session.GetString("Username") ?? "";
+    var fullName = Context.Session.GetString("FullName") ?? "";
+    var userId = Context.Session.GetString("UserId") ?? "";
 }
 
-<section class="profile-page py-4">
-    <div class="container" id="profileRoot" data-email="@Model.Email" data-phone="@Model.PhoneNumber" data-backup="@Model.BackupEmail" data-emergency="@Model.EmergencyPhone">
-        <!-- New profile photo header section -->
-        <h1 class="h3 mb-4">Edit profile</h1>
-        <div class="row align-items-start mb-4" id="photoSection">
-            <div class="col-auto">
-                <div id="profileAvatar" class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold" style="width:160px;height:160px;font-size:64px; user-select:none; background-size:cover; background-position:center;">
-                    @initial
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/profile.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/pages/mylistings.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/listing-form.css" asp-append-version="true" />
+}
+
+<section class="profile-page py-4" 
+         data-user-name="@username"
+         data-user-fullname="@fullName"
+         data-user-id="@userId"
+         data-user-type="@userType">
+    <div class="container">
+        <!-- Profile Header -->
+        <div class="profile-header-section">
+            <div class="profile-header-content">
+                <div id="profileAvatar" class="profile-avatar-large">@initial</div>
+                <div class="profile-info-section">
+                    <div class="profile-name-row">
+                        <h1 class="profile-name">@(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Username : Model.FullName)</h1>
+                        <span class="profile-verified-badge">Not verified</span>
+                    </div>
+                    <a href="#" id="profileDetailsLink" class="profile-username-link">
+                        Profile details <i class="bi bi-chevron-right"></i>
+                    </a>
+                    <div class="profile-meta-stats">
+                        <div class="profile-meta-item">
+                            <span class="profile-meta-value">N/A</span>
+                            <span class="profile-meta-label">No review yet</span>
+                        </div>
+                        <div class="profile-meta-item">
+                            <span class="profile-meta-value">@joinedText</span>
+                            <span class="profile-meta-label">Joined</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <a href="@Url.Action("AccountSettings", "Home")" class="btn btn-edit-profile">Edit Profile</a>
+                    <button class="btn btn-share-profile" title="Share profile" onclick="shareProfile()">
+                        <i class="bi bi-upload"></i>
+                    </button>
                 </div>
             </div>
-            <div class="col-md-6">
-                <h5 class="fw-semibold mb-2">Profile photo</h5>
-                <p class="text-muted mb-3">Clear frontal face photos are an important way for buyers and sellers to learn about each other.</p>
-                <button type="button" class="btn btn-outline-secondary" id="uploadPhotoBtn">Upload a photo</button>
-                <input type="file" id="photoInput" accept="image/*" class="d-none" />
-                <div class="small text-muted mt-2" id="photoStatus" style="display:none;"></div>
+        </div>
+        
+        <!-- Profile Tabs with Add Button -->
+        <div class="profile-tabs-section">
+            <div class="d-flex justify-content-between align-items-center" style="padding: 0 40px;">
+                <div class="profile-tabs">
+                    <button class="profile-tab active" data-tab="listings">Listings</button>
+                </div>
+                @if (userType == "seller" || userType == "admin")
+                {
+                    <button class="btn-add-new" onclick="openListingModal()" style="margin: 12px 0;">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        Add New Listing
+                    </button>
+                }
             </div>
         </div>
-        <!-- Existing profile form -->
-        <h1 class="h4 mb-1">My Profile</h1>
-        <p class="text-muted mb-4">Manage and protect your account</p>
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <form id="profileForm" asp-controller="Home" asp-action="UpdateProfile" method="post">
-                    @Html.AntiForgeryToken()
-                    <div class="row">
-                        <div class="col-lg-12">
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Username</label>
-                                <input type="text" class="form-control" id="Username" name="Username" value="@Model.Username" />
-                                <div class="invalid-feedback" id="UsernameError">Please enter username</div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Name</label>
-                                <input type="text" class="form-control" id="FullName" name="FullName" value="@Model.FullName" />
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Primary Email</label>
-                                <div class="d-flex align-items-center">
-                                    <span class="me-2" id="EmailMasked"></span>
+        
+        <!-- Listings Content -->
+        <div class="profile-listings-section">
+            <div class="listings-grid" id="listingsContainer">
+                <!-- Skeleton Loader -->
+                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Profile Details Modal -->
+<div class="modal fade" id="profileDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">About @Model.Username</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="mb-3">Account details</h6>
+        <ul class="list-unstyled d-flex flex-column gap-2">
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-calendar"></i> <span>Joined @joinedText</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> <span>0 Followers  ·  0 Following</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> <span>@(Model.City ?? "Unknown City")</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Listing Modal -->
+<div class="modal fade" id="listingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content modern-modal">
+            <div class="modal-header border-0">
+                <div>
+                    <h2 class="modal-title" id="modalTitle">Add New Listing</h2>
+                    <p class="modal-subtitle">Fill in the details below</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="listingForm">
+                    <input type="hidden" id="listingId" value="0">
+                    <input type="hidden" id="imageUrl" value="">
+                    
+                    <!-- Image Upload Section -->
+                    <div class="mb-4">
+                        <label class="form-label">Product Photo *</label>
+                        <div class="image-upload-container" id="imageUploadContainer">
+                            <div class="image-preview-area" id="imagePreviewArea">
+                                <img id="imagePreview" src="" alt="Preview" style="display: none;">
+                                <div class="upload-placeholder" id="uploadPlaceholder">
+                                    <i class="bi bi-cloud-upload" style="font-size: 3rem; color: #9ca3af;"></i>
+                                    <p class="mt-3 mb-2" style="font-weight: 600; color: #1a1a1a;">Click to upload or drag and drop</p>
+                                    <p class="text-muted" style="font-size: 0.875rem;">PNG, JPG, GIF up to 10MB</p>
                                 </div>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Backup / Emergency Email (optional)</label>
-                                <input type="email" class="form-control" id="BackupEmail" name="BackupEmail" value="@Model.BackupEmail" placeholder="Add backup email" />
+                            <input type="file" id="imageFileInput" accept="image/*" style="display: none;">
+                            <button type="button" class="btn-remove-image" id="removeImageBtn" style="display: none;" onclick="removeImage()">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        <div class="mt-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <hr class="flex-grow-1">
+                                <span class="px-3 text-muted" style="font-size: 0.875rem;">or paste image URL</span>
+                                <hr class="flex-grow-1">
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Primary Phone</label>
-                                <div class="d-flex align-items-center">
-                                    <span class="me-2" id="PhoneMasked"></span>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">Emergency / Backup Phone (optional)</label>
-                                <input type="tel" class="form-control" id="EmergencyPhone" name="EmergencyPhone" value="@Model.EmergencyPhone" placeholder="Add emergency phone" />
-                            </div>
-                            <button type="submit" class="btn btn-primary px-4" id="saveProfileBtn">Save</button>
+                            <input type="url" class="form-control minimal-input" id="imageUrlInput" placeholder="https://example.com/image.jpg">
+                        </div>
+                    </div>
+
+                    <!-- Title -->
+                    <div class="mb-4">
+                        <label for="title" class="form-label">Title *</label>
+                        <input type="text" class="form-control minimal-input" name="title" id="title" placeholder="e.g., iPhone 13 Pro Max 256GB" required maxlength="100">
+                    </div>
+
+                    <!-- Description -->
+                    <div class="mb-4">
+                        <label for="description" class="form-label">Description *</label>
+                        <textarea class="form-control minimal-input" name="description" id="description" rows="3" placeholder="Describe your item..." required maxlength="500"></textarea>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Price -->
+                        <div class="col-md-6">
+                            <label for="price" class="form-label">Price (?) *</label>
+                            <input type="number" class="form-control minimal-input" name="price" id="price" placeholder="0.00" step="0.01" min="0" required>
+                        </div>
+
+                        <!-- Category -->
+                        <div class="col-md-6">
+                            <label for="category" class="form-label">Category *</label>
+                            <select class="form-select minimal-input" name="category" id="category" required>
+                                <option value="">Select category</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Fashion">Fashion</option>
+                                <option value="Home & Living">Home & Living</option>
+                                <option value="Books">Books</option>
+                                <option value="Sports">Sports</option>
+                                <option value="Furniture">Furniture</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Condition -->
+                    <div class="mt-4">
+                        <label class="form-label">Condition *</label>
+                        <div class="condition-options">
+                            <input type="radio" class="btn-check" name="condition" id="conditionNew" value="New">
+                            <label class="condition-option" for="conditionNew">New</label>
+
+                            <input type="radio" class="btn-check" name="condition" id="conditionLikeNew" value="Like New">
+                            <label class="condition-option" for="conditionLikeNew">Like New</label>
+
+                            <input type="radio" class="btn-check" name="condition" id="conditionGood" value="Good">
+                            <label class="condition-option" for="conditionGood">Good</label>
+
+                            <input type="radio" class="btn-check" name="condition" id="conditionFair" value="Fair">
+                            <label class="condition-option" for="conditionFair">Fair</label>
                         </div>
                     </div>
                 </form>
             </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn-modal-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn-modal-save btn-save-listing" onclick="saveListing()">
+                    <span id="saveButtonText">Add Listing</span>
+                </button>
+            </div>
         </div>
-        <div class="mt-3" id="profileStatus" style="display:none;"></div>
     </div>
-</section>
+</div>
+
+<!-- Toast Notification -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11000">
+    <div id="toastNotification" class="toast" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMessage"></div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
+<script src="~/js/firebase-client.js?v=2.0" type="module"></script>
 <script>
-(function(){
-    const root = document.getElementById('profileRoot');
-    const form = document.getElementById('profileForm');
-    const usernameInput = document.getElementById('Username');
-    const fullNameInput = document.getElementById('FullName');
-    const backupEmailInput = document.getElementById('BackupEmail');
-    const emergencyPhoneInput = document.getElementById('EmergencyPhone');
-    const statusEl = document.getElementById('profileStatus');
-    const saveBtn = document.getElementById('saveProfileBtn');
-
-    // Photo upload logic
-    const avatar = document.getElementById('profileAvatar');
-    const photoBtn = document.getElementById('uploadPhotoBtn');
-    const photoInput = document.getElementById('photoInput');
-    const photoStatus = document.getElementById('photoStatus');
-    photoBtn.addEventListener('click', ()=> photoInput.click());
-    photoInput.addEventListener('change', ()=>{
-        if(photoInput.files && photoInput.files[0]){
-            const file = photoInput.files[0];
-            if(!file.type.startsWith('image/')){ photoStatus.style.display='block'; photoStatus.textContent='Please select an image file.'; return; }
-            const reader = new FileReader();
-            reader.onload = e => {
-                avatar.style.backgroundImage = `url('${e.target.result}')`;
-                avatar.textContent='';
-                photoStatus.style.display='block';
-                photoStatus.textContent='Preview loaded (not yet saved).';
-            };
-            reader.readAsDataURL(file);
+    // Immediate loading without waiting for Firebase
+    let userListingsLoaded = false;
+    
+    // Profile details modal open
+    document.addEventListener('DOMContentLoaded', function() {
+        const link = document.getElementById('profileDetailsLink');
+        if (link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const modal = new bootstrap.Modal(document.getElementById('profileDetailsModal'));
+                modal.show();
+            });
         }
     });
-
-    const initialEmail = root.getAttribute('data-email') || '';
-    const initialPhone = root.getAttribute('data-phone') || '';
-
-    function maskEmail(email){
-        if(!email) return '';
-        const atChar = String.fromCharCode(64);
-        const atIndex = email.indexOf(atChar);
-        if(atIndex <= 2) return email;
-        const user = email.substring(0, atIndex);
-        const domain = email.substring(atIndex + 1);
-        return user.substring(0,2) + '********' + atChar + domain;
-    }
-    function maskPhone(ph){ if(!ph) return ''; if(ph.length < 4) return ph; return '********' + ph.slice(-2); }
-
-    document.getElementById('EmailMasked').textContent = maskEmail(initialEmail);
-    document.getElementById('PhoneMasked').textContent = maskPhone(initialPhone);
-
-    form.addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        usernameInput.classList.remove('is-invalid');
-        if(!usernameInput.value.trim()){ usernameInput.classList.add('is-invalid'); return; }
-        saveBtn.disabled=true; saveBtn.textContent='Saving...';
+    
+    async function loadUserListings() {
+        const container = document.getElementById('listingsContainer');
+        
         try {
-            const payload={
-                Username: usernameInput.value.trim(),
-                FullName: fullNameInput.value.trim(),
-                PhoneNumber: '',
-                BackupEmail: backupEmailInput.value.trim(),
-                EmergencyPhone: emergencyPhoneInput.value.trim()
-            };
-            const resp= await fetch(form.getAttribute('action'), { method:'POST', headers:{ 'Content-Type':'application/json','RequestVerificationToken':document.querySelector('input[name="__RequestVerificationToken"]').value }, body: JSON.stringify(payload) });
-            const data = await resp.json();
-            statusEl.style.display='block';
-            statusEl.className=data.success? 'alert alert-success':'alert alert-danger';
-            statusEl.textContent=data.message||'Update failed';
-        } catch(err){ statusEl.style.display='block'; statusEl.className='alert alert-danger'; statusEl.textContent=err.message||String(err); }
-        finally { saveBtn.disabled=false; saveBtn.textContent='Save'; }
-    });
-})();
+            // First try: Load from server API (faster, no Firebase auth needed)
+            const response = await fetch('/Home/GetUserListings');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.listings) {
+                    displayListings(data.listings, container);
+                    userListingsLoaded = true;
+                    return;
+                }
+            }
+        } catch (error) {
+            console.warn('Server API failed, trying Firebase...', error);
+        }
+        
+        // Fallback: Try Firebase (slower)
+        try {
+            await loadFromFirebase(container);
+        } catch (error) {
+            console.error('Firebase also failed:', error);
+            showError(container, error.message);
+        }
+    }
+    
+    async function loadFromFirebase(container) {
+        // Get user info from page data attributes
+        const section = document.querySelector('.profile-page');
+        var username = section.getAttribute('data-user-name') || '';
+        var fullName = section.getAttribute('data-user-fullname') || '';
+        var userId = section.getAttribute('data-user-id') || '';
+        var userType = section.getAttribute('data-user-type') || 'seller';
+        
+        // Store in sessionStorage for Firebase functions
+        if (!userId || userId === '') {
+            userId = username;
+        }
+        sessionStorage.setItem('Username', username);
+        sessionStorage.setItem('FullName', fullName);
+        sessionStorage.setItem('UserId', userId);
+        sessionStorage.setItem('UserType', userType);
+        
+        // Wait for Firebase functions
+        if (typeof window.loadListingsFromFirebase === 'function') {
+            await window.loadListingsFromFirebase();
+            
+            // Check if Firebase populated the container
+            if (container.children.length > 0 && !container.querySelector('.listing-skeleton')) {
+                return; // Firebase loaded successfully
+            }
+        }
+        
+        // If Firebase didn't load, show empty state
+        showNoListings(container);
+    }
+    
+    function displayListings(listings, container) {
+        if (!listings || listings.length === 0) {
+            showNoListings(container);
+            return;
+        }
+        
+        const grid = document.createElement('div');
+        grid.className = 'listings-grid';
+        
+        const userTypeAttr = document.querySelector('.profile-page').getAttribute('data-user-type');
+        
+        listings.forEach(listing => {
+            const card = document.createElement('div');
+            card.className = 'listing-card-minimal';
+            card.id = `listing-${listing.id || listing.Id}`;
+            
+            const imageUrl = listing.imageUrl || listing.ImageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const price = listing.price || listing.Price || 0;
+            const title = listing.title || listing.Title || 'Untitled';
+            const description = listing.description || listing.Description || '';
+            const condition = listing.condition || listing.Condition || 'New';
+            const category = listing.category || listing.Category || 'Uncategorized';
+            const listingId = listing.id || listing.Id;
+            
+            card.innerHTML = `
+                <div class="product-image-wrapper">
+                    <img src="${imageUrl}" alt="${title}" class="product-image" 
+                         onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                    <span class="condition-badge badge-${condition.toLowerCase().replace(' ', '-')}">${condition}</span>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-title">${title}</h3>
+                    <p class="product-description">${description}</p>
+                    <div class="product-meta">
+                        <span class="product-price">?${parseFloat(price).toFixed(2)}</span>
+                        <span class="product-category">${category}</span>
+                    </div>
+                    <div class="product-actions">
+                        ${userTypeAttr === 'seller' || userTypeAttr === 'admin' ? `
+                            <button class="btn-action btn-edit-minimal" onclick="editListing('${listingId}')" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                                Edit
+                            </button>
+                            <button class="btn-action btn-delete-minimal" onclick="deleteListing('${listingId}', '${title.replace(/'/g, "\\'")}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        ` : `
+                            <button class="btn-action btn-buy-minimal" onclick="viewListing('${listingId}')" style="background:#10b981;color:#fff;">
+                                <i class="bi bi-bag-check"></i>
+                                View
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `;
+            
+            grid.appendChild(card);
+        });
+        
+        container.innerHTML = '';
+        container.appendChild(grid);
+    }
+    
+    function showNoListings(container) {
+        container.innerHTML = `
+            <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                <i class="bi bi-box-seam"></i>
+                <h3>No listings yet</h3>
+                <p>Start selling by creating your first listing</p>
+                ${sessionStorage.getItem('UserType') === 'seller' || sessionStorage.getItem('UserType') === 'admin' ? 
+                    '<button class="btn-add-new" onclick="openListingModal()"><i class="bi bi-plus-circle me-2"></i>Add New Listing</button>' : ''}
+            </div>
+        `;
+    }
+    
+    function showNoAuth(container) {
+        container.innerHTML = `
+            <div class="no-listings">
+                <i class="bi bi-box-seam"></i>
+                <h4>Please log in to view your listings</h4>
+                <a href="@Url.Action("Login", "Home")" class="btn btn-primary mt-3">Login</a>
+            </div>
+        `;
+    }
+    
+    function showError(container, message) {
+        container.innerHTML = `
+            <div class="no-listings">
+                <i class="bi bi-exclamation-triangle"></i>
+                <h4>Error loading listings</h4>
+                <p>${message || 'Please try again later'}</p>
+                <button class="btn btn-primary mt-3" onclick="location.reload()">Retry</button>
+            </div>
+        `;
+    }
+    
+    function viewListing(id) {
+        if (!id) return;
+        window.location.href = `/Home/ProductDetail?id=${id}`;
+    }
+    
+    window.viewListing = viewListing;
+    
+    function shareProfile() {
+        const url = window.location.href;
+        if (navigator.share) {
+            navigator.share({
+                title: 'My Profile',
+                url: url
+            }).catch(err => console.log('Error sharing:', err));
+        } else {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Profile link copied to clipboard!');
+            });
+        }
+    }
+    
+    // Wait for Firebase functions to be available
+    function waitForFirebaseFunctions() {
+        if (typeof window.firebaseCreateListing === 'function') {
+            console.log('Firebase functions ready');
+            // Load listings
+            loadUserListings();
+        } else {
+            setTimeout(waitForFirebaseFunctions, 100);
+        }
+    }
+    
+    // Load listings immediately
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', waitForFirebaseFunctions);
+    } else {
+        waitForFirebaseFunctions();
+    }
 </script>
-}
-
-@functions{
-    private string MaskEmail(string email){ if(string.IsNullOrWhiteSpace(email)) return string.Empty; var parts=email.Split('@'); if(parts.Length!=2) return email; var user=parts[0]; if(user.Length<=2) return email; return user.Substring(0,2)+"********@"+parts[1]; }
-    private string MaskPhone(string phone){ if(string.IsNullOrWhiteSpace(phone)) return string.Empty; if(phone.Length<4) return phone; return new string('*', phone.Length-2)+ phone[^2..]; }
+<script src="~/js/listings-manager.js?v=2.0"></script>
+<script src="~/js/listings-enhanced.js?v=2.0"></script>
 }

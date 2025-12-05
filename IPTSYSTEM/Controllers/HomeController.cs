@@ -33,6 +33,28 @@ namespace IPTSYSTEM.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _db = db ?? throw new ArgumentNullException(nameof(db));
             _firestore = firestore ?? throw new ArgumentNullException(nameof(firestore));
+            
+            // ? FIX: Load listings from Firestore on startup
+            if (_firestore.IsInitialized && _listings.Count == 0)
+            {
+                try
+                {
+                    // Load listings from Firestore into memory cache
+                    var task = _firestore.GetAllListingsAsync();
+                    task.Wait(); // Synchronous wait for startup
+                    var firestoreListings = task.Result;
+                    
+                    if (firestoreListings != null && firestoreListings.Count > 0)
+                    {
+                        _listings = firestoreListings;
+                        _logger.LogInformation("? Loaded {Count} listings from Firestore on startup", _listings.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load listings from Firestore on startup");
+                }
+            }
         }
 
         public IActionResult Index()
@@ -101,53 +123,102 @@ namespace IPTSYSTEM.Controllers
                 return View();
             }
         }
-        public IActionResult Mylisting() => View(_listings.Where(l => l.IsActive).ToList());
-        public IActionResult Browse(string? category, string? q)
+        public async Task<IActionResult> Browse(string? category, string? q)
         {
-            var uid = HttpContext.Session.GetString("UserId") ?? string.Empty;
-            var userType = (HttpContext.Session.GetString("UserType") ?? string.Empty).ToLowerInvariant();
-
-            var listingsQuery = _listings.Where(l => l.IsActive);
-
-            // Exclude seller's own items for sellers
-            if (userType == "seller")
+            try
             {
-                listingsQuery = listingsQuery.Where(l => l.SellerUserId != uid);
+                List<Listing> listings;
+
+                // Load all active listings from Firestore
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    var firestoreListings = await _firestore.GetAllListingsAsync();
+                    listings = firestoreListings?.Where(l => l.IsActive).ToList() ?? new List<Listing>();
+
+                    // Refresh in-memory cache for Landing/Categories
+                    if (firestoreListings != null && firestoreListings.Count > 0)
+                    {
+                        _listings = firestoreListings;
+                    }
+                }
+                else
+                {
+                    listings = _listings.Where(l => l.IsActive).ToList();
+                }
+
+                // Filters
+                if (!string.IsNullOrWhiteSpace(category))
+                {
+                    listings = listings.Where(l => string.Equals(l.Category?.Trim(), category, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    var query = q.ToLowerInvariant();
+                    listings = listings.Where(l => (l.Title?.ToLowerInvariant().Contains(query) ?? false) || (l.Description?.ToLowerInvariant().Contains(query) ?? false)).ToList();
+                }
+
+                // Sort
+                listings = listings.OrderByDescending(l => l.CreatedDate).ToList();
+
+                ViewBag.SelectedCategory = category ?? string.Empty;
+                ViewBag.Query = q ?? string.Empty;
+
+                _logger.LogInformation("Browse page showing {Count} listings", listings.Count);
+                return View(listings);
             }
-
-            // Keep a normalizedCategory to use for selecting the option in the UI
-            string normalizedCategory = category ?? string.Empty;
-
-            if (!string.IsNullOrWhiteSpace(category))
+            catch (Exception ex)
             {
-                // Normalize incoming category values so HTML-encoded values or small variations
-                // (e.g. "Toys &amp; Games", "Toys and Games", "Home and Living") map to the
-                // canonical category strings stored on listings (e.g. "Toys & Games", "Home & Living").
-                var cat = System.Net.WebUtility.HtmlDecode(category).Trim();
-                // Accept both "and" and "&" as equivalent
-                cat = System.Text.RegularExpressions.Regex.Replace(cat, "\\band\\b", "&", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                cat = cat.Replace("&&", "&");
-
-                normalizedCategory = cat;
-
-                listingsQuery = listingsQuery.Where(l => string.Equals(l.Category?.Trim(), cat, StringComparison.OrdinalIgnoreCase));
+                _logger.LogError(ex, "Error loading Browse page");
+                ViewBag.SelectedCategory = category ?? string.Empty;
+                ViewBag.Query = q ?? string.Empty;
+                return View(new List<Listing>());
             }
-
-            if (!string.IsNullOrWhiteSpace(q))
-            {
-                var qtrim = q.Trim().ToLowerInvariant();
-                listingsQuery = listingsQuery.Where(l => ((l.Title ?? string.Empty) + " " + (l.Description ?? string.Empty)).ToLower().Contains(qtrim));
-                ViewBag.Query = q;
-            }
-
-            ViewBag.SelectedCategory = normalizedCategory ?? string.Empty;
-
-            var listings = listingsQuery.OrderByDescending(l => l.CreatedDate).ToList();
-
-            return View(listings);
         }
 
         public IActionResult SellerProfile() => View();
+
+        // Profile - User's own profile with listings
+        [HttpGet]
+        public async Task<IActionResult> Profile()
+        {
+            var model = new UserProfileViewModel
+            {
+                UserId = HttpContext.Session.GetString("UserId") ?? string.Empty,
+                Username = HttpContext.Session.GetString("Username") ?? string.Empty,
+                FullName = HttpContext.Session.GetString("FullName") ?? string.Empty,
+                AccountType = HttpContext.Session.GetString("UserType") ?? string.Empty,
+                Email = HttpContext.Session.GetString("Email") ?? string.Empty,
+                PhoneNumber = HttpContext.Session.GetString("PhoneNumber") ?? string.Empty,
+                Region = HttpContext.Session.GetString("Region") ?? string.Empty,
+                Province = HttpContext.Session.GetString("Province") ?? string.Empty,
+                City = HttpContext.Session.GetString("City") ?? string.Empty,
+                Barangay = HttpContext.Session.GetString("Barangay") ?? string.Empty,
+                PostalCode = HttpContext.Session.GetString("PostalCode") ?? string.Empty,
+                StreetAddress = HttpContext.Session.GetString("StreetAddress") ?? string.Empty,
+                AddressFull = HttpContext.Session.GetString("Address") ?? string.Empty,
+            };
+
+            try
+            {
+                // Attempt to enrich with Firestore profile if available
+                if (!string.IsNullOrWhiteSpace(model.UserId))
+                {
+                    var doc = await _firestore.GetUserAsync(model.UserId);
+                    if (doc != null)
+                    {
+                        model.RawFirestore = doc;
+                        if (doc.TryGetValue("full_name", out var fn) && fn is string s1 && !string.IsNullOrWhiteSpace(s1)) model.FullName = s1;
+                        if (doc.TryGetValue("email", out var em) && em is string s2 && !string.IsNullOrWhiteSpace(s2)) model.Email = s2;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Skipping Firestore user fetch");
+            }
+
+            return View(model);
+        }
 
         // Account Settings
         [HttpGet]
@@ -738,10 +809,102 @@ namespace IPTSYSTEM.Controllers
         public IActionResult GetUserListings()
         {
             var uid = HttpContext.Session.GetString("UserId") ?? string.Empty;
-            var listings = _listings.Where(l => l.IsActive && (string.IsNullOrEmpty(uid) || l.SellerUserId == uid)).ToList();
+            var username = HttpContext.Session.GetString("Username") ?? string.Empty;
+            
+            // Use either uid or username to filter
+            var userIdentifier = !string.IsNullOrEmpty(uid) ? uid : username;
+            
+            if (string.IsNullOrEmpty(userIdentifier))
+            {
+                return Json(new { success = false, message = "User not logged in", listings = new List<Listing>() });
+            }
+            
+            var listings = _listings.Where(l => 
+                l.IsActive && 
+                (!string.IsNullOrEmpty(l.SellerUserId) && l.SellerUserId == userIdentifier || 
+                 !string.IsNullOrEmpty(l.SellerUsername) && l.SellerUsername == username)
+            ).OrderByDescending(l => l.CreatedDate).ToList();
+            
             return Json(new { success = true, listings });
         }
 
-        public IActionResult Privacy() => View("Mylisting");
+        public IActionResult Privacy() => View();
+
+        // Diagnostics: quick health check for Firestore and listings
+        [HttpGet]
+        public async Task<IActionResult> Diagnostics()
+        {
+            var diag = new Dictionary<string, object?>();
+            try
+            {
+                diag["firestoreInitialized"] = _firestore?.IsInitialized == true;
+                diag["cacheCount"] = _listings?.Count ?? 0;
+
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    var remote = await _firestore.GetAllListingsAsync();
+                    diag["firestoreCount"] = remote?.Count ?? 0;
+                    diag["sampleTitles"] = remote?.Take(5).Select(l => l.Title).ToArray();
+                }
+                else
+                {
+                    diag["firestoreCount"] = -1;
+                    diag["message"] = "Firestore not initialized. Ensure GOOGLE_APPLICATION_CREDENTIALS is set to a valid service account JSON.";
+                }
+
+                _logger.LogInformation("Diagnostics: FS={FS}, cache={Cache}, fsCount={FsCount}", diag["firestoreInitialized"], diag["cacheCount"], diag["firestoreCount"]);
+                return Json(new { ok = true, diagnostics = diag });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Diagnostics error");
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // Seller public dashboard: view another seller's listings
+        [HttpGet]
+        [Route("Home/Seller/{seller}")]
+        public async Task<IActionResult> Seller(string seller)
+        {
+            if (string.IsNullOrWhiteSpace(seller))
+            {
+                return RedirectToAction("Browse");
+            }
+            try
+            {
+                List<Listing> listings;
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    var all = await _firestore.GetAllListingsAsync();
+                    listings = all.Where(l => l.IsActive && (
+                        string.Equals(l.SellerUserId?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerUsername?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerFullName?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase)
+                    )).OrderByDescending(l => l.CreatedDate).ToList();
+
+                    if (all != null && all.Count > 0) _listings = all;
+                }
+                else
+                {
+                    listings = _listings.Where(l => l.IsActive && (
+                        string.Equals(l.SellerUserId?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerUsername?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerFullName?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase)
+                    )).OrderByDescending(l => l.CreatedDate).ToList();
+                }
+
+                ViewBag.Seller = seller;
+                ViewBag.SellerDisplay = listings.FirstOrDefault()?.SellerFullName ?? listings.FirstOrDefault()?.SellerUsername ?? seller;
+                _logger.LogInformation("Seller dashboard for {Seller} showing {Count} listings", seller, listings.Count);
+                return View("BrowseSeller", listings);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading seller dashboard for {Seller}", seller);
+                ViewBag.Seller = seller;
+                return View("BrowseSeller", new List<Listing>());
+            }
+        }
     }
 }
