@@ -66,8 +66,9 @@
                         }
 
                         <li class="nav-item">
-                            <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Messages" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Messages">
+                            <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Messages" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Messages" style="position: relative;">
                                 <span>Messages</span>
+                                <span class="messages-badge" style="display: none; position: absolute; top: 0; right: -8px; background: #ef4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">0</span>
                             </a>
                         </li>
                     </ul>
@@ -104,6 +105,7 @@
                                 <!-- Logged In User with avatar and role -->
                                     var fullName = Context.Session.GetString("FullName") ?? string.Empty;
                                     var username = Context.Session.GetString("Username") ?? string.Empty;
+                                    var navUserId = Context.Session.GetString("UserId") ?? string.Empty;
                                     var displayName = !string.IsNullOrWhiteSpace(fullName) ? fullName : username;
                                     var firstInitial = "?";
                                     if (!string.IsNullOrWhiteSpace(displayName))
@@ -116,7 +118,7 @@
 
                                 <div class="dropdown user-profile">
                                     <a class="d-flex align-items-center text-decoration-none dropdown-toggle" href="#" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <div class="profile-avatar" title="@displayName">@firstInitial</div>
+                                        <div class="profile-avatar" id="navbarAvatar" data-user-id="@navUserId" title="@displayName">@firstInitial</div>
                                         <div class="user-meta">
                                             <div class="user-welcome">@displayName</div>
                                             <div class="user-role">@userTypeDisplay</div>
@@ -172,6 +174,67 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    
+    @* Global message notification check and avatar loading *@
+    @if (Context.Session.GetString("UserId") != null)
+    {
+        <script>
+            const globalUserId = '@Context.Session.GetString("UserId")';
+        </script>
+        <script type="module" src="~/js/firebase-client.js"></script>
+        <script>
+            // Wait for Firebase to be ready and load avatar
+            async function initGlobalFeatures() {
+                // Wait for Firebase functions to be available
+                let retries = 0;
+                while (typeof window.firebaseGetUserProfile !== 'function' && retries < 30) {
+                    await new Promise(r => setTimeout(r, 200));
+                    retries++;
+                }
+                
+                // Load navbar avatar
+                const navbarAvatar = document.getElementById('navbarAvatar');
+                if (navbarAvatar && globalUserId && typeof window.firebaseGetUserProfile === 'function') {
+                    try {
+                        const result = await window.firebaseGetUserProfile(globalUserId);
+                        if (result.success && result.profile && result.profile.photo_url) {
+                            navbarAvatar.style.backgroundImage = 'url("' + result.profile.photo_url + '")';
+                            navbarAvatar.style.backgroundSize = 'cover';
+                            navbarAvatar.style.backgroundPosition = 'center';
+                            navbarAvatar.innerHTML = '';
+                            console.log('✅ Navbar avatar loaded');
+                        }
+                    } catch (err) {
+                        console.warn('Could not load navbar avatar:', err);
+                    }
+                }
+                
+                // Setup message notifications
+                if (typeof window.firebaseListenForNewMessages === 'function') {
+                    window.firebaseListenForNewMessages(globalUserId, function(notification) {
+                        // Update badge
+                        const badge = document.querySelector('.messages-badge');
+                        if (badge) {
+                            const current = parseInt(badge.textContent) || 0;
+                            badge.textContent = current + 1;
+                            badge.style.display = 'inline-block';
+                        }
+                    });
+                }
+                
+                // NOTE: Initial unread count is loaded when Messages page is visited
+                // This avoids extra Firebase reads on every page load
+            }
+            
+            // Run when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initGlobalFeatures);
+            } else {
+                initGlobalFeatures();
+            }
+        </script>
+    }
+    
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 

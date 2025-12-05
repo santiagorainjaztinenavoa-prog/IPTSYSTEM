@@ -95,7 +95,7 @@
                             </div>
                             <div class="item-details">
                                 <h3 class="item-title">@item.Title</h3>
-                                <p class="item-description">@((item.Description ?? "").Length > 80 ? (item.Description.Substring(0,80) + "...") : (item.Description ?? ""))</p>
+                                <p class="item-description">@{ var desc = item.Description ?? ""; }@(desc.Length > 80 ? (desc.Substring(0,80) + "...") : desc)</p>
                                 <div class="item-footer">
                                     <span class="item-price">₱@item.Price.ToString("0.00")</span>
                                     <div class="item-rating"><i class="bi bi-star-fill text-success"></i><span class="rating-value">5</span></div>
