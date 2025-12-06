@@ -39,7 +39,7 @@
                             @if (string.Equals(sel, "Books", StringComparison.OrdinalIgnoreCase)) { <option value="Books" selected>Books</option> } else { <option value="Books">Books</option> }
                             @if (string.Equals(sel, "Sports", StringComparison.OrdinalIgnoreCase)) { <option value="Sports" selected>Sports</option> } else { <option value="Sports">Sports</option> }
                             @if (string.Equals(sel, "Toys & Games", StringComparison.OrdinalIgnoreCase)) { <option value="Toys & Games" selected>Toys & Games</option> } else { <option value="Toys & Games">Toys & Games</option> }
-                            @if (string.Equals(sel, "Furniture", StringComparison.OrdinalIgnoreCase)) { <option value="Furniture" selected>Furniture</option> } else { <option value="Furniture">Furniture</option> }
+                            @if (string.Equals(sel, "Vehicles", StringComparison.OrdinalIgnoreCase)) { <option value="Vehicles" selected>Vehicles</option> } else { <option value="Vehicles">Vehicles</option> }
                             @if (string.Equals(sel, "Beauty", StringComparison.OrdinalIgnoreCase)) { <option value="Beauty" selected>Beauty</option> } else { <option value="Beauty">Beauty</option> }
                             @if (string.IsNullOrWhiteSpace(sel)) { <option value="" selected>All Categories</option> } else { <option value="">All Categories</option> }
                         </select>
@@ -144,10 +144,116 @@
         // Use server-provided listings if available, otherwise fall back to firebase client
         let allProducts = @Html.Raw(JsonSerializer.Serialize(Model ?? new List<IPTSYSTEM.Models.Listing>()));
         let currentProductDetail = null;
+        let currentUserId = '@(Context.Session.GetString("UserId") ?? "")';
+        let currentUserType = '@(Context.Session.GetString("UserType") ?? "Buyer")';
+        let savedProductIds = new Set();
 
+        // Fetch current user's saved items at page load
+        async function loadUserSavedItems() {
+            if (!currentUserId) return;
+            try {
+                console.log('🔍 Loading saved items for user:', currentUserId);
+                if (typeof window.firebaseGetSavedProducts === 'function') {
+                    const result = await window.firebaseGetSavedProducts(currentUserId);
+                    if (result.success && result.products) {
+                        savedProductIds = new Set(result.products.map(p => p.product_id || p.productId));
+                        console.log('✅ Loaded', savedProductIds.size, 'saved items');
+                        updateHeartIcons();
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading saved items:', error);
+            }
+        }
+
+        // Update heart icon states based on saved items
+        function updateHeartIcons() {
+            allProducts.forEach(product => {
+                const heartBtn = document.getElementById(`heart-${product.id}`);
+                if (heartBtn) {
+                    const isSaved = savedProductIds.has(product.id);
+                    if (isSaved) {
+                        heartBtn.classList.add('saved');
+                        heartBtn.querySelector('i').classList.remove('bi-heart');
+                        heartBtn.querySelector('i').classList.add('bi-heart-fill');
+                    } else {
+                        heartBtn.classList.remove('saved');
+                        heartBtn.querySelector('i').classList.remove('bi-heart-fill');
+                        heartBtn.querySelector('i').classList.add('bi-heart');
+                    }
+                }
+            });
+        }
+
+        // Toggle save/unsave product
+        async function toggleSaveProduct(productId) {
+            if (!currentUserId) {
+                alert('Please login to save items');
+                window.location.href = '/Home/Login';
+                return;
+            }
+
+            const product = allProducts.find(p => p.id === productId);
+            if (!product) return;
+
+            try {
+                const isSaved = savedProductIds.has(productId);
+                
+                if (isSaved) {
+                    // Unsave
+                    if (typeof window.firebaseUnsaveProduct === 'function') {
+                        const result = await window.firebaseUnsaveProduct(currentUserId, productId);
+                        if (result.success) {
+                            savedProductIds.delete(productId);
+                            console.log('❌ Product unsaved');
+                        }
+                    }
+                } else {
+                    // Save
+                    if (typeof window.firebaseSaveProduct === 'function') {
+                        const result = await window.firebaseSaveProduct(currentUserId, productId, {
+                            title: product.title || product.Title,
+                            price: product.price || product.Price,
+                            imageUrl: product.imageUrl || product.image_url || product.ImageUrl,
+                            category: product.category || product.Category,
+                            condition: product.condition || product.Condition,
+                            sellerName: product.full_name || product.SellerFullName || product.seller_name || 'Unknown',
+                            sellerUsername: product.username || product.SellerUsername || '',
+                            sellerId: product.user_id || product.SellerUserId || ''
+                        });
+                        if (result.success) {
+                            savedProductIds.add(productId);
+                            console.log('❤️ Product saved');
+                        }
+                    }
+                }
+                updateHeartIcons();
+            } catch (error) {
+                console.error('Error saving product:', error);
+                alert('Error saving product. Please try again.');
+            }
+        }
+
+        // Check for productId in URL and auto-open modal
+        function checkForProductIdParam() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const productId = urlParams.get('productId');
+            
+            if (productId) {
+                console.log('📍 Product ID found in URL:', productId);
+                // Wait a bit for products to load, then open the modal
+                setTimeout(() => {
+                    openProductDetail(productId);
+                }, 1000);
+            }
+        }
+
+        // Open saved items modal
         async function initializeBrowse() {
             try {
                 console.log('🔄 Initializing Browse page...');
+                console.log('Current User ID:', currentUserId);
+                console.log('Current User Type:', currentUserType);
                 
                 // Wait for Firebase to be ready
                 let retries = 0;
@@ -156,14 +262,29 @@
                     retries++;
                 }
                 
+                // Load saved items
+                await loadUserSavedItems();
+                
                 // Fetch products from Firestore
                 if (typeof window.firebaseFetchAllProducts === 'function') {
                     console.log('📦 Fetching products from Firestore...');
                     const res = await window.firebaseFetchAllProducts();
                     if (res && res.success && res.products) {
-                        allProducts = res.products;
-                        console.log('✅ Loaded', allProducts.length, 'products');
+                        // Filter out seller's own items if user is a seller
+                        if (currentUserType.toLowerCase() === 'seller' && currentUserId) {
+                            allProducts = res.products.filter(p => {
+                                const productSellerId = p.user_id || p.SellerUserId || '';
+                                return productSellerId !== currentUserId;
+                            });
+                            console.log('✅ Loaded', allProducts.length, 'products (filtered out own items)');
+                        } else {
+                            allProducts = res.products;
+                            console.log('✅ Loaded', allProducts.length, 'products');
+                        }
                         applyFilters(false);
+                        updateHeartIcons();
+                        // Check if productId parameter exists and open modal
+                        checkForProductIdParam();
                     } else {
                         console.warn('⚠️ No products returned from Firestore');
                         displayProducts([]);
@@ -181,6 +302,11 @@
                 displayProducts([]);
             }
         }
+
+        // Pagination variables
+        let currentFilteredProducts = [];
+        let expandedCategories = new Set();
+        const ITEMS_PER_CATEGORY = 4;
 
         // Apply filters client-side and optionally update the URL without reloading
         function applyFilters(updateUrl = true) {
@@ -211,7 +337,9 @@
                 }
             });
 
-            displayProducts(filtered);
+            // Store filtered products
+            currentFilteredProducts = filtered;
+            displayProducts();
 
             if (updateUrl) {
                 const params = new URLSearchParams();
@@ -222,9 +350,10 @@
             }
         }
 
-        function displayProducts(products) {
+        function displayProducts() {
             const container = document.getElementById('listingsContainer');
-            if (!products || products.length === 0) {
+            
+            if (!currentFilteredProducts || currentFilteredProducts.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
                         <i class="bi bi-inbox"></i>
@@ -235,12 +364,69 @@
                 return;
             }
 
-            container.innerHTML = '';
-            products.forEach(product => {
-                const card = createProductCard(product);
-                container.appendChild(card);
+            // Group products by category
+            const productsByCategory = {};
+            currentFilteredProducts.forEach(product => {
+                const cat = product.category ?? product.Category ?? 'Uncategorized';
+                if (!productsByCategory[cat]) {
+                    productsByCategory[cat] = [];
+                }
+                productsByCategory[cat].push(product);
             });
+
+            // Clear container
+            container.innerHTML = '';
+
+            // Display each category section
+            Object.keys(productsByCategory).sort().forEach(categoryName => {
+                const categoryProducts = productsByCategory[categoryName];
+                const isExpanded = expandedCategories.has(categoryName);
+                const itemsToShow = isExpanded ? categoryProducts : categoryProducts.slice(0, ITEMS_PER_CATEGORY);
+                
+                // Create category section
+                const categorySection = document.createElement('div');
+                categorySection.className = 'category-section';
+                
+                // Category header with title and "See more" link
+                const categoryHeader = document.createElement('div');
+                categoryHeader.className = 'category-header';
+                categoryHeader.innerHTML = `
+                    <h2 class="category-title">${categoryName}</h2>
+                    ${categoryProducts.length > ITEMS_PER_CATEGORY ? `
+                        <a href="#" class="category-see-more" onclick="toggleCategory('${categoryName}'); return false;">
+                            ${isExpanded ? 'Show less' : `See more '${categoryName}'`}
+                            <i class="bi ${isExpanded ? 'bi-chevron-up' : 'bi-chevron-right'}"></i>
+                        </a>
+                    ` : ''}
+                `;
+                categorySection.appendChild(categoryHeader);
+
+                // Category grid
+                const categoryGrid = document.createElement('div');
+                categoryGrid.className = 'category-grid';
+                
+                itemsToShow.forEach(product => {
+                    const card = createProductCard(product);
+                    categoryGrid.appendChild(card);
+                });
+
+                categorySection.appendChild(categoryGrid);
+                container.appendChild(categorySection);
+            });
+
+            console.log(`📊 Displaying products grouped by ${Object.keys(productsByCategory).length} categories`);
         }
+
+        function toggleCategory(categoryName) {
+            if (expandedCategories.has(categoryName)) {
+                expandedCategories.delete(categoryName);
+            } else {
+                expandedCategories.add(categoryName);
+            }
+            displayProducts();
+        }
+        
+        window.toggleCategory = toggleCategory;
 
         // re-use existing client-side helpers
         function createProductCard(product = {}) {
@@ -269,6 +455,9 @@
                 <div class="listing-image-wrapper">
                     <img src="${imageUrl}" alt="${title || 'Product'}" class="listing-image" onclick="openProductDetail('${id}')" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
                     <span class="condition-badge badge-${conditionClass}">${condition}</span>
+                    <button class="btn-heart" id="heart-${id}" onclick="toggleSaveProduct('${id}')" title="Save item">
+                        <i class="bi bi-heart"></i>
+                    </button>
                 </div>
                 <div class="listing-seller-info">
                     <div class="seller-avatar"><span class="avatar-initial">${sellerInitial}</span></div>
@@ -285,8 +474,8 @@
                     <p class="listing-price">₱${parseFloat(price || 0).toFixed(2)}</p>
                 </div>
                 <div class="listing-buttons">
-                    <button class="btn-message" onclick="openProductDetail('${id}'); setTimeout(() => messageSeller(), 500)">Message</button>
-                    <button class="btn-select" onclick="openProductDetail('${id}')">Select</button>
+                    <button class="btn-message" onclick="handleCardMessage('${id}')">Message</button>
+                    <button class="btn-select" onclick="handleCardSelect('${id}')">Select</button>
                 </div>
             `;
 
@@ -326,18 +515,31 @@
             modal.show();
         }
 
+        // Check if user is logged in
+        function isLoggedIn() {
+            const userId = '@(Context.Session.GetString("UserId") ?? "")';
+            return userId && userId.length > 0;
+        }
+
+        // Redirect to login if not logged in
+        function requireLogin(action) {
+            if (!isLoggedIn()) {
+                alert('Please login to ' + action);
+                window.location.href = '/Home/Login';
+                return false;
+            }
+            return true;
+        }
+
         async function messageSeller() { 
             if (!currentProductDetail) return;
+            
+            // Check if logged in first
+            if (!requireLogin('message the seller')) return;
             
             // Get current user info from session (passed from server)
             const buyerId = '@(Context.Session.GetString("UserId") ?? "")';
             const buyerName = '@(Context.Session.GetString("FullName") ?? Context.Session.GetString("Username") ?? "")';
-            
-            if (!buyerId) {
-                alert('Please login to message the seller');
-                window.location.href = '/Home/Login';
-                return;
-            }
             
             // Find the full product to get seller info
             const product = allProducts.find(p => (p.id && p.id == currentProductDetail.id) || (p.Id && p.Id == currentProductDetail.id));
@@ -382,7 +584,23 @@
                 alert('Messaging service not available. Please refresh the page.');
             }
         }
-        function selectProduct() { if (currentProductDetail) alert(`Selected: ${currentProductDetail.title}`); }
+
+        function selectProduct() { 
+            if (!requireLogin('select this product')) return;
+            if (currentProductDetail) alert(`Selected: ${currentProductDetail.title}`); 
+        }
+
+        // Handle card button clicks with login check
+        function handleCardMessage(productId) {
+            if (!requireLogin('message the seller')) return;
+            openProductDetail(productId);
+            setTimeout(() => messageSeller(), 500);
+        }
+
+        function handleCardSelect(productId) {
+            if (!requireLogin('select this product')) return;
+            openProductDetail(productId);
+        }
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', initializeBrowse);

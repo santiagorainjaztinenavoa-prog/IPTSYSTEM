@@ -28,7 +28,7 @@
     const photoInput = document.getElementById('photoInput');
     const photoStatus = document.getElementById('photoStatus');
     
-    // Load existing photo from Firebase on page load
+    // Load existing photo and profile data from Firebase on page load
     async function loadProfilePhotoFromFirebase() {
         if (typeof currentUserId === 'undefined' || !currentUserId) return;
         
@@ -49,15 +49,34 @@
         if (typeof window.firebaseGetUserProfile === 'function') {
             try {
                 const result = await window.firebaseGetUserProfile(currentUserId);
-                if (result.success && result.profile && result.profile.photo_url) {
-                    console.log('✅ Loaded profile photo from Firebase');
-                    avatar.style.backgroundImage = `url('${result.profile.photo_url}')`;
-                    avatar.textContent = '';
-                    // Update cache
-                    sessionStorage.setItem('userPhotoUrl', result.profile.photo_url);
+                if (result.success && result.profile) {
+                    const profile = result.profile;
+                    
+                    // Load photo
+                    if (profile.photo_url) {
+                        console.log('✅ Loaded profile photo from Firebase');
+                        avatar.style.backgroundImage = `url('${profile.photo_url}')`;
+                        avatar.textContent = '';
+                        sessionStorage.setItem('userPhotoUrl', profile.photo_url);
+                    }
+                    
+                    // Load name fields
+                    const firstNameEl = document.getElementById('FirstName');
+                    const lastNameEl = document.getElementById('LastName');
+                    const middleNameEl = document.getElementById('MiddleName');
+                    
+                    if (firstNameEl && profile.first_name) firstNameEl.value = profile.first_name;
+                    if (lastNameEl && profile.last_name) lastNameEl.value = profile.last_name;
+                    if (middleNameEl && profile.middle_name) middleNameEl.value = profile.middle_name;
+                    
+                    console.log('✅ Loaded profile data from Firebase:', {
+                        firstName: profile.first_name,
+                        lastName: profile.last_name,
+                        middleName: profile.middle_name
+                    });
                 }
             } catch (err) {
-                console.warn('Could not load profile photo:', err);
+                console.warn('Could not load profile from Firebase:', err);
             }
         }
     }
@@ -192,9 +211,20 @@
             try {
                 const additionalEmails = Array.from(extraEmailsContainer.querySelectorAll('input[data-type="email"]')).map(function(i){ return i.value.trim(); }).filter(function(v){ return v; });
                 const additionalPhones = Array.from(extraPhonesContainer.querySelectorAll('input[data-type="phone"]')).map(function(i){ return i.value.trim(); }).filter(function(v){ return v; });
+                const firstNameEl = document.getElementById('FirstName');
+                const lastNameEl = document.getElementById('LastName');
+                const middleNameEl = document.getElementById('MiddleName');
+                const firstNameVal = firstNameEl ? firstNameEl.value.trim() : '';
+                const lastNameVal = lastNameEl ? lastNameEl.value.trim() : '';
+                const middleNameVal = middleNameEl ? middleNameEl.value.trim() : '';
+                // FullName = FirstName + LastName only (middle name separate)
+                const fullNameDisplay = [firstNameVal, lastNameVal].filter(function(n){ return n; }).join(' ');
                 const payload={
                     Username: usernameInput.value.trim(),
-                    FullName: document.getElementById('FullName').value.trim(),
+                    FirstName: firstNameVal,
+                    LastName: lastNameVal,
+                    MiddleName: middleNameVal,
+                    FullName: fullNameDisplay,
                     PhoneNumber: '',
                     AdditionalEmails: additionalEmails,
                     AdditionalPhones: additionalPhones,
@@ -232,6 +262,9 @@
                     try {
                         const firebasePayload = {
                             username: payload.Username,
+                            firstName: payload.FirstName,
+                            lastName: payload.LastName,
+                            middleName: payload.MiddleName,
                             fullName: payload.FullName,
                             phoneNumber: payload.PhoneNumber,
                             additionalEmails: additionalEmails,
@@ -257,6 +290,12 @@
                     // Update session storage with new values
                     sessionStorage.setItem('Username', payload.Username);
                     sessionStorage.setItem('FullName', payload.FullName);
+                    
+                    // Update navbar display name (FirstName + LastName only)
+                    const userWelcomeEl = document.querySelector('.user-welcome');
+                    if (userWelcomeEl && fullNameDisplay) {
+                        userWelcomeEl.textContent = fullNameDisplay;
+                    }
                 } else {
                     profileStatus.className = 'alert alert-danger';
                     profileStatus.textContent = serverMessage || 'Update failed';

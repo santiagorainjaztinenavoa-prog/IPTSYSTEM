@@ -19,6 +19,69 @@
     <link rel="stylesheet" href="~/css/pages/profile.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/pages/mylistings.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/listing-form.css" asp-append-version="true" />
+    <style>
+        /* Smooth modal animations */
+        .modal.fade .modal-dialog {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transform: scale(0.7) translateY(-30px);
+            opacity: 0;
+        }
+        
+        .modal.show .modal-dialog {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+        
+        .modal-backdrop.fade {
+            transition: opacity 0.3s ease;
+        }
+        
+        .modal-backdrop.show {
+            opacity: 0.6;
+        }
+        
+        /* Sold out items in history - grayscale and lower opacity */
+        .sold-item {
+            filter: grayscale(100%);
+            opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+        
+        .sold-item:hover {
+            opacity: 0.8;
+        }
+        
+        .sold-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(220, 38, 38, 0.95);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            z-index: 2;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Button hover animations */
+        #confirmSoldBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5) !important;
+        }
+        
+        #confirmDeleteBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.5) !important;
+        }
+        
+        .modal .btn:hover {
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
+    </style>
 }
 
 <section class="profile-page py-4" 
@@ -63,11 +126,22 @@
         <div class="profile-tabs-section">
             <div class="d-flex justify-content-between align-items-center" style="padding: 0 40px;">
                 <div class="profile-tabs">
-                    <button class="profile-tab active" data-tab="listings">Listings</button>
+                    @if (userType.ToLower() == "buyer")
+                    {
+                        <button class="profile-tab active" data-tab="listings" onclick="switchTab('listings')">Listings</button>
+                        <button class="profile-tab" data-tab="review" onclick="switchTab('review')">Reviews</button>
+                    }
+                    else
+                    {
+                        <button class="profile-tab active" data-tab="listings" onclick="switchTab('listings')">Listings</button>
+                        <button class="profile-tab" data-tab="history" onclick="switchTab('history')">History</button>
+                        <button class="profile-tab" data-tab="reports" onclick="switchTab('reports')">Reports</button>
+                        <button class="profile-tab" data-tab="review" onclick="switchTab('review')">Review</button>
+                    }
                 </div>
                 @if (userType == "seller" || userType == "admin")
                 {
-                    <button class="btn-add-new" onclick="openListingModal()" style="margin: 12px 0;">
+                    <button class="btn-add-new" id="addNewListingBtn" onclick="openListingModal()" style="margin: 12px 0;">
                         <i class="bi bi-plus-circle me-2"></i>
                         Add New Listing
                     </button>
@@ -75,14 +149,47 @@
             </div>
         </div>
         
-        <!-- Listings Content -->
-        <div class="profile-listings-section">
-            <div class="listings-grid" id="listingsContainer">
-                <!-- Skeleton Loader -->
-                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
-                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
-                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
-                <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+        <!-- Tab Contents -->
+        <div class="profile-content-section">
+            <!-- Listings Content (For Both Buyer and Seller) -->
+            <div class="tab-content active" id="listingsContent">
+                <div class="listings-grid" id="listingsContainer">
+                    <!-- Skeleton Loader -->
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                </div>
+            </div>
+
+            <!-- History Content -->
+            <div class="tab-content" id="historyContent">
+                <div class="empty-tab-state">
+                    <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Purchase History</h3>
+                    <p>Your transaction history will appear here</p>
+                </div>
+            </div>
+
+            <!-- Reports Content -->
+            <div class="tab-content" id="reportsContent">
+                <div class="empty-tab-state">
+                    <i class="bi bi-file-earmark-text" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Reports</h3>
+                    <p>View your sales reports and analytics here</p>
+                </div>
+            </div>
+
+            <!-- Review Content -->
+            <div class="tab-content" id="reviewContent">
+                <div class="reviews-container" id="reviewsContainer">
+                    <div class="loading-state">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading reviews...</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -106,6 +213,63 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- Confirmation Modals -->
+<!-- Sold Out Confirmation Modal -->
+<div class="modal fade" id="soldOutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
+            <div class="modal-header border-0" style="padding: 24px 24px 0;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #10b981 0%, #16a34a 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-check-circle-fill" style="font-size: 24px; color: white;"></i>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px 24px;">
+                <h5 class="mb-2" style="font-weight: 700; color: #1a1a1a;">Mark as Sold Out?</h5>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">
+                    <span id="soldOutItemTitle" style="font-weight: 600; color: #16a34a;"></span> will be moved to your history and removed from Browse.
+                </p>
+            </div>
+            <div class="modal-footer border-0" style="padding: 0 24px 24px; gap: 12px;">
+                <button type="button" class="btn" data-bs-dismiss="modal" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: #f3f4f6; color: #6b7280; border: none;">
+                    Cancel
+                </button>
+                <button type="button" class="btn" id="confirmSoldBtn" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: linear-gradient(135deg, #10b981 0%, #16a34a 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);">
+                    <i class="bi bi-check-circle me-2"></i>Mark as Sold
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
+            <div class="modal-header border-0" style="padding: 24px 24px 0;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-trash-fill" style="font-size: 24px; color: white;"></i>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px 24px;">
+                <h5 class="mb-2" style="font-weight: 700; color: #1a1a1a;">Delete Listing?</h5>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">
+                    Are you sure you want to delete <span id="deleteItemTitle" style="font-weight: 600; color: #dc2626;"></span>? This action cannot be undone.
+                </p>
+            </div>
+            <div class="modal-footer border-0" style="padding: 0 24px 24px; gap: 12px;">
+                <button type="button" class="btn" data-bs-dismiss="modal" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: #f3f4f6; color: #6b7280; border: none;">
+                    Cancel
+                </button>
+                <button type="button" class="btn" id="confirmDeleteBtn" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);">
+                    <i class="bi bi-trash me-2"></i>Delete
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Add/Edit Listing Modal -->
@@ -180,7 +344,9 @@
                                 <option value="Home & Living">Home & Living</option>
                                 <option value="Books">Books</option>
                                 <option value="Sports">Sports</option>
-                                <option value="Furniture">Furniture</option>
+                                <option value="Toys & Games">Toys & Games</option>
+                                <option value="Vehicles">Vehicles</option>
+                                <option value="Beauty">Beauty</option>
                             </select>
                         </div>
                     </div>
@@ -225,10 +391,251 @@
 </div>
 
 @section Scripts {
-<script src="~/js/firebase-client.js?v=2.0" type="module"></script>
+<script src="~/js/firebase-client.js?v=@DateTime.Now.Ticks" type="module"></script>
 <script>
     // Immediate loading without waiting for Firebase
     let userListingsLoaded = false;
+    let pendingSoldOutItem = null;
+    let pendingDeleteItem = null;
+    
+    // Tab switching functionality
+    function switchTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.profile-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        
+        // Update tab contents
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(tabName + 'Content').classList.add('active');
+        
+        // Show/hide Add New Listing button (only show on Listings tab for sellers)
+        const section = document.querySelector('.profile-page');
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        const addBtn = document.getElementById('addNewListingBtn');
+        if (addBtn) {
+            addBtn.style.display = (tabName === 'listings' && userType.toLowerCase() !== 'buyer') ? 'block' : 'none';
+        }
+        
+        // Load content based on tab
+        if (tabName === 'history') {
+            loadHistoryTab();
+        } else if (tabName === 'listings') {
+            // Reload listings content when switching to Listings tab
+            if (userType.toLowerCase() === 'buyer') {
+                loadSavedItemsForBuyer();
+            } else {
+                loadUserListings();
+            }
+        } else if (tabName === 'review') {
+            loadReviewsTab();
+        }
+    }
+    
+    // Load reviews tab (for sellers to see reviews they received)
+    async function loadReviewsTab() {
+        const reviewsContainer = document.getElementById('reviewsContainer');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        
+        if (!userId) {
+            reviewsContainer.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Reviews</h3>
+                    <p>Please log in to view reviews</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show loading
+        reviewsContainer.innerHTML = `
+            <div class="loading-state">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Loading reviews...</p>
+            </div>
+        `;
+        
+        try {
+            // For sellers, show reviews they received
+            if (userType.toLowerCase() === 'seller' || userType.toLowerCase() === 'admin') {
+                if (typeof window.firebaseGetSellerReviews === 'function') {
+                    const result = await window.firebaseGetSellerReviews(userId);
+                    
+                    if (result.success && result.reviews && result.reviews.length > 0) {
+                        displaySellerReviews(result.reviews);
+                    } else {
+                        reviewsContainer.innerHTML = `
+                            <div class="empty-tab-state">
+                                <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                                <h3>No Reviews Yet</h3>
+                                <p>You haven't received any reviews yet</p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    throw new Error('Review function not available');
+                }
+            } else {
+                // For buyers, show empty state (buyers write reviews, don't receive them)
+                reviewsContainer.innerHTML = `
+                    <div class="empty-tab-state">
+                        <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                        <h3>Your Reviews</h3>
+                        <p>Reviews you write for sellers will appear here</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading reviews:', error);
+            reviewsContainer.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #dc3545;"></i>
+                    <h3>Error Loading Reviews</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function displaySellerReviews(reviews) {
+        const reviewsContainer = document.getElementById('reviewsContainer');
+        reviewsContainer.innerHTML = '<div class="reviews-list"></div>';
+        const reviewsList = reviewsContainer.querySelector('.reviews-list');
+        
+        reviews.forEach(review => {
+            const reviewCard = createReviewCardForProfile(review);
+            reviewsList.appendChild(reviewCard);
+        });
+    }
+    
+    function createReviewCardForProfile(review) {
+        const card = document.createElement('div');
+        card.className = 'review-card';
+        
+        const buyerInitial = review.buyer_name ? review.buyer_name.charAt(0).toUpperCase() : 'U';
+        const createdDate = review.created_at ? new Date(review.created_at.seconds * 1000).toLocaleDateString() : 'Recently';
+        
+        // Create stars
+        let starsHTML = '';
+        for (let i = 0; i < 5; i++) {
+            if (i < review.rating) {
+                starsHTML += '<i class="bi bi-star-fill" style="color: #fbbf24;"></i>';
+            } else {
+                starsHTML += '<i class="bi bi-star" style="color: #d1d5db;"></i>';
+            }
+        }
+        
+        card.innerHTML = `
+            <div class="review-header">
+                <div class="review-user-info">
+                    <div class="review-avatar">${buyerInitial}</div>
+                    <div class="review-user-details">
+                        <h5 class="review-user-name">${review.buyer_name || 'Anonymous'}</h5>
+                        <p class="review-username">@@${review.buyer_username || 'user'}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="review-rating">
+                ${starsHTML}
+                <span class="review-date">${createdDate}</span>
+            </div>
+            <div class="review-comment">
+                ${review.comment || '<em>No comment</em>'}
+            </div>
+        `;
+        
+        return card;
+    }
+    
+    // Load sold items for History tab
+    async function loadHistoryTab() {
+        const historyContent = document.getElementById('historyContent');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        
+        if (!userId) {
+            historyContent.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Purchase History</h3>
+                    <p>Please log in to view your history</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show loading
+        historyContent.innerHTML = `
+            <div class="text-center p-5">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Loading sold items...</p>
+            </div>
+        `;
+        
+        try {
+            if (typeof window.firebaseFetchSoldItems === 'function') {
+                const result = await window.firebaseFetchSoldItems(userId);
+                
+                if (result.success && result.items && result.items.length > 0) {
+                    // Display sold items
+                    const html = `
+                        <div class="listings-grid">
+                            ${result.items.map(item => `
+                                <div class="listing-card-minimal sold-item">
+                                    <div class="product-image-wrapper">
+                                        <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
+                                             alt="${item.title || 'Product'}" 
+                                             class="product-image"
+                                             onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                                        <span class="sold-badge">SOLD OUT</span>
+                                    </div>
+                                    <div class="product-info">
+                                        <h3 class="product-title">${item.title || 'Untitled'}</h3>
+                                        <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
+                                        <div class="product-meta">
+                                            <span class="product-price">₱${parseFloat(item.price || 0).toFixed(2)}</span>
+                                            <span class="product-category">${item.category || 'Uncategorized'}</span>
+                                        </div>
+                                        <small class="text-muted">Sold: ${item.sold_date ? new Date(item.sold_date.seconds * 1000).toLocaleDateString() : 'Recently'}</small>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    historyContent.innerHTML = html;
+                } else {
+                    historyContent.innerHTML = `
+                        <div class="empty-tab-state">
+                            <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                            <h3>No Sold Items</h3>
+                            <p>Items you mark as sold will appear here</p>
+                        </div>
+                    `;
+                }
+            } else {
+                throw new Error('History feature not available');
+            }
+        } catch (error) {
+            console.error('Error loading history:', error);
+            historyContent.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 4rem; color: #dc3545;"></i>
+                    <h3>Error Loading History</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
     
     // Profile details modal open
     document.addEventListener('DOMContentLoaded', function() {
@@ -244,27 +651,13 @@
     
     async function loadUserListings() {
         const container = document.getElementById('listingsContainer');
+        console.log('🚀 loadUserListings called');
         
-        try {
-            // First try: Load from server API (faster, no Firebase auth needed)
-            const response = await fetch('/Home/GetUserListings');
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.listings) {
-                    displayListings(data.listings, container);
-                    userListingsLoaded = true;
-                    return;
-                }
-            }
-        } catch (error) {
-            console.warn('Server API failed, trying Firebase...', error);
-        }
-        
-        // Fallback: Try Firebase (slower)
+        // Go directly to Firebase (skip server API)
         try {
             await loadFromFirebase(container);
         } catch (error) {
-            console.error('Firebase also failed:', error);
+            console.error('Firebase loading failed:', error);
             showError(container, error.message);
         }
     }
@@ -277,44 +670,70 @@
         var userId = section.getAttribute('data-user-id') || '';
         var userType = section.getAttribute('data-user-type') || 'seller';
         
-        console.log('🔄 Loading listings from Firebase for user:', userId || username);
-        
-        // Store in sessionStorage for Firebase functions
-        if (!userId || userId === '') {
-            userId = username;
-        }
+        console.log('🔄 [PROFILE] loadFromFirebase START');
+        console.log('🔄 [PROFILE] Current logged-in userId:', userId);
+        console.log('🔄 [PROFILE] Username:', username);
+
         sessionStorage.setItem('Username', username);
         sessionStorage.setItem('FullName', fullName);
         sessionStorage.setItem('UserId', userId);
         sessionStorage.setItem('UserType', userType);
-        
+
         // Wait for Firebase to be ready
         let retries = 0;
-        while (typeof window.firebaseFetchSellerProducts !== 'function' && retries < 30) {
+        while (typeof window.firebaseFetchAllProducts !== 'function' && retries < 30) {
             await new Promise(r => setTimeout(r, 100));
             retries++;
         }
-        
-        if (typeof window.firebaseFetchSellerProducts === 'function') {
+        console.log('🔄 [PROFILE] Firebase ready after', retries, 'retries');
+
+        if (typeof window.firebaseFetchAllProducts === 'function') {
             try {
-                console.log('📦 Fetching seller products for:', userId);
-                const result = await window.firebaseFetchSellerProducts(userId);
-                console.log('📦 Result:', result);
+                console.log('🔄 [PROFILE] Calling firebaseFetchAllProducts(true)...');
+                const result = await window.firebaseFetchAllProducts(true);
+                console.log('🟢 [PROFILE] firebaseFetchAllProducts result:', result);
                 
-                if (result.success && result.products && result.products.length > 0) {
-                    displayListings(result.products, container);
-                    return;
+                if (result.success && result.products) {
+                    console.log('🟢 [PROFILE] SUCCESS: Got', result.products.length, 'total products');
+                    
+                    // Print detailed info for each product
+                    result.products.forEach((p, idx) => {
+                        console.log(`  [${idx}] Title: ${p.title} | user_id: "${p.user_id}" | seller_name: "${p.seller_name}" | id: ${p.id}`);
+                    });
+                    
+                    // Filter for ONLY the current logged-in user's items and exclude sold items
+                    console.log('🟡 [PROFILE] Filtering for current userId ONLY:', userId);
+                    const filtered = result.products.filter(p => {
+                        const matchUser = p.user_id === userId;
+                        const notSold = p.status !== 'sold';
+                        if (matchUser) {
+                            console.log(`    ✓ Match found: "${p.title}" - user_id: "${p.user_id}", Not Sold: ${notSold}`);
+                        }
+                        return matchUser && notSold;
+                    });
+                    console.log('🟡 [PROFILE] Filtered result:', filtered.length, 'products belong to current user (excluding sold items)');
+                    
+                    if (filtered.length > 0) {
+                        console.log('✅ [PROFILE] Displaying', filtered.length, 'listings');
+                        displayListings(filtered, container);
+                        return;
+                    } else {
+                        console.log('⚠️ [PROFILE] No products matched filter');
+                    }
+                } else {
+                    console.log('❌ [PROFILE] result.success:', result.success, '| products:', result.products);
                 }
             } catch (err) {
-                console.error('❌ Firebase fetch error:', err);
+                console.error('❌ [PROFILE] Firebase fetch error:', err);
             }
+        } else {
+            console.error('❌ [PROFILE] firebaseFetchAllProducts not available');
         }
-        
+
         // If Firebase didn't load, show empty state
+        console.log('📌 [PROFILE] Showing empty state');
         showNoListings(container);
-    }
-    
-    function displayListings(listings, container) {
+    }    function displayListings(listings, container) {
         if (!listings || listings.length === 0) {
             showNoListings(container);
             return;
@@ -348,14 +767,18 @@
                     <h3 class="product-title">${title}</h3>
                     <p class="product-description">${description}</p>
                     <div class="product-meta">
-                        <span class="product-price">?${parseFloat(price).toFixed(2)}</span>
+                        <span class="product-price">₱${parseFloat(price).toFixed(2)}</span>
                         <span class="product-category">${category}</span>
                     </div>
                     <div class="product-actions">
                         ${userTypeAttr === 'seller' || userTypeAttr === 'admin' ? `
-                            <button class="btn-action btn-edit-minimal" onclick="editListing('${listingId}')" title="Edit">
+                            <button class="btn-action btn-edit-minimal" onclick="editListing('${listingId}')" title="Edit listing">
                                 <i class="bi bi-pencil"></i>
-                                Edit
+                                <span>Edit</span>
+                            </button>
+                            <button class="btn-action btn-soldout-minimal" onclick="markAsSoldOut('${listingId}', '${title.replace(/'/g, "\\'")}')">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Sold</span>
                             </button>
                             <button class="btn-action btn-delete-minimal" onclick="deleteListing('${listingId}', '${title.replace(/'/g, "\\'")}')">
                                 <i class="bi bi-trash"></i>
@@ -431,24 +854,395 @@
         }
     }
     
+    // Note: markAsSoldOut will be overridden at the END after all scripts load
+    
+    // Handle sold out confirmation - setup immediately
+    (function setupConfirmButtons() {
+        const confirmSoldBtn = document.getElementById('confirmSoldBtn');
+        if (confirmSoldBtn) {
+            confirmSoldBtn.addEventListener('click', async function() {
+                if (!pendingSoldOutItem) return;
+                
+                const { productId, title } = pendingSoldOutItem;
+                
+                // Close modal
+                const soldModal = bootstrap.Modal.getInstance(document.getElementById('soldOutModal'));
+                soldModal.hide();
+                
+                try {
+                    console.log('🔄 Marking product as sold:', productId);
+                    
+                    // Call Firebase function to update status
+                    if (typeof window.firebaseMarkAsSold === 'function') {
+                        console.log('✅ Calling firebaseMarkAsSold...');
+                        const result = await window.firebaseMarkAsSold(productId);
+                        console.log('📊 Result:', result);
+                        
+                        if (result.success) {
+                            console.log('✅ Product marked as sold successfully');
+                            
+                            // Show success message
+                            const toastEl = document.getElementById('toastNotification');
+                            const toastMsg = document.getElementById('toastMessage');
+                            if (toastEl && toastMsg) {
+                                toastMsg.textContent = '✓ Item marked as sold and moved to history';
+                                const toast = new bootstrap.Toast(toastEl);
+                                toast.show();
+                            }
+                            
+                            // Reload listings to reflect changes
+                            setTimeout(() => {
+                                loadUserListings();
+                            }, 500);
+                        } else {
+                            console.error('❌ Failed to mark as sold:', result.message);
+                            alert('Failed to mark item as sold: ' + (result.message || 'Unknown error'));
+                        }
+                    } else {
+                        console.error('❌ firebaseMarkAsSold function not available');
+                        alert('Sold out feature not available. Please refresh the page.');
+                    }
+                } catch (error) {
+                    console.error('❌ Error marking as sold:', error);
+                    alert('Error: ' + error.message);
+                }
+                
+                pendingSoldOutItem = null;
+            });
+        } else {
+            console.error('❌ confirmSoldBtn not found!');
+        }
+        
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', async function() {
+                if (!pendingDeleteItem) return;
+                
+                const { productId, title } = pendingDeleteItem;
+                
+                // Close modal
+                const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+                deleteModal.hide();
+                
+                try {
+                    console.log('🗑️ Deleting product:', productId);
+                    
+                    // Call Firebase function to delete
+                    if (typeof window.firebaseDeleteListing === 'function') {
+                        const result = await window.firebaseDeleteListing(productId);
+                        
+                        if (result.success) {
+                            console.log('✅ Product deleted successfully');
+                            
+                            // Show success message
+                            const toastEl = document.getElementById('toastNotification');
+                            const toastMsg = document.getElementById('toastMessage');
+                            if (toastEl && toastMsg) {
+                                toastMsg.textContent = '✓ Listing deleted successfully';
+                                const toast = new bootstrap.Toast(toastEl);
+                                toast.show();
+                            }
+                            
+                            // Reload listings
+                            setTimeout(() => {
+                                loadUserListings();
+                            }, 500);
+                        } else {
+                            alert('Failed to delete listing: ' + (result.message || 'Unknown error'));
+                        }
+                    } else {
+                        alert('Delete feature not available. Please refresh the page.');
+                    }
+                } catch (error) {
+                    console.error('❌ Error deleting:', error);
+                    alert('Error: ' + error.message);
+                }
+                
+                pendingDeleteItem = null;
+            });
+        } else {
+            console.error('❌ confirmDeleteBtn not found!');
+        }
+    })();
+    
+    // Note: deleteListing will be overridden at the END after all scripts load
+    
+    // Load saved items for buyers
+    async function loadSavedItems() {
+        const container = document.getElementById('savedItemsContainer');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        
+        console.log('🔖 Loading saved items for buyer:', userId);
+        
+        // Wait for Firebase to be ready
+        let retries = 0;
+        while (typeof window.firebaseGetSavedProducts !== 'function' && retries < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        
+        try {
+            if (typeof window.firebaseGetSavedProducts === 'function') {
+                const result = await window.firebaseGetSavedProducts(userId);
+                
+                if (result.success && result.products && result.products.length > 0) {
+                    console.log('✅ Loaded', result.products.length, 'saved items');
+                    displaySavedItems(result.products, container);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                            <i class="bi bi-heart"></i>
+                            <h3>No Saved Items</h3>
+                            <p>Items you save will appear here</p>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved items:', error);
+            container.innerHTML = `
+                <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <h3>Error Loading Saved Items</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function displaySavedItems(items, container) {
+        const grid = document.createElement('div');
+        grid.className = 'listings-grid';
+        
+        items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'listing-card-minimal';
+            
+            card.innerHTML = `
+                <div class="product-image-wrapper">
+                    <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
+                         alt="${item.title}" 
+                         class="product-image" 
+                         onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                    <span class="condition-badge badge-${(item.condition || 'new').toLowerCase().replace(' ', '-')}">${item.condition || 'New'}</span>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-title">${item.title || 'Untitled'}</h3>
+                    <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
+                    <div class="product-meta">
+                        <span class="product-price">\u20b1${parseFloat(item.price || 0).toFixed(2)}</span>
+                        <span class="product-category">${item.category || 'Uncategorized'}</span>
+                    </div>
+                    <div class="product-seller-info">
+                        <span class="seller-name-small"><i class="bi bi-person"></i> ${item.sellerName || 'Unknown Seller'}</span>
+                    </div>
+                    <div class="product-actions">
+                        <button class="btn-action btn-view-minimal" onclick="viewProduct('${item.product_id || item.productId}')" style="background:#0ea5e9;color:#fff;">
+                            <i class="bi bi-eye"></i>
+                            <span>View</span>
+                        </button>
+                        <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${item.product_id || item.productId}')" style="background:#ef4444;color:#fff;">
+                            <i class="bi bi-heart-fill"></i>
+                            <span>Unsave</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            grid.appendChild(card);
+        });
+        
+        container.innerHTML = '';
+        container.appendChild(grid);
+    }
+    
+    async function unsaveSavedItem(productId) {
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id');
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        
+        if (!confirm('Remove this item from your saved items?')) return;
+        
+        try {
+            if (typeof window.firebaseUnsaveProduct === 'function') {
+                const result = await window.firebaseUnsaveProduct(userId, productId);
+                if (result.success) {
+                    console.log('✅ Item unsaved');
+                    // Reload appropriate content based on user type
+                    if (userType.toLowerCase() === 'buyer') {
+                        loadSavedItemsForBuyer();
+                    } else {
+                        loadSavedItems();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error unsaving item:', error);
+            alert('Error removing item. Please try again.');
+        }
+    }
+    
+    function viewProduct(productId) {
+        // Navigate to product detail or open modal
+        window.location.href = `/Home/Browse?productId=${productId}`;
+    }
+    
+    window.unsaveSavedItem = unsaveSavedItem;
+    window.viewProduct = viewProduct;
+
     // Wait for Firebase functions to be available
     function waitForFirebaseFunctions() {
-        if (typeof window.firebaseCreateListing === 'function') {
-            console.log('Firebase functions ready');
-            // Load listings
-            loadUserListings();
+        console.log('⏳ Checking Firebase readiness...');
+        const section = document.querySelector('.profile-page');
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        
+        if (typeof window.firebaseFetchAllProducts === 'function' && typeof window.firebaseCreateListing === 'function') {
+            console.log('✅ Firebase functions ready');
+            
+            // Load appropriate content based on user type
+            if (userType.toLowerCase() === 'buyer') {
+                // For buyers, load saved items in Listings tab
+                loadSavedItemsForBuyer();
+            } else {
+                // For sellers, load their own products
+                loadUserListings();
+            }
         } else {
+            console.log('⏳ Waiting for Firebase:', {
+                'firebaseFetchAllProducts': typeof window.firebaseFetchAllProducts,
+                'firebaseCreateListing': typeof window.firebaseCreateListing
+            });
             setTimeout(waitForFirebaseFunctions, 100);
         }
     }
     
+    // Load saved items for buyer in Listings tab
+    async function loadSavedItemsForBuyer() {
+        const container = document.getElementById('listingsContainer');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        
+        console.log('🔖 Loading saved items for buyer in Listings tab:', userId);
+        
+        // Wait for Firebase to be ready
+        let retries = 0;
+        while (typeof window.firebaseGetSavedProducts !== 'function' && retries < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        
+        try {
+            if (typeof window.firebaseGetSavedProducts === 'function') {
+                const result = await window.firebaseGetSavedProducts(userId);
+                
+                if (result.success && result.products && result.products.length > 0) {
+                    console.log('✅ Loaded', result.products.length, 'saved items');
+                    displaySavedItemsAsBuyerListings(result.products, container);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                            <i class="bi bi-heart"></i>
+                            <h3>No Saved Items</h3>
+                            <p>Items you save will appear here</p>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved items:', error);
+            container.innerHTML = `
+                <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <h3>Error Loading Saved Items</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function displaySavedItemsAsBuyerListings(items, container) {
+        const grid = document.createElement('div');
+        grid.className = 'listings-grid';
+        
+        items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'listing-card-minimal';
+            
+            card.innerHTML = `
+                <div class="product-image-wrapper">
+                    <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
+                         alt="${item.title}" 
+                         class="product-image" 
+                         onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                    <span class="condition-badge badge-${(item.condition || 'new').toLowerCase().replace(' ', '-')}">${item.condition || 'New'}</span>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-title">${item.title || 'Untitled'}</h3>
+                    <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
+                    <div class="product-meta">
+                        <span class="product-price">\u20b1${parseFloat(item.price || 0).toFixed(2)}</span>
+                        <span class="product-category">${item.category || 'Uncategorized'}</span>
+                    </div>
+                    <div class="product-seller-info">
+                        <span class="seller-name-small"><i class="bi bi-person"></i> ${item.sellerName || 'Unknown Seller'}</span>
+                    </div>
+                    <div class="product-actions">
+                        <button class="btn-action btn-view-minimal" onclick="viewProduct('${item.product_id || item.productId}')" style="background:#0ea5e9;color:#fff;">
+                            <i class="bi bi-eye"></i>
+                            <span>View</span>
+                        </button>
+                        <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${item.product_id || item.productId}')" style="background:#ef4444;color:#fff;">
+                            <i class="bi bi-heart-fill"></i>
+                            <span>Unsave</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            grid.appendChild(card);
+        });
+        
+        container.innerHTML = '';
+        container.appendChild(grid);
+    }
+    
     // Load listings immediately
+    console.log('📄 Profile page loaded, readyState:', document.readyState);
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', waitForFirebaseFunctions);
     } else {
         waitForFirebaseFunctions();
     }
 </script>
-<script src="~/js/listings-manager.js?v=2.0"></script>
-<script src="~/js/listings-enhanced.js?v=2.0"></script>
+<script src="~/js/listings-manager.js?v=@DateTime.Now.Ticks"></script>
+<script src="~/js/listings-enhanced.js?v=@DateTime.Now.Ticks"></script>
+<script>
+    // OVERRIDE FUNCTIONS AFTER ALL SCRIPTS LOAD - This ensures our modal functions are FINAL
+    console.log('🔧 Installing modal overrides AFTER external scripts...');
+    
+    // Re-override markAsSoldOut to use modal (FINAL VERSION)
+    window.markAsSoldOut = function(productId, title) {
+        console.log('🎯✅ MODAL markAsSoldOut (FINAL) called with:', productId, title);
+        
+        pendingSoldOutItem = { productId, title };
+        document.getElementById('soldOutItemTitle').textContent = title;
+        const soldModal = new bootstrap.Modal(document.getElementById('soldOutModal'));
+        soldModal.show();
+    };
+    
+    // Re-override deleteListing to use modal (FINAL VERSION)
+    window.deleteListing = function(productId, title) {
+        console.log('🎯✅ MODAL deleteListing (FINAL) called with:', productId, title);
+        
+        pendingDeleteItem = { productId, title };
+        document.getElementById('deleteItemTitle').textContent = title;
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        deleteModal.show();
+    };
+    
+    console.log('✅ Modal overrides installed successfully!');
+</script>
 }
+
+

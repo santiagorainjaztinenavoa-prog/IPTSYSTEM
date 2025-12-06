@@ -18,94 +18,94 @@
         </div>
 
         <!-- Categories Grid -->
-        <div class="row g-4">
-         <!-- Electronics -->
+        <div class="row g-4 justify-content-center">
+            <!-- Electronics -->
             <div class="col-12 col-sm-6 col-lg-3">
-            <a href="@Url.Action("Browse", "Home", new { category = "Electronics" })" class="category-card" data-category="Electronics">
-   <div class="category-icon-wrapper">
-    <i class="bi bi-laptop category-icon"></i>
+                <a href="@Url.Action("Browse", "Home", new { category = "Electronics" })" class="category-card" data-category="Electronics">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-laptop category-icon"></i>
                     </div>
-        <h3 class="category-name">Electronics</h3>
-     <p class="category-count">@CountFor("Electronics") items</p>
-       </a>
-      </div>
+                    <h3 class="category-name">Electronics</h3>
+                    <p class="category-count">@CountFor("Electronics") items</p>
+                </a>
+            </div>
 
-        <!-- Fashion -->
-      <div class="col-12 col-sm-6 col-lg-3">
-   <a href="@Url.Action("Browse", "Home", new { category = "Fashion" })" class="category-card" data-category="Fashion">
-          <div class="category-icon-wrapper">
-     <i class="bi bi-bag category-icon"></i>
-     </div>
-  <h3 class="category-name">Fashion</h3>
-        <p class="category-count">@CountFor("Fashion") items</p>
-     </a>
-     </div>
-
-          <!-- Home & Living -->
-    <div class="col-12 col-sm-6 col-lg-3">
-       <a href="@Url.Action("Browse", "Home", new { category = "Home & Living" })" class="category-card" data-category="Home & Living">
-            <div class="category-icon-wrapper">
-             <i class="bi bi-house-door category-icon"></i>
-              </div>
-             <h3 class="category-name">Home &amp; Living</h3>
-  <p class="category-count">@CountFor("Home & Living") items</p>
-  </a>
-   </div>
-
-     <!-- Books -->
+            <!-- Fashion -->
             <div class="col-12 col-sm-6 col-lg-3">
-             <a href="@Url.Action("Browse", "Home", new { category = "Books" })" class="category-card" data-category="Books">
-            <div class="category-icon-wrapper">
-        <i class="bi bi-book category-icon"></i>
-    </div>
-        <h3 class="category-name">Books</h3>
-           <p class="category-count">@CountFor("Books") items</p>
-    </a>
-     </div>
+                <a href="@Url.Action("Browse", "Home", new { category = "Fashion" })" class="category-card" data-category="Fashion">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-bag category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Fashion</h3>
+                    <p class="category-count">@CountFor("Fashion") items</p>
+                </a>
+            </div>
 
- <!-- Sports -->
-       <div class="col-12 col-sm-6 col-lg-3">
- <a href="@Url.Action("Browse", "Home", new { category = "Sports" })" class="category-card" data-category="Sports">
-   <div class="category-icon-wrapper">
-       <i class="bi bi-trophy category-icon"></i>
-</div>
-           <h3 class="category-name">Sports</h3>
-    <p class="category-count">@CountFor("Sports") items</p>
-      </a>
-       </div>
+            <!-- Home & Living -->
+            <div class="col-12 col-sm-6 col-lg-3">
+                <a href="@Url.Action("Browse", "Home", new { category = "Home & Living" })" class="category-card" data-category="Home & Living">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-house-door category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Home &amp; Living</h3>
+                    <p class="category-count">@CountFor("Home & Living") items</p>
+                </a>
+            </div>
+
+            <!-- Books -->
+            <div class="col-12 col-sm-6 col-lg-3">
+                <a href="@Url.Action("Browse", "Home", new { category = "Books" })" class="category-card" data-category="Books">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-book category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Books</h3>
+                    <p class="category-count">@CountFor("Books") items</p>
+                </a>
+            </div>
+
+            <!-- Sports -->
+            <div class="col-12 col-sm-6 col-lg-3">
+                <a href="@Url.Action("Browse", "Home", new { category = "Sports" })" class="category-card" data-category="Sports">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-trophy category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Sports</h3>
+                    <p class="category-count">@CountFor("Sports") items</p>
+                </a>
+            </div>
 
             <!-- Toys & Games -->
             <div class="col-12 col-sm-6 col-lg-3">
-      <a href="@Url.Action("Browse", "Home", new { category = "Toys & Games" })" class="category-card" data-category="Toys & Games">
-   <div class="category-icon-wrapper">
-              <i class="bi bi-controller category-icon"></i>
-     </div>
-       <h3 class="category-name">Toys &amp; Games</h3>
-    <p class="category-count">@CountFor("Toys & Games") items</p>
-    </a>
+                <a href="@Url.Action("Browse", "Home", new { category = "Toys & Games" })" class="category-card" data-category="Toys & Games">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-controller category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Toys &amp; Games</h3>
+                    <p class="category-count">@CountFor("Toys & Games") items</p>
+                </a>
             </div>
 
-  <!-- Furniture -->
- <div class="col-12 col-sm-6 col-lg-3">
-    <a href="@Url.Action("Browse", "Home", new { category = "Furniture" })" class="category-card" data-category="Furniture">
-           <div class="category-icon-wrapper">
-<i class="bi bi-lamp category-icon"></i>
-          </div>
-     <h3 class="category-name">Furniture</h3>
-   <p class="category-count">@CountFor("Furniture") items</p>
-    </a>
-         </div>
+            <!-- Vehicles -->
+            <div class="col-12 col-sm-6 col-lg-3">
+                <a href="@Url.Action("Browse", "Home", new { category = "Vehicles" })" class="category-card" data-category="Vehicles">
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-truck category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Vehicles</h3>
+                    <p class="category-count">@CountFor("Vehicles") items</p>
+                </a>
+            </div>
 
-     <!-- Beauty -->
+            <!-- Beauty -->
             <div class="col-12 col-sm-6 col-lg-3">
                 <a href="@Url.Action("Browse", "Home", new { category = "Beauty" })" class="category-card" data-category="Beauty">
-         <div class="category-icon-wrapper">
-           <i class="bi bi-stars category-icon"></i>
+                    <div class="category-icon-wrapper">
+                        <i class="bi bi-stars category-icon"></i>
+                    </div>
+                    <h3 class="category-name">Beauty</h3>
+                    <p class="category-count">@CountFor("Beauty") items</p>
+                </a>
             </div>
-          <h3 class="category-name">Beauty</h3>
-       <p class="category-count">@CountFor("Beauty") items</p>
-              </a>
-         </div>
         </div>
     </div>
 </section>
