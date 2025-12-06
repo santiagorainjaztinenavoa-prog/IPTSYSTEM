@@ -115,6 +115,21 @@ display: grid;
     border-left: 3px solid #000000;
 }
 
+/* Unread Conversation Highlight */
+.conversation-item.unread {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.04) 100%);
+    border-left: 3px solid #ef4444;
+}
+
+.conversation-item.unread:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.08) 100%);
+}
+
+.conversation-item.unread.active {
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0.04) 100%);
+    border-left: 3px solid #000000;
+}
+
 /* AI Conversation Highlight */
 .conversation-item.ai-conversation {
     background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(124, 58, 237, 0.06) 100%);

@@ -1,0 +1,296 @@
+@model List<IPTSYSTEM.Models.Listing>
+@using System.Text.Json
+@using System.Collections.Generic
+@{
+    ViewData["Title"] = "Seller Dashboard";
+
+    List<object> serverData = new List<object>();
+    if (Model != null)
+    {
+        foreach (var l in Model)
+        {
+            serverData.Add(new {
+                id = l.Id.ToString(),
+                title = l.Title,
+                description = l.Description,
+                price = l.Price,
+                category = l.Category,
+                condition = l.Condition,
+                imageUrl = l.ImageUrl,
+                full_name = l.SellerFullName,
+                username = l.SellerUsername,
+                user_id = l.SellerUserId,
+                date_created = l.CreatedDate
+            });
+        }
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/browse.css" asp-append-version="true" />
+}
+
+<section class="browse-page">
+    <div class="container-fluid p-0">
+        <div class="browse-header">
+            <div class="browse-header-content">
+                <h1 class="browse-title">@ViewBag.SellerDisplay</h1>
+                <p class="text-muted">Seller dashboard</p>
+
+                <ul class="nav nav-tabs mt-3" id="sellerTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tab-listings" data-bs-toggle="tab" data-bs-target="#pane-listings" type="button" role="tab">Listings</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-reviews" data-bs-toggle="tab" data-bs-target="#pane-reviews" type="button" role="tab">Reviews</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-history" data-bs-toggle="tab" data-bs-target="#pane-history" type="button" role="tab">History</button>
+                    </li>
+                </ul>
+
+                <div class="search-filter-row mt-3">
+                    <div class="search-container">
+                        <input type="text" id="searchInput" class="search-input" placeholder="Search listings..." onkeyup="filterListings()">
+                        <i class="bi bi-search search-icon"></i>
+                    </div>
+                    <div class="filter-container">
+                        <select id="categoryFilter" class="filter-select" onchange="filterListings()">
+                            <option value="">All Categories</option>
+                            <option value="Electronics">Electronics</option>
+                            <option value="Fashion">Fashion</option>
+                            <option value="Home & Living">Home & Living</option>
+                            <option value="Books">Books</option>
+                            <option value="Sports">Sports</option>
+                            <option value="Toys & Games">Toys & Games</option>
+                            <option value="Vehicles">Vehicles</option>
+                            <option value="Beauty">Beauty</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="sellerTabContent">
+            <div class="tab-pane fade show active" id="pane-listings" role="tabpanel" aria-labelledby="tab-listings">
+                <div class="browse-grid" id="listingsContainer">
+                    <div class="loading-state">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading products...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="pane-reviews" role="tabpanel" aria-labelledby="tab-reviews">
+                <div class="p-4" id="reviewsContainer">
+                    <div class="empty-state">
+                        <i class="bi bi-chat-square-text"></i>
+                        <h3>No reviews yet</h3>
+                        <p>Reviews for this seller will appear here.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="pane-history" role="tabpanel" aria-labelledby="tab-history">
+                <div class="p-4" id="historyContainer">
+                    <div class="empty-state">
+                        <i class="bi bi-clock-history"></i>
+                        <h3>No recent activity</h3>
+                        <p>Listing changes and activity history will appear here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Detail modal omitted for brevity; same as existing -->
+<div class="modal fade" id="productDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content product-detail-modal">
+            <div class="modal-header border-0">
+                <h2 class="modal-title" id="productTitle">Product Details</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="product-detail-image mb-4">
+                    <img id="detailProductImage" src="" alt="Product" class="img-fluid">
+                    <span id="detailConditionBadge" class="condition-badge"></span>
+                </div>
+                <div class="product-detail-info">
+                    <h3 id="detailProductTitle" class="product-detail-title"></h3>
+                    <p id="detailProductCategory" class="product-detail-category"></p>
+                    <h2 id="detailProductPrice" class="product-detail-price"></h2>
+                    <p id="detailProductDescription" class="product-detail-description"></p>
+
+                    <div class="seller-card">
+                        <div class="seller-card-header">
+                            <h4>Seller Information</h4>
+                        </div>
+                        <div class="seller-card-body">
+                            <div class="seller-card-info">
+                                <div class="seller-avatar-large">
+                                    <span id="detailSellerAvatar" class="avatar-initial-large">U</span>
+                                </div>
+                                <div class="seller-details-full">
+                                    <p id="detailSellerName" class="seller-name-full"></p>
+                                    <p id="detailSellerUsername" class="seller-username-full"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="product-details-section">
+                        <h4>Condition</h4>
+                        <p id="detailConditionText" class="detail-value"></p>
+                    </div>
+
+                    <div class="product-details-section">
+                        <h4>Posted on</h4>
+                        <p id="detailPostedDate" class="detail-value"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer border-0 gap-2">
+                <button type="button" class="btn-detail-message" onclick="messageSeller()">
+                    <i class="bi bi-chat-dots"></i>
+                    Message Seller
+                </button>
+                <button type="button" class="btn-detail-select" onclick="selectProduct()">
+                    <i class="bi bi-check-circle"></i>
+                    Select
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/seller-products.js"></script>
+    <script>
+        const serverProducts = @Html.Raw(JsonSerializer.Serialize(serverData, typeof(List<object>)));
+        let allProducts = serverProducts || [];
+        let currentProductDetail = null;
+
+        function displayProducts(products) {
+            const container = document.getElementById('listingsContainer');
+            if (!products || products.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <h3>No listings found</h3>
+                        <p>Try adjusting your filters or search term</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            products.forEach(product => {
+                const card = createProductCard(product);
+                container.appendChild(card);
+            });
+        }
+
+        function createProductCard(product) {
+            const card = document.createElement('div');
+            card.className = 'listing-card';
+            card.id = `listing-${product.id}`;
+            card.setAttribute('data-category', product.category || '');
+            card.setAttribute('data-title', product.title || '');
+            card.setAttribute('data-description', product.description || '');
+
+            const condition = product.condition || 'New';
+            const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
+            const imageUrl = product.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+
+            let sellerName = product.full_name || product.SellerFullName || product.seller_name || product.username || product.SellerUsername || 'Unknown Seller';
+            let sellerUsername = product.username || product.SellerUsername || '';
+            let sellerId = product.user_id || product.SellerUserId || '';
+            let sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+
+            const html = `
+                <div class="listing-image-wrapper">
+                    <img src="${imageUrl}" alt="${product.title || 'Product'}" class="listing-image" onclick="openProductDetail('${product.id}')">
+                    <span class="condition-badge badge-${conditionClass}">${condition}</span>
+                </div>
+                <div class="listing-seller-info">
+                    <div class="seller-avatar"><span class="avatar-initial">${sellerInitial}</span></div>
+                    <div class="seller-details">
+                        <p class="seller-name">${sellerName}</p>
+                        <p class="seller-username">${sellerUsername}</p>
+                    </div>
+                    <a href="/Home/SellerProfile?id=${sellerId}&name=${encodeURIComponent(sellerName)}&username=${encodeURIComponent(sellerUsername)}" class="seller-link" title="View seller profile"></a>
+                </div>
+                <div class="listing-body">
+                    <h3 class="listing-title">${product.title || 'Untitled'}</h3>
+                    <p class="listing-description">${(product.description || 'No description available').substring(0,80)}${(product.description || '').length > 80 ? '...' : ''}</p>
+                    <p class="listing-category">${product.category || 'Uncategorized'}</p>
+                    <p class="listing-price">?${parseFloat(product.price || 0).toFixed(2)}</p>
+                </div>
+                <div class="listing-buttons">
+                    <button class="btn-message" onclick="openProductDetail('${product.id}'); setTimeout(() => messageSeller(), 500)">Message</button>
+                    <button class="btn-select" onclick="openProductDetail('${product.id}')">Select</button>
+                </div>
+            `;
+
+            card.innerHTML = html;
+            return card;
+        }
+
+        function openProductDetail(productId) {
+            const product = allProducts.find(p => p.id == productId || p.id === productId);
+            if (!product) return;
+            const condition = product.condition || 'New';
+            const sellerName = product.full_name || product.SellerFullName || 'Unknown Seller';
+            const sellerUsername = product.username || product.SellerUsername || '';
+            const sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+            const imageUrl = product.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
+
+            document.getElementById('productTitle').textContent = product.title || 'Product';
+            document.getElementById('detailProductTitle').textContent = product.title || 'Product';
+            document.getElementById('detailProductCategory').textContent = product.category || 'Uncategorized';
+            document.getElementById('detailProductPrice').textContent = `?${parseFloat(product.price || 0).toFixed(2)}`;
+            document.getElementById('detailProductDescription').textContent = product.description || 'No description available';
+            document.getElementById('detailProductImage').src = imageUrl;
+            document.getElementById('detailConditionBadge').textContent = condition;
+            document.getElementById('detailConditionBadge').className = `condition-badge badge-${conditionClass}`;
+            document.getElementById('detailConditionText').textContent = condition;
+            document.getElementById('detailSellerName').textContent = sellerName;
+            document.getElementById('detailSellerUsername').textContent = sellerUsername;
+            document.getElementById('detailSellerAvatar').textContent = sellerInitial;
+
+            const createdDate = product.date_created ? new Date(product.date_created).toLocaleDateString() : new Date().toLocaleDateString();
+            document.getElementById('detailPostedDate').textContent = createdDate;
+
+            currentProductDetail = { id: productId, title: product.title, sellerName, sellerUsername };
+            const modal = new bootstrap.Modal(document.getElementById('productDetailModal'));
+            modal.show();
+        }
+
+        function messageSeller() { if (currentProductDetail) alert(`Message seller: ${currentProductDetail.sellerName}`); }
+        function selectProduct() { if (currentProductDetail) alert(`Selected: ${currentProductDetail.title}`); }
+
+        function filterListings() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const categoryFilter = document.getElementById('categoryFilter').value;
+
+            const filtered = allProducts.filter(product => {
+                const title = (product.title || '').toLowerCase();
+                const description = (product.description || '').toLowerCase();
+                const category = product.category || '';
+                const matchesSearch = title.includes(searchInput) || description.includes(searchInput);
+                const matchesCategory = !categoryFilter || category === categoryFilter;
+                return matchesSearch && matchesCategory;
+            });
+
+            displayProducts(filtered);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            displayProducts(allProducts);
+        });
+    </script>
+}

@@ -3,6 +3,30 @@
 let listingModal;
 let toastNotification;
 
+// Map categories to Bootstrap Icon classes
+function categoryToIcon(category) {
+    if (!category || typeof category !== 'string') return 'bi-tag';
+    const c = category.trim().toLowerCase();
+    switch(c) {
+        case 'electronics': return 'bi-laptop';
+        case 'fashion': return 'bi-bag';
+        case 'home & living': return 'bi-house-door';
+        case 'books': return 'bi-book';
+        case 'sports': return 'bi-trophy';
+        case 'toys & games': return 'bi-controller';
+        case 'vehicles': return 'bi-truck';
+        case 'furniture': return 'bi-truck';
+        case 'beauty': return 'bi-stars';
+        default: return 'bi-tag';
+    }
+}
+
+function normalizeCategoryName(category) {
+    if (!category || typeof category !== 'string') return category;
+    if (category.trim().toLowerCase() === 'furniture') return 'Vehicles';
+    return category;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     // Initialize Bootstrap components
     const modalEl = document.getElementById('listingModal');
@@ -21,6 +45,9 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Initialize image upload
     initializeImageUpload();
+    
+    // Note: loadListingsFromFirebase() is called from the Mylisting.cshtml view
+    // after sessionStorage is properly populated
 });
 
 // ========== IMAGE UPLOAD FUNCTIONALITY ==========
@@ -225,56 +252,143 @@ function openListingModal() {
 // Edit existing listing
 async function editListing(id) {
     try {
-showLoadingState();
-      
- const response = await fetch(`/Home/GetListing?id=${id}`);
-  
-     if (!response.ok) {
-          throw new Error('Failed to fetch listing details');
-      }
-   
+        showLoadingState();
+        console.log('🔍 Attempting to edit listing:', id);
+        
+        // Try to get the listing from the current page first (faster)
+        const existingCard = document.getElementById(`listing-${id}`);
+        if (existingCard) {
+            console.log('✅ Found listing in page DOM');
+            const listing = {
+                id: id,
+                title: existingCard.getAttribute('data-title') || existingCard.querySelector('.product-title')?.textContent ||'',
+                description: existingCard.getAttribute('data-description') || existingCard.querySelector('.product-description')?.textContent || '',
+                price: parseFloat(existingCard.getAttribute('data-price') || existingCard.querySelector('.product-price')?.textContent.replace(/[^0-9.]/g, '') || '0'),
+                category: existingCard.getAttribute('data-category') || existingCard.querySelector('.product-category')?.textContent || '',
+                condition: existingCard.getAttribute('data-condition') || 'New',
+                imageUrl: existingCard.querySelector('.product-image')?.src || ''
+            };
+            
+            // Update modal title
+            const modalTitle = document.getElementById('modalTitle');
+            const saveButtonText = document.getElementById('saveButtonText');
+            
+            if (modalTitle) modalTitle.textContent = 'Edit Listing';
+            if (saveButtonText) saveButtonText.textContent = 'Update Listing';
+            
+            // Populate form fields
+            populateForm(listing);
+            
+            // Show preview image
+            if (listing.imageUrl) {
+                updateImagePreview(listing.imageUrl);
+            }
+            
+            hideLoadingState();
+            
+            if (listingModal) listingModal.show();
+            return;
+        }
+        
+        // Try Firebase fetch
+        if (typeof window.firebaseFetchProductById === 'function') {
+            console.log('📡 Fetching from Firebase...');
+            const result = await window.firebaseFetchProductById(id);
+            
+            if (result && result.success && result.product) {
+                console.log('✅ Found listing in Firebase');
+                const listing = result.product;
+                
+                // Update modal title
+                const modalTitle = document.getElementById('modalTitle');
+                const saveButtonText = document.getElementById('saveButtonText');
+                
+                if (modalTitle) modalTitle.textContent = 'Edit Listing';
+                if (saveButtonText) saveButtonText.textContent = 'Update Listing';
+                
+                // Populate form fields
+                populateForm(listing);
+                
+                // Show preview image
+                if (listing.imageUrl) {
+                    updateImagePreview(listing.imageUrl);
+                }
+                
+                hideLoadingState();
+                
+                if (listingModal) listingModal.show();
+                return;
+            }
+        }
+        
+        // Fall back to server-side fetch if not found in DOM or Firebase
+        console.log('📡 Fetching from server API...');
+        const response = await fetch(`/Home/GetListing?id=${id}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch listing details');
+        }
+        
         const listing = await response.json();
         
-    // Update modal title
-   const modalTitle = document.getElementById('modalTitle');
-     const saveButtonText = document.getElementById('saveButtonText');
+        // Update modal title
+        const modalTitle = document.getElementById('modalTitle');
+        const saveButtonText = document.getElementById('saveButtonText');
         
         if (modalTitle) modalTitle.textContent = 'Edit Listing';
-  if (saveButtonText) saveButtonText.textContent = 'Update Listing';
+        if (saveButtonText) saveButtonText.textContent = 'Update Listing';
         
         // Populate form fields
-     populateForm(listing);
-   
-        // Show preview image
-        if (listing.imageUrl) {
-        updateImagePreview(listing.imageUrl);
- }
+        populateForm(listing);
         
-     hideLoadingState();
-   
-    if (listingModal) listingModal.show();
+        // Show preview image
+        if (listing.imageUrl || listing.ImageUrl) {
+            updateImagePreview(listing.imageUrl || listing.ImageUrl);
+        }
+        
+        hideLoadingState();
+        
+        if (listingModal) listingModal.show();
         
     } catch (error) {
-     hideLoadingState();
+        hideLoadingState();
         showToast('Error loading listing: ' + error.message, 'error');
-   console.error('Edit listing error:', error);
+        console.error('Edit listing error:', error);
     }
 }
 
 // Populate form with listing data
 function populateForm(listing) {
-    // Set all form fields
-    setFieldValue('listingId', listing.id);
- setFieldValue('title', listing.title);
-    setFieldValue('description', listing.description);
-    setFieldValue('price', listing.price);
-    setFieldValue('category', listing.category);
+    console.log('📝 Populating form with listing:', listing);
+    
+    // Set all form fields (handle both server and Firebase formats)
+    setFieldValue('listingId', listing.id || listing.Id || listing.product_id || '');
+    setFieldValue('title', listing.title || listing.Title || '');
+    setFieldValue('description', listing.description || listing.Description || '');
+    setFieldValue('price', listing.price || listing.Price || 0);
+    setFieldValue('category', listing.category || listing.Category || '');
+    
+    // Set image URL in hidden field
+    const imageUrl = listing.imageUrl || listing.image_url || listing.ImageUrl || '';
+    setFieldValue('imageUrl', imageUrl);
+    
+    // Show image preview if imageUrl exists
+    if (imageUrl) {
+        console.log('📷 Showing image preview:', imageUrl);
+        updateImagePreview(imageUrl);
+    } else {
+        console.log('⚠️ No image URL found in listing');
+        resetImagePreview();
+    }
     
     // Set condition radio button
-    const conditionInput = document.querySelector(`input[name="condition"][value="${listing.condition}"]`);
+    const condition = listing.condition || listing.Condition || '';
+    const conditionInput = document.querySelector(`input[name="condition"][value="${condition}"]`);
     if (conditionInput) {
-   conditionInput.checked = true;
+        conditionInput.checked = true;
     }
+    
+    console.log('✅ Form populated successfully');
 }
 
 // Helper to set field value safely
@@ -310,7 +424,46 @@ try {
         showSaveLoadingState();
   
     // Determine if creating or updating
-   const isUpdate = listingData.id > 0;
+   // NOTE: listingId may be a numeric server ID or a non-numeric Firestore document ID.
+   const rawId = (document.getElementById('listingId') && document.getElementById('listingId').value) ? document.getElementById('listingId').value : '';
+   const numericId = parseInt(rawId || '0');
+   const isFirebaseId = rawId && isNaN(numericId);
+   const isUpdate = !isFirebaseId && listingData.id > 0;
+
+  // If this is a Firestore-only listing (non-numeric id) and firebaseUpdateListing is available,
+  // update directly in Firestore to avoid creating a new server-side listing.
+  if (isFirebaseId && typeof window.firebaseUpdateListing === 'function') {
+        try {
+            const fbPayload = {
+                id: rawId,
+                title: listingData.title,
+                description: listingData.description,
+                price: listingData.price,
+                category: listingData.category,
+                condition: listingData.condition,
+                imageUrl: listingData.imageUrl
+            };
+            const fbResult = await window.firebaseUpdateListing(fbPayload);
+            hideSaveLoadingState();
+            if (fbResult && fbResult.success) {
+                showToast('Listing updated successfully!', 'success');
+                // Attempt to update UI cards if helper exists
+                if (typeof updateListingOnPage === 'function') {
+                    try { updateListingOnPage(Object.assign({}, listingData, { product_id: rawId })); } catch (e) { }
+                }
+                if (listingModal) listingModal.hide();
+                setTimeout(() => window.location.reload(), 800);
+                return;
+            } else {
+                showToast((fbResult && fbResult.message) ? fbResult.message : 'Failed to update listing in Firestore', 'error');
+                // fallthrough to server update as a last resort
+            }
+        } catch (e) {
+            console.error('Firestore update failed:', e);
+            // continue to attempt server-side update below if applicable
+        }
+    }
+
   const url = isUpdate ? '/Home/UpdateListing' : '/Home/CreateListing';
         const actionText = isUpdate ? 'updated' : 'created';
         
@@ -334,16 +487,53 @@ hideSaveLoadingState();
         if (result.success) {
             showToast(`Listing ${actionText} successfully!`, 'success');
       
-            // Close modal
-  if (listingModal) listingModal.hide();
+            // Mirror data into Firestore (if client Firebase helpers are available)
+            // Do this BEFORE closing/reloading
+            try {
+                if (typeof window.firebaseCreateListing === 'function') {
+                    // For create action, server returns `listing` object; for update, use listingData
+                    const serverListing = result.listing || listingData;
+                    const fbPayload = {
+                        id: serverListing.id ?? serverListing.Id ?? listingData.id,
+                        title: serverListing.title ?? serverListing.Title ?? listingData.title,
+                        description: serverListing.description ?? serverListing.Description ?? listingData.description,
+                        price: serverListing.price ?? serverListing.Price ?? listingData.price,
+                        category: serverListing.category ?? serverListing.Category ?? listingData.category,
+                        condition: serverListing.condition ?? serverListing.Condition ?? listingData.condition,
+                        imageUrl: serverListing.imageUrl ?? serverListing.ImageUrl ?? listingData.imageUrl
+                    };
+
+                    console.log('🔥 Syncing to Firestore:', fbPayload);
+                    
+                    if (isUpdate && typeof window.firebaseUpdateListing === 'function') {
+                        const updateResult = await window.firebaseUpdateListing(fbPayload);
+                        console.log('🔥 Firestore update result:', updateResult);
+                        if (!updateResult.success) {
+                            console.error('⚠️ Firestore update failed, but server update succeeded');
+                        }
+                    } else if (!isUpdate && typeof window.firebaseCreateListing === 'function') {
+                        const createResult = await window.firebaseCreateListing(fbPayload);
+                        console.log('🔥 Firestore create result:', createResult);
+                        if (!createResult.success) {
+                            console.error('⚠️ Firestore create failed, but server create succeeded');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('❌ Firestore mirroring error:', e);
+                // Continue anyway - the listing was saved on the server
+            }
       
-      // Reload page after a short delay to show the toast
-        setTimeout(() => {
-         window.location.reload();
-    }, 1200);
-     } else {
-     showToast(result.message || `Failed to ${actionText} listing`, 'error');
- }
+            // Close modal
+            if (listingModal) listingModal.hide();
+      
+            // Reload page after a short delay to show the toast and allow Firestore to complete
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showToast(result.message || `Failed to ${actionText} listing`, 'error');
+        }
         
   } catch (error) {
         hideSaveLoadingState();
@@ -417,59 +607,54 @@ showToast('Please select a condition', 'warning');
 
 function deleteListing(id, title) {
     // Create a better confirmation dialog
-  const confirmMessage = `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`;
+    const confirmMessage = `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`;
     
-if (confirm(confirmMessage)) {
-   performDelete(id, title);
+    if (confirm(confirmMessage)) {
+        performDelete(id, title);
     }
 }
 
 // Perform the actual delete operation
 async function performDelete(id, title) {
     try {
-     const response = await fetch(`/Home/DeleteListing?id=${id}`, {
-    method: 'POST'
-      });
-      
-    if (!response.ok) {
- throw new Error('Failed to delete listing');
+        // Delete from Firestore first
+        if (typeof window.firebaseDeleteListing === 'function') {
+            console.log('🔥 Deleting from Firestore for listing ID:', id);
+            const deleteResult = await window.firebaseDeleteListing(id);
+            console.log('🔥 Firestore delete result:', deleteResult);
+            
+            if (!deleteResult.success) {
+                showToast('Failed to delete listing from database', 'error');
+                return;
+            }
         }
-    
-        const result = await response.json();
         
-        if (result.success) {
-    showToast(`"${title}" deleted successfully!`, 'success');
-     
-       // Animate card removal
-       const card = document.getElementById(`listing-${id}`);
-if (card) {
-         // Add fade-out animation
-    card.style.opacity = '0';
-       card.style.transform = 'scale(0.95)';
-   card.style.transition = 'all 0.4s ease';
-  
-          // Remove card after animation
-    setTimeout(() => {
-      card.remove();
- 
-        // Check if there are no more listings
- const container = document.getElementById('listings-container');
- if (container && container.children.length === 0) {
-  // Reload to show empty state
-  setTimeout(() => window.location.reload(), 300);
-  }
-    }, 400);
-} else {
-        // If card not found, just reload
-       setTimeout(() => window.location.reload(), 1000);
-    }
-    } else {
-            showToast(result.message || 'Failed to delete listing', 'error');
- }
+        showToast(`"${title}" deleted successfully!`, 'success');
+        
+        // Animate card removal
+        const card = document.getElementById(`listing-${id}`);
+        if (card) {
+            // Add fade-out animation
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.95)';
+            card.style.transition = 'all 0.4s ease';
+            
+            // Remove card after animation
+            setTimeout(() => {
+                card.remove();
+                
+                // Check if there are no more listings
+                const container = document.getElementById('listings-container');
+                if (container && container.children.length === 0) {
+                    // Reload to show empty state
+                    setTimeout(() => window.location.reload(), 300);
+                }
+            }, 400);
+        }
         
     } catch (error) {
-     showToast('Error deleting listing: ' + error.message, 'error');
-      console.error('Delete listing error:', error);
+        showToast('Error deleting listing: ' + error.message, 'error');
+        console.error('Delete listing error:', error);
     }
 }
 
@@ -588,9 +773,204 @@ function debounce(func, wait) {
 };
 }
 
+// ========== FIREBASE LISTINGS LOADING ==========
+
+async function loadListingsFromFirebase() {
+    try {
+        // Get current user ID from session storage
+        let userId = sessionStorage.getItem('UserId');
+        const username = sessionStorage.getItem('Username');
+        const fullName = sessionStorage.getItem('FullName');
+        const userType = sessionStorage.getItem('UserType');
+        
+        console.log('🔄 loadListingsFromFirebase called');
+        console.log('   userId:', userId);
+        console.log('   username:', username);
+        console.log('   fullName:', fullName);
+        console.log('   userType:', userType);
+        
+        // Try multiple fallback options for userId
+        if (!userId || userId === '') {
+            if (fullName && fullName !== '') {
+                userId = fullName;
+                console.log('⚠️  No UserId, using fullName as fallback:', userId);
+            } else if (username && username !== '') {
+                userId = username;
+                console.log('⚠️  No UserId, using username as fallback:', userId);
+            } else {
+                console.log('⚠️  No user ID, username, or fullName in session');
+                // Still try to load, Firebase will return empty
+                userId = 'unknown-user';
+            }
+        }
+        
+        // Wait for Firebase to be ready
+        if (typeof window.firebaseFetchSellerProducts !== 'function') {
+            console.log('⏳ Firebase not ready, will retry in 500ms');
+            setTimeout(loadListingsFromFirebase, 500);
+            return;
+        }
+        
+        console.log('✅ Firebase ready, fetching seller products for user:', userId);
+        
+        // Fetch seller's products from Firestore
+        const result = await window.firebaseFetchSellerProducts(userId);
+        
+        console.log('📦 Firebase result:', result);
+        
+        if (!result.success) {
+            console.error('❌ Failed to load listings from Firebase:', result.message);
+            return;
+        }
+        
+        // Get the container - check both possible IDs (Profile uses listingsContainer, Mylisting uses listings-container)
+        let container = document.getElementById('listings-container') || document.getElementById('listingsContainer');
+        if (!container) {
+            console.error('❌ listings container not found in DOM (tried listings-container and listingsContainer)');
+            return;
+        }
+        
+        const products = result.products || [];
+        
+        console.log('📊 Loaded', products.length, 'products from Firebase');
+        console.log('Product data sample:', products.length > 0 ? products[0] : 'No products');
+        
+        if (products.length === 0) {
+            // Show empty state with option to create first listing
+            container.innerHTML = `
+                <div class="empty-state-minimal">
+                    <i class="bi bi-inbox"></i>
+                    <h3>No listings yet</h3>
+                    <p>Create your first listing to get started!</p>
+                </div>
+            `;
+            
+            // Also try to load from server for migration purposes
+            console.log('🔄 No Firebase products, attempting to load from server for display...');
+            try {
+                const serverListings = await fetch('/Home/GetUserListings').then(r => r.json()).catch(() => ({ listings: [] }));
+                if (serverListings.listings && serverListings.listings.length > 0) {
+                    console.log('📚 Found', serverListings.listings.length, 'server listings');
+                    // Could display these if needed, but for now keep empty state
+                }
+            } catch (e) {
+                console.log('ℹ️  Server listing load skipped');
+            }
+            return;
+        }
+        
+        // Build the HTML for all products
+        const html = products.map(product => `
+            <div class="listing-card-minimal" 
+                 id="listing-${product.id}" 
+                 data-category="${product.category || ''}" 
+                 data-condition="${product.condition || ''}" 
+                 data-price="${product.price || 0}" 
+                 data-title="${escapeHtml(product.title || '')}"
+                 data-description="${escapeHtml(product.description || '')}">
+                <!-- Product Image -->
+                <div class="product-image-wrapper">
+                    <img src="${product.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" alt="${product.title || 'Product'}" class="product-image" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                    <!-- Condition Badge -->
+                    <span class="condition-badge badge-${(product.condition || 'new').replace(' ', '-').toLowerCase()}">
+                        ${product.condition || 'New'}
+                    </span>
+                </div>
+                
+                <!-- Product Info -->
+                <div class="product-info">
+                    <h3 class="product-title">${product.title || 'Untitled'}</h3>
+                    <p class="product-description">${product.description || ''}</p>
+                    
+                    <!-- Price & Category -->
+                    <div class="product-meta">
+                        <span class="product-price">₱${parseFloat(product.price || 0).toFixed(2)}</span>
+                                <span class="product-category"><i class="bi ${categoryToIcon(product.category)} me-1"></i> ${normalizeCategoryName(product.category) || product.category || 'Uncategorized'}</span>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="product-actions">
+                        ${userType === 'seller' || userType === 'admin' ? `
+                            <button class="btn-action btn-edit-minimal" onclick="editListing('${product.id}')" title="Edit listing">
+                                <i class="bi bi-pencil"></i>
+                                <span>Edit</span>
+                            </button>
+                            <button class="btn-action btn-soldout-minimal" onclick="markAsSoldOut('${product.id}', '${escapeHtml(product.title || 'Listing')}')" title="Mark item as sold">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Sold</span>
+                            </button>
+                            <button class="btn-action btn-delete-minimal" onclick="deleteListing('${product.id}', '${escapeHtml(product.title || 'Listing')}')" title="Delete listing">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        ` : `
+                            <button class="btn-action btn-buy-minimal animate__animated animate__pulse" onclick="buyProduct('${product.id}')" title="Buy" style="background:#10b981;color:#fff;font-weight:600;">
+                                <i class="bi bi-bag-check"></i>
+                                Buy
+                            </button>
+                            <button class="btn-action btn-message-minimal animate__animated animate__pulse" onclick="messageSeller('${product.id}')" title="Message Seller" style="background:#2563eb;color:#fff;font-weight:600;">
+                                <i class="bi bi-chat-dots"></i>
+                                Message Seller
+                            </button>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        container.innerHTML = html;
+        console.log('✅ Successfully rendered', products.length, 'listings');
+        
+    } catch (error) {
+        console.error('❌ Error loading listings from Firebase:', error);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Mark item as sold out
+async function markAsSoldOut(productId, title) {
+    if (!confirm(`Mark "${title}" as sold out? This will move it to your history.`)) {
+        return;
+    }
+    
+    try {
+        console.log('🔄 Marking product as sold:', productId);
+        
+        // Call Firebase function to update status
+        if (typeof window.firebaseMarkAsSold === 'function') {
+            const result = await window.firebaseMarkAsSold(productId);
+            
+            if (result.success) {
+                console.log('✅ Product marked as sold successfully');
+                showToast('Item marked as sold and moved to history', 'success');
+                
+                // Reload listings to reflect changes
+                setTimeout(() => {
+                    loadListingsFromFirebase();
+                }, 500);
+            } else {
+                console.error('❌ Failed to mark as sold:', result.message);
+                showToast('Failed to mark item as sold: ' + (result.message || 'Unknown error'), 'error');
+            }
+        } else {
+            console.error('❌ firebaseMarkAsSold function not available');
+            showToast('Sold out feature not available. Please refresh the page.', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error marking as sold:', error);
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
 // Make functions globally accessible
 window.openListingModal = openListingModal;
 window.editListing = editListing;
 window.saveListing = saveListing;
 window.deleteListing = deleteListing;
 window.removeImage = removeImage;
+window.loadListingsFromFirebase = loadListingsFromFirebase;
+window.markAsSoldOut = markAsSoldOut;

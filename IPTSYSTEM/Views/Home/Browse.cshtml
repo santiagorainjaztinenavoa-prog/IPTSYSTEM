@@ -1,0 +1,632 @@
+@model List<IPTSYSTEM.Models.Listing>
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Browse";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/browse.css" asp-append-version="true" />
+}
+
+<!-- Browse Page - Carousell Style Grid -->
+<section class="browse-page">
+    <div class="container-fluid p-0">
+        <!-- Header with Search & Filters -->
+        <div class="browse-header">
+            <div class="browse-header-content">
+                <h1 class="browse-title">Browse</h1>
+
+                <!-- Search Bar and Filter on same row -->
+                <div class="search-filter-row">
+                    <!-- Search Bar -->
+                    <div class="search-container">
+                        <input type="text"
+                               id="searchInput"
+                               class="search-input"
+                               placeholder="Search items..."
+                               value="@ViewBag.Query"
+                               onkeyup="if(event.key === 'Enter') applyFilters();">
+                        <i class="bi bi-search search-icon"></i>
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div class="filter-container">
+                        <select id="categoryFilter" class="filter-select" onchange="applyFilters()">
+                            @{ var sel = (string)ViewBag.SelectedCategory ?? string.Empty; }
+                            @if (string.Equals(sel, "Electronics", StringComparison.OrdinalIgnoreCase)) { <option value="Electronics" selected>Electronics</option> } else { <option value="Electronics">Electronics</option> }
+                            @if (string.Equals(sel, "Fashion", StringComparison.OrdinalIgnoreCase)) { <option value="Fashion" selected>Fashion</option> } else { <option value="Fashion">Fashion</option> }
+                            @if (string.Equals(sel, "Home & Living", StringComparison.OrdinalIgnoreCase)) { <option value="Home & Living" selected>Home & Living</option> } else { <option value="Home & Living">Home & Living</option> }
+                            @if (string.Equals(sel, "Books", StringComparison.OrdinalIgnoreCase)) { <option value="Books" selected>Books</option> } else { <option value="Books">Books</option> }
+                            @if (string.Equals(sel, "Sports", StringComparison.OrdinalIgnoreCase)) { <option value="Sports" selected>Sports</option> } else { <option value="Sports">Sports</option> }
+                            @if (string.Equals(sel, "Toys & Games", StringComparison.OrdinalIgnoreCase)) { <option value="Toys & Games" selected>Toys & Games</option> } else { <option value="Toys & Games">Toys & Games</option> }
+                            @if (string.Equals(sel, "Vehicles", StringComparison.OrdinalIgnoreCase)) { <option value="Vehicles" selected>Vehicles</option> } else { <option value="Vehicles">Vehicles</option> }
+                            @if (string.Equals(sel, "Beauty", StringComparison.OrdinalIgnoreCase)) { <option value="Beauty" selected>Beauty</option> } else { <option value="Beauty">Beauty</option> }
+                            @if (string.IsNullOrWhiteSpace(sel)) { <option value="" selected>All Categories</option> } else { <option value="">All Categories</option> }
+                        </select>
+                    </div>
+
+                    <!-- Sort Filter -->
+                    <div class="filter-container">
+                        <select id="sortFilter" class="filter-select" onchange="applyFilters()">
+                            <option value="newest" selected>Newest First</option>
+                            <option value="price-low">Price: Low to High</option>
+                            <option value="price-high">Price: High to Low</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Listings Grid -->
+        <div class="browse-grid" id="listingsContainer">
+            <div class="loading-state">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Loading products...</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Product Detail Modal -->
+<div class="modal fade" id="productDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content product-detail-modal">
+            <div class="modal-header border-0">
+                <h2 class="modal-title" id="productTitle">Product Details</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Product Image Carousel -->
+                <div class="product-detail-image mb-4">
+                    <img id="detailProductImage" src="" alt="Product" class="img-fluid">
+                    <span id="detailConditionBadge" class="condition-badge"></span>
+                </div>
+
+                <!-- Product Info -->
+                <div class="product-detail-info">
+                    <h3 id="detailProductTitle" class="product-detail-title"></h3>
+                    <p id="detailProductCategory" class="product-detail-category"></p>
+                    <h2 id="detailProductPrice" class="product-detail-price"></h2>
+                    <p id="detailProductDescription" class="product-detail-description"></p>
+
+                    <!-- Seller Card -->
+                    <div class="seller-card">
+                        <div class="seller-card-header">
+                            <h4>Seller Information</h4>
+                        </div>
+                        <div class="seller-card-body">
+                            <div class="seller-card-info">
+                                <div class="seller-avatar-large">
+                                    <span id="detailSellerAvatar" class="avatar-initial-large">U</span>
+                                </div>
+                                <div class="seller-details-full">
+                                    <p id="detailSellerName" class="seller-name-full"></p>
+                                    <p id="detailSellerUsername" class="seller-username-full"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Additional Details -->
+                    <div class="product-details-section">
+                        <h4>Condition</h4>
+                        <p id="detailConditionText" class="detail-value"></p>
+                    </div>
+
+                    <div class="product-details-section">
+                        <h4>Posted on</h4>
+                        <p id="detailPostedDate" class="detail-value"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer border-0 gap-2">
+                <button type="button" class="btn-detail-message" onclick="messageSeller()">
+                    <i class="bi bi-chat-dots"></i>
+                    Message Seller
+                </button>
+                <button type="button" class="btn-detail-select" onclick="selectProduct()">
+                    <i class="bi bi-check-circle"></i>
+                    Select
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script src="~/js/seller-products.js"></script>
+    <script>
+        // Use server-provided listings if available, otherwise fall back to firebase client
+        let allProducts = @Html.Raw(JsonSerializer.Serialize(Model ?? new List<IPTSYSTEM.Models.Listing>()));
+        let currentProductDetail = null;
+        let currentUserId = '@(Context.Session.GetString("UserId") ?? "")';
+        let currentUserType = '@(Context.Session.GetString("UserType") ?? "Buyer")';
+        let savedProductIds = new Set();
+
+        // Fetch current user's saved items at page load
+        async function loadUserSavedItems() {
+            if (!currentUserId) return;
+            try {
+                console.log('🔍 Loading saved items for user:', currentUserId);
+                if (typeof window.firebaseGetSavedProducts === 'function') {
+                    const result = await window.firebaseGetSavedProducts(currentUserId);
+                    if (result.success && result.products) {
+                        savedProductIds = new Set(result.products.map(p => p.product_id || p.productId));
+                        console.log('✅ Loaded', savedProductIds.size, 'saved items');
+                        updateHeartIcons();
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading saved items:', error);
+            }
+        }
+
+        // Update heart icon states based on saved items
+        function updateHeartIcons() {
+            allProducts.forEach(product => {
+                const heartBtn = document.getElementById(`heart-${product.id}`);
+                if (heartBtn) {
+                    const isSaved = savedProductIds.has(product.id);
+                    if (isSaved) {
+                        heartBtn.classList.add('saved');
+                        heartBtn.querySelector('i').classList.remove('bi-heart');
+                        heartBtn.querySelector('i').classList.add('bi-heart-fill');
+                    } else {
+                        heartBtn.classList.remove('saved');
+                        heartBtn.querySelector('i').classList.remove('bi-heart-fill');
+                        heartBtn.querySelector('i').classList.add('bi-heart');
+                    }
+                }
+            });
+        }
+
+        // Update saved badge counter
+        function updateSavedBadgeCount(change) {
+            const badge = document.querySelector('.saved-icon .icon-badge');
+            if (badge) {
+                const currentCount = parseInt(sessionStorage.getItem('savedProductsCount') || '0');
+                const newCount = Math.max(0, currentCount + change);
+                sessionStorage.setItem('savedProductsCount', newCount.toString());
+                sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
+                badge.textContent = newCount > 99 ? '99+' : newCount;
+                badge.style.display = newCount > 0 ? 'flex' : 'none';
+            }
+        }
+
+        // Toggle save/unsave product
+        async function toggleSaveProduct(productId) {
+            if (!currentUserId) {
+                alert('Please login to save items');
+                window.location.href = '/Home/Login';
+                return;
+            }
+
+            const product = allProducts.find(p => p.id === productId);
+            if (!product) return;
+
+            try {
+                const isSaved = savedProductIds.has(productId);
+                
+                if (isSaved) {
+                    // Unsave
+                    if (typeof window.firebaseUnsaveProduct === 'function') {
+                        const result = await window.firebaseUnsaveProduct(currentUserId, productId);
+                        if (result.success) {
+                            savedProductIds.delete(productId);
+                            console.log('❌ Product unsaved');
+                            // Update badge counter
+                            updateSavedBadgeCount(-1);
+                        }
+                    }
+                } else {
+                    // Save
+                    if (typeof window.firebaseSaveProduct === 'function') {
+                        const result = await window.firebaseSaveProduct(currentUserId, productId, {
+                            title: product.title || product.Title,
+                            price: product.price || product.Price,
+                            imageUrl: product.imageUrl || product.image_url || product.ImageUrl,
+                            category: product.category || product.Category,
+                            condition: product.condition || product.Condition,
+                            sellerName: product.full_name || product.SellerFullName || product.seller_name || 'Unknown',
+                            sellerUsername: product.username || product.SellerUsername || '',
+                            sellerId: product.user_id || product.SellerUserId || ''
+                        });
+                        if (result.success) {
+                            savedProductIds.add(productId);
+                            console.log('❤️ Product saved');
+                            // Update badge counter
+                            updateSavedBadgeCount(1);
+                        }
+                    }
+                }
+                updateHeartIcons();
+            } catch (error) {
+                console.error('Error saving product:', error);
+                alert('Error saving product. Please try again.');
+            }
+        }
+
+        // Check for productId in URL and auto-open modal
+        function checkForProductIdParam() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const productId = urlParams.get('productId');
+            
+            if (productId) {
+                console.log('📍 Product ID found in URL:', productId);
+                // Wait a bit for products to load, then open the modal
+                setTimeout(() => {
+                    openProductDetail(productId);
+                }, 1000);
+            }
+        }
+
+        // Open saved items modal
+        async function initializeBrowse() {
+            try {
+                console.log('🔄 Initializing Browse page...');
+                console.log('Current User ID:', currentUserId);
+                console.log('Current User Type:', currentUserType);
+                
+                // Wait for Firebase to be ready
+                let retries = 0;
+                while (typeof window.firebaseFetchAllProducts !== 'function' && retries < 30) {
+                    await new Promise(r => setTimeout(r, 100));
+                    retries++;
+                }
+                
+                // Load saved items
+                await loadUserSavedItems();
+                
+                // Fetch products from Firestore with timeout
+                if (typeof window.firebaseFetchAllProducts === 'function') {
+                    console.log('📦 Fetching products from Firestore...');
+                    
+                    // Add timeout to prevent infinite loading
+                    const fetchPromise = window.firebaseFetchAllProducts();
+                    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, message: 'Timeout' }), 10000));
+                    
+                    const res = await Promise.race([fetchPromise, timeoutPromise]);
+                    
+                    if (res && res.success && res.products) {
+                        console.log('✅ Received', res.products.length, 'products from Firebase');
+                        // Filter out seller's own items if user is a seller
+                        if (currentUserType.toLowerCase() === 'seller' && currentUserId) {
+                            allProducts = res.products.filter(p => {
+                                const productSellerId = p.user_id || p.SellerUserId || '';
+                                return productSellerId !== currentUserId;
+                            });
+                            console.log('✅ Loaded', allProducts.length, 'products (filtered out own items)');
+                        } else {
+                            allProducts = res.products;
+                            console.log('✅ Loaded', allProducts.length, 'products');
+                        }
+                        applyFilters(false);
+                        updateHeartIcons();
+                        // Check if productId parameter exists and open modal
+                        checkForProductIdParam();
+                    } else {
+                        console.warn('⚠️ No products returned from Firestore:', res);
+                        displayProducts([]);
+                    }
+                } else {
+                    console.warn('⚠️ Firebase not ready, showing server-provided data');
+                    if (allProducts && allProducts.length > 0) {
+                        displayProducts(allProducts);
+                    } else {
+                        displayProducts([]);
+                    }
+                }
+            } catch (err) {
+                console.error('❌ Browse init error:', err);
+                displayProducts([]);
+            }
+        }
+
+        // Pagination variables
+        let currentFilteredProducts = [];
+        let expandedCategories = new Set();
+        const ITEMS_PER_CATEGORY = 4;
+
+        // Apply filters client-side and optionally update the URL without reloading
+        function applyFilters(updateUrl = true) {
+            const q = document.getElementById('searchInput').value.trim().toLowerCase();
+            const category = document.getElementById('categoryFilter').value;
+            const sort = document.getElementById('sortFilter').value;
+
+            const filtered = (allProducts || []).filter(p => {
+                const title = (p.title ?? p.Title ?? '').toString().toLowerCase();
+                const description = (p.description ?? p.Description ?? '').toString().toLowerCase();
+                const cat = (p.category ?? p.Category ?? '').toString();
+
+                const matchesQuery = !q || title.includes(q) || description.includes(q);
+                const matchesCategory = !category || category === '' || cat.toLowerCase() === category.toLowerCase();
+
+                return matchesQuery && matchesCategory;
+            });
+
+            // Sort the filtered results
+            filtered.sort((a, b) => {
+                if (sort === 'price-low') {
+                    return (a.price ?? a.Price ?? 0) - (b.price ?? b.Price ?? 0);
+                } else if (sort === 'price-high') {
+                    return (b.price ?? b.Price ?? 0) - (a.price ?? a.Price ?? 0);
+                } else {
+                    // Default to newest first (assuming date_created is available and in proper format)
+                    return (b.date_created?.seconds || 0) - (a.date_created?.seconds || 0);
+                }
+            });
+
+            // Store filtered products
+            currentFilteredProducts = filtered;
+            displayProducts();
+
+            if (updateUrl) {
+                const params = new URLSearchParams();
+                if (q) params.set('q', q);
+                if (category) params.set('category', category);
+                const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+                history.replaceState(null, '', newUrl);
+            }
+        }
+
+        function displayProducts() {
+            const container = document.getElementById('listingsContainer');
+            
+            if (!currentFilteredProducts || currentFilteredProducts.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <h3>No listings found</h3>
+                        <p>Try adjusting your filters or search term</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Group products by category
+            const productsByCategory = {};
+            currentFilteredProducts.forEach(product => {
+                const cat = product.category ?? product.Category ?? 'Uncategorized';
+                if (!productsByCategory[cat]) {
+                    productsByCategory[cat] = [];
+                }
+                productsByCategory[cat].push(product);
+            });
+
+            // Clear container
+            container.innerHTML = '';
+
+            // Display each category section
+            Object.keys(productsByCategory).sort().forEach(categoryName => {
+                const categoryProducts = productsByCategory[categoryName];
+                const isExpanded = expandedCategories.has(categoryName);
+                const itemsToShow = isExpanded ? categoryProducts : categoryProducts.slice(0, ITEMS_PER_CATEGORY);
+                
+                // Create category section
+                const categorySection = document.createElement('div');
+                categorySection.className = 'category-section';
+                
+                // Category header with title and "See more" link
+                const categoryHeader = document.createElement('div');
+                categoryHeader.className = 'category-header';
+                categoryHeader.innerHTML = `
+                    <h2 class="category-title">${categoryName}</h2>
+                    ${categoryProducts.length > ITEMS_PER_CATEGORY ? `
+                        <a href="#" class="category-see-more" onclick="toggleCategory('${categoryName}'); return false;">
+                            ${isExpanded ? 'Show less' : `See more '${categoryName}'`}
+                            <i class="bi ${isExpanded ? 'bi-chevron-up' : 'bi-chevron-right'}"></i>
+                        </a>
+                    ` : ''}
+                `;
+                categorySection.appendChild(categoryHeader);
+
+                // Category grid
+                const categoryGrid = document.createElement('div');
+                categoryGrid.className = 'category-grid';
+                
+                itemsToShow.forEach(product => {
+                    const card = createProductCard(product);
+                    categoryGrid.appendChild(card);
+                });
+
+                categorySection.appendChild(categoryGrid);
+                container.appendChild(categorySection);
+            });
+
+            console.log(`📊 Displaying products grouped by ${Object.keys(productsByCategory).length} categories`);
+        }
+
+        function toggleCategory(categoryName) {
+            if (expandedCategories.has(categoryName)) {
+                expandedCategories.delete(categoryName);
+            } else {
+                expandedCategories.add(categoryName);
+            }
+            displayProducts();
+        }
+        
+        window.toggleCategory = toggleCategory;
+
+        // re-use existing client-side helpers
+        function createProductCard(product = {}) {
+            const id = product.id ?? product.Id;
+            const title = product.title ?? product.Title;
+            const description = product.description ?? product.Description;
+            const price = product.price ?? product.Price;
+            const category = product.category ?? product.Category;
+            const condition = product.condition ?? product.Condition ?? 'New';
+            const imageUrl = product.imageUrl ?? product.image_url ?? product.ImageUrl ?? 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const sellerName = product.full_name ?? product.SellerFullName ?? product.seller_name ?? product.username ?? product.SellerUsername ?? 'Unknown Seller';
+            const sellerUsername = product.username ?? product.SellerUsername ?? product.user_email ?? '';
+            const sellerId = product.user_id ?? product.SellerUserId ?? '';
+            const sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+
+            const card = document.createElement('div');
+            card.className = 'listing-card';
+            card.id = `listing-${id}`;
+            card.setAttribute('data-category', category || '');
+            card.setAttribute('data-title', title || '');
+            card.setAttribute('data-description', description || '');
+
+            const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
+
+            const html = `
+                <div class="listing-image-wrapper">
+                    <img src="${imageUrl}" alt="${title || 'Product'}" class="listing-image" onclick="openProductDetail('${id}')" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                    <span class="condition-badge badge-${conditionClass}">${condition}</span>
+                    <button class="btn-heart" id="heart-${id}" onclick="toggleSaveProduct('${id}')" title="Save item">
+                        <i class="bi bi-heart"></i>
+                    </button>
+                </div>
+                <div class="listing-seller-info">
+                    <div class="seller-avatar"><span class="avatar-initial">${sellerInitial}</span></div>
+                    <div class="seller-details">
+                        <p class="seller-name">${sellerName}</p>
+                        <p class="seller-username">${sellerUsername}</p>
+                    </div>
+                    <a href="/Home/SellerProfile?id=${sellerId}&name=${encodeURIComponent(sellerName)}&username=${encodeURIComponent(sellerUsername)}" class="seller-link" title="View seller profile"></a>
+                </div>
+                <div class="listing-body">
+                    <h3 class="listing-title">${title || 'Untitled'}</h3>
+                    <p class="listing-description">${(description || 'No description available').substring(0, 80)}${(description || '').length > 80 ? '...' : ''}</p>
+                    <p class="listing-category">${category || 'Uncategorized'}</p>
+                    <p class="listing-price">₱${parseFloat(price || 0).toFixed(2)}</p>
+                </div>
+                <div class="listing-buttons">
+                    <button class="btn-message" onclick="handleCardMessage('${id}')">Message</button>
+                    <button class="btn-select" onclick="handleCardSelect('${id}')">Select</button>
+                </div>
+            `;
+
+            card.innerHTML = html;
+            return card;
+        }
+
+        function openProductDetail(productId) {
+            const product = allProducts.find(p => (p.id && p.id == productId) || (p.Id && p.Id == productId));
+            if (!product) return;
+
+            const condition = product.condition ?? product.Condition ?? 'New';
+            const sellerName = product.full_name ?? product.SellerFullName ?? 'Unknown Seller';
+            const sellerUsername = product.username ?? product.SellerUsername ?? '';
+            const sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+            const imageUrl = product.imageUrl ?? product.image_url ?? product.ImageUrl ?? 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
+
+            document.getElementById('productTitle').textContent = product.title ?? product.Title ?? 'Product';
+            document.getElementById('detailProductTitle').textContent = product.title ?? product.Title ?? 'Product';
+            document.getElementById('detailProductCategory').textContent = product.category ?? product.Category ?? 'Uncategorized';
+            document.getElementById('detailProductPrice').textContent = `₱${parseFloat(product.price ?? product.Price ?? 0).toFixed(2)}`;
+            document.getElementById('detailProductDescription').textContent = product.description ?? product.Description ?? 'No description available';
+            document.getElementById('detailProductImage').src = imageUrl;
+            document.getElementById('detailConditionBadge').textContent = condition;
+            document.getElementById('detailConditionBadge').className = `condition-badge badge-${conditionClass}`;
+            document.getElementById('detailConditionText').textContent = condition;
+            document.getElementById('detailSellerName').textContent = sellerName;
+            document.getElementById('detailSellerUsername').textContent = sellerUsername;
+            document.getElementById('detailSellerAvatar').textContent = sellerInitial;
+
+            const createdDate = product.date_created ? (product.date_created.seconds ? new Date(product.date_created.seconds * 1000).toLocaleDateString() : new Date(product.date_created).toLocaleDateString()) : new Date().toLocaleDateString();
+            document.getElementById('detailPostedDate').textContent = createdDate;
+
+            currentProductDetail = { id: productId, title: product.title ?? product.Title, sellerName, sellerUsername };
+            const modal = new bootstrap.Modal(document.getElementById('productDetailModal'));
+            modal.show();
+        }
+
+        // Check if user is logged in
+        function isLoggedIn() {
+            const userId = '@(Context.Session.GetString("UserId") ?? "")';
+            return userId && userId.length > 0;
+        }
+
+        // Redirect to login if not logged in
+        function requireLogin(action) {
+            if (!isLoggedIn()) {
+                alert('Please login to ' + action);
+                window.location.href = '/Home/Login';
+                return false;
+            }
+            return true;
+        }
+
+        async function messageSeller() { 
+            if (!currentProductDetail) return;
+            
+            // Check if logged in first
+            if (!requireLogin('message the seller')) return;
+            
+            // Get current user info from session (passed from server)
+            const buyerId = '@(Context.Session.GetString("UserId") ?? "")';
+            const buyerName = '@(Context.Session.GetString("FullName") ?? Context.Session.GetString("Username") ?? "")';
+            
+            // Find the full product to get seller info
+            const product = allProducts.find(p => (p.id && p.id == currentProductDetail.id) || (p.Id && p.Id == currentProductDetail.id));
+            if (!product) {
+                alert('Product not found');
+                return;
+            }
+            
+            const sellerId = product.user_id ?? product.SellerUserId ?? '';
+            const sellerName = product.full_name ?? product.SellerFullName ?? product.seller_name ?? 'Seller';
+            const listingId = (product.id ?? product.Id ?? '').toString();
+            const listingTitle = product.title ?? product.Title ?? 'Item';
+            
+            if (!sellerId) {
+                alert('Seller information not available');
+                return;
+            }
+            
+            if (buyerId === sellerId) {
+                alert('You cannot message yourself');
+                return;
+            }
+            
+            // Use client-side Firebase to start conversation
+            if (typeof window.firebaseStartConversation === 'function') {
+                try {
+                    const result = await window.firebaseStartConversation(
+                        buyerId, buyerName, sellerId, sellerName, listingId, listingTitle
+                    );
+                    
+                    if (result.success && result.conversation) {
+                        // Redirect to messages page with conversation ID
+                        window.location.href = '/Home/Messages?conversationId=' + result.conversation.id;
+                    } else {
+                        alert('Failed to start conversation: ' + (result.message || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Error starting conversation:', error);
+                    alert('Error starting conversation. Please try again.');
+                }
+            } else {
+                alert('Messaging service not available. Please refresh the page.');
+            }
+        }
+
+        function selectProduct() { 
+            if (!requireLogin('select this product')) return;
+            if (currentProductDetail) alert(`Selected: ${currentProductDetail.title}`); 
+        }
+
+        // Handle card button clicks with login check
+        function handleCardMessage(productId) {
+            if (!requireLogin('message the seller')) return;
+            openProductDetail(productId);
+            setTimeout(() => messageSeller(), 500);
+        }
+
+        function handleCardSelect(productId) {
+            if (!requireLogin('select this product')) return;
+            openProductDetail(productId);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initializeBrowse);
+    </script>
+}

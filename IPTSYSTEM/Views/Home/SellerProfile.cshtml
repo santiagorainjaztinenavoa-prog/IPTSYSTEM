@@ -1,0 +1,587 @@
+@model IPTSYSTEM.Models.Listing
+@{
+    ViewData["Title"] = "Seller Profile";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/seller-profile.css" asp-append-version="true" />
+}
+
+<!-- Seller Profile Page -->
+<section class="seller-profile-page">
+    <div class="container">
+        <!-- Seller Header -->
+        <div class="seller-header">
+            <div class="seller-card-large">
+                <div class="seller-avatar-large">
+                    <span class="avatar-initial-large" id="sellerInitial">U</span>
+                </div>
+                <div class="seller-info-large">
+                <h1 id="sellerName" class="seller-name-large">Seller Name</h1>
+                <p id="sellerUsernameDisplay" class="seller-username-large"></p>
+                <a href="#" id="sellerProfileDetailsLink" class="profile-username-link">Profile details <i class="bi bi-chevron-right"></i></a>
+                    <div class="seller-stats">
+                        <div class="stat">
+                            <span class="stat-value" id="productCount">0</span>
+                            <span class="stat-label">Products</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="ratingValue">4.5</span>
+                            <span class="stat-label">Rating</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="btn-message-seller" id="messageBtn">
+                        <i class="bi bi-chat-dots"></i>
+                        Message
+                    </button>
+                    <button class="btn-follow-seller" id="followBtn">
+                        <i class="bi bi-person-plus"></i>
+                        Follow
+                    </button>
+                    <button class="btn btn-outline-secondary" id="aboutBtn">
+                        <i class="bi bi-info-circle"></i>
+                        About
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Tabs Section -->
+        <div class="profile-tabs-section">
+            <div class="d-flex justify-content-between align-items-center" style="padding: 0 40px;">
+                <div class="profile-tabs">
+                    <button class="profile-tab active" data-tab="listings" onclick="switchSellerTab('listings')">Listings</button>
+                    <button class="profile-tab" data-tab="reviews" onclick="switchSellerTab('reviews')">Reviews</button>
+                </div>
+                <div class="view-controls" id="listingsControls">
+                    <select id="sortSelect" class="sort-select" onchange="changeSortOrder()">
+                        <option value="newest">Newest</option>
+                        <option value="price-low">Price: Low to High</option>
+                        <option value="price-high">Price: High to Low</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="profile-content-section">
+            <!-- Listings Tab -->
+            <div class="tab-content active" id="listingsContent">
+                <div class="seller-products-grid" id="sellerProductsGrid">
+                    <div class="loading-spinner">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading products...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reviews Tab -->
+            <div class="tab-content" id="reviewsContent">
+                <!-- Add Review Form (Only for Buyers) -->
+                <div class="add-review-section" id="addReviewSection" style="display: none;">
+                    <h3 class="mb-3">Write a Review</h3>
+                    <div class="review-form-card">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Rating *</label>
+                            <div class="star-rating">
+                                <i class="bi bi-star-fill star" data-rating="1"></i>
+                                <i class="bi bi-star-fill star" data-rating="2"></i>
+                                <i class="bi bi-star-fill star" data-rating="3"></i>
+                                <i class="bi bi-star-fill star" data-rating="4"></i>
+                                <i class="bi bi-star-fill star" data-rating="5"></i>
+                            </div>
+                            <input type="hidden" id="reviewRating" value="0">
+                        </div>
+                        <div class="mb-3">
+                            <label for="reviewComment" class="form-label fw-bold">Comment</label>
+                            <textarea class="form-control" id="reviewComment" rows="4" placeholder="Share your experience with this seller..."></textarea>
+                        </div>
+                        <button class="btn btn-primary" onclick="submitReview()">
+                            <i class="bi bi-send me-2"></i>Submit Review
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Reviews List -->
+                <div class="reviews-list-section">
+                    <h3 class="mb-3">Customer Reviews</h3>
+                    <div id="reviewsList">
+                        <div class="loading-state">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading reviews...</span>
+                            </div>
+                            <p>Loading reviews...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- About Modal -->
+<div class="modal fade" id="aboutModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutTitle">About</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="mb-3">Account details</h6>
+        <ul class="list-unstyled d-flex flex-column gap-2">
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-calendar"></i> <span id="joinedText">Joined �</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> <span id="socialText">0 Followers  �  0 Following</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> <span id="locationText">�</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/firebase-client.js" type="module"></script>
+    <script src="~/js/seller-products.js"></script>
+    <script>
+        // Get seller data from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const sellerId = urlParams.get('id');
+        const sellerName = urlParams.get('name');
+        const sellerUsername = urlParams.get('username');
+        const sellerLocation = urlParams.get('location');
+
+        const atSign = String.fromCharCode(64);
+
+        // Initialize seller profile
+        async function initializeSellerProfile() {
+            if (!sellerId) {
+                document.getElementById('sellerProductsGrid').innerHTML = '<p class="error">No seller selected</p>';
+                return;
+            }
+
+            try {
+                // Display seller info
+                document.getElementById('sellerName').textContent = sellerName || 'Seller';
+                const usernameDisplay = (sellerUsername || sellerId);
+                document.getElementById('sellerUsernameDisplay').textContent = atSign + usernameDisplay;
+                const initial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
+                document.getElementById('sellerInitial').textContent = initial;
+
+                // About title
+                document.getElementById('aboutTitle').textContent = 'About ' + atSign + usernameDisplay;
+
+                // Fetch seller products
+                const products = await window.sellerProductsManager.fetchSellerProducts(sellerId);
+                document.getElementById('productCount').textContent = products.length;
+
+                // Joined text based on earliest product date as a proxy
+                let joinedText = 'Joined recently';
+                if (products && products.length > 0) {
+                    const dates = products.map(p => {
+                        const d = p.date_created || p.created_at || p.CreatedDate;
+                        if (!d) return null;
+                        if (d && d.seconds) return new Date(d.seconds * 1000);
+                        return new Date(d);
+                    }).filter(Boolean);
+                    if (dates.length) {
+                        const earliest = new Date(Math.min.apply(null, dates));
+                        joinedText = formatRelativeJoin(earliest);
+                    }
+                }
+                document.getElementById('joinedText').textContent = joinedText;
+
+                // Location
+                document.getElementById('locationText').textContent = sellerLocation || 'Unknown City';
+
+                if (products.length === 0) {
+                    document.getElementById('sellerProductsGrid').innerHTML = 
+                        '<p class="no-products">This seller has no products yet</p>';
+                    return;
+                }
+
+                // Display products
+                displaySellerProducts(products);
+            } catch (error) {
+                console.error('Error initializing seller profile:', error);
+                document.getElementById('sellerProductsGrid').innerHTML = 
+                    '<p class="error">Error loading seller products</p>';
+            }
+        }
+
+        function formatRelativeJoin(date) {
+            const now = new Date();
+            const diffMs = now - date;
+            const minutes = Math.floor(diffMs / 60000);
+            const days = Math.floor(minutes / (60 * 24));
+            const months = Math.floor(days / 30);
+            const remDays = days - months * 30;
+            return 'Joined ' + months + 'm ' + remDays + 'd';
+        }
+
+        function displaySellerProducts(products) {
+            const grid = document.getElementById('sellerProductsGrid');
+            grid.innerHTML = '';
+
+            products.forEach(product => {
+                const card = createProductCard(product);
+                grid.appendChild(card);
+            });
+        }
+
+        function createProductCard(product) {
+            const conditionClass = ((product.condition || 'new') + '').toLowerCase().replace(' ', '-');
+            const imageSrc = product.imageUrl || product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const title = product.title || 'Untitled';
+            const category = product.category || 'Uncategorized';
+            const priceText = '₱' + parseFloat(product.price || 0).toFixed(2);
+            const productId = product.id || product.product_id;
+
+            const html = 
+                '<div class="product-image-container">' +
+                    '<img src="' + imageSrc + '" alt="' + title + '" class="product-image" onerror="this.src=\'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop\'">' +
+                    '<span class="condition-badge badge-' + conditionClass + '">' + (product.condition || 'New') + '</span>' +
+                '</div>' +
+                '<div class="product-info">' +
+                    '<h3 class="product-title">' + title + '</h3>' +
+                    '<p class="product-category">' + category + '</p>' +
+                    '<p class="product-price">' + priceText + '</p>' +
+                '</div>' +
+                '<button class="btn-view-product" onclick="viewProduct(\'' + productId + '\')">' +
+                    'View' +
+                '</button>';
+
+            const card = document.createElement('div');
+            card.className = 'seller-product-card';
+            card.innerHTML = html;
+            return card;
+        }
+
+        function changeSortOrder() {
+            const sortSelect = document.getElementById('sortSelect');
+            const order = sortSelect.value;
+            const products = window.sellerProductsManager.getSellerProducts();
+            
+            let sorted;
+            if (order === 'newest') {
+                sorted = window.sellerProductsManager.sortByDate(products, 'newest');
+            } else if (order === 'price-low') {
+                sorted = window.sellerProductsManager.sortByPrice(products, 'asc');
+            } else if (order === 'price-high') {
+                sorted = window.sellerProductsManager.sortByPrice(products, 'desc');
+            }
+
+            displaySellerProducts(sorted);
+        }
+
+        function viewProduct(productId) {
+            // Redirect to Browse page with product ID to open modal
+            window.location.href = '/Home/Browse?productId=' + productId;
+        }
+
+        function followSeller() {
+            const btn = document.getElementById('followBtn');
+            const isFollowing = btn.classList.toggle('following');
+            btn.innerHTML = isFollowing ? 
+                '<i class="bi bi-person-check"></i> Following' : 
+                '<i class="bi bi-person-plus"></i> Follow';
+        }
+
+        document.getElementById('followBtn').addEventListener('click', followSeller);
+        document.getElementById('aboutBtn').addEventListener('click', () => {
+            const modal = new bootstrap.Modal(document.getElementById('aboutModal'));
+            modal.show();
+        });
+        document.getElementById('messageBtn').addEventListener('click', messageSellerFromProfile);
+        document.getElementById('sellerProfileDetailsLink').addEventListener('click', (e) => { e.preventDefault(); const modal = new bootstrap.Modal(document.getElementById('aboutModal')); modal.show(); });
+        
+        // Message seller from profile
+        async function messageSellerFromProfile() {
+            const currentUserId = '@(Context.Session.GetString("UserId") ?? "")';
+            const currentUserName = '@(Context.Session.GetString("FullName") ?? Context.Session.GetString("Username") ?? "")';
+            
+            if (!currentUserId) {
+                alert('Please login to message this seller');
+                window.location.href = '/Home/Login';
+                return;
+            }
+            
+            if (currentUserId === sellerId) {
+                alert('You cannot message yourself');
+                return;
+            }
+            
+            // Use Firebase to start conversation (no specific listing)
+            if (typeof window.firebaseStartConversation === 'function') {
+                try {
+                    const result = await window.firebaseStartConversation(
+                        currentUserId, 
+                        currentUserName, 
+                        sellerId, 
+                        sellerName, 
+                        '', 
+                        'General Inquiry'
+                    );
+                    
+                    if (result.success && result.conversation) {
+                        window.location.href = '/Home/Messages?conversationId=' + result.conversation.id;
+                    } else {
+                        alert('Failed to start conversation: ' + (result.message || 'Unknown error'));
+                    }
+                } catch (error) {
+                    console.error('Error starting conversation:', error);
+                    alert('Error starting conversation. Please try again.');
+                }
+            } else {
+                alert('Messaging feature not available. Please refresh the page.');
+            }
+        }
+
+        // Tab switching functionality
+        function switchSellerTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.profile-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            
+            // Update tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + 'Content').classList.add('active');
+            
+            // Show/hide sort controls (only show on Listings tab)
+            const sortControls = document.getElementById('listingsControls');
+            if (sortControls) {
+                sortControls.style.display = tabName === 'listings' ? 'flex' : 'none';
+            }
+            
+            // Load reviews when switching to Reviews tab
+            if (tabName === 'reviews') {
+                loadReviews();
+            }
+        }
+        
+        window.switchSellerTab = switchSellerTab;
+
+        // ========== REVIEWS FUNCTIONALITY ==========
+        
+        let currentUserId = '@(Context.Session.GetString("UserId") ?? "")';
+        let currentUserType = '@(Context.Session.GetString("UserType") ?? "")';
+        let currentUserName = '@(Context.Session.GetString("FullName") ?? "")';
+        let currentUserUsername = '@(Context.Session.GetString("Username") ?? "")';
+        let selectedRating = 0;
+        
+        // Show/hide add review form based on user type
+        async function checkUserTypeAndShowReviewForm() {
+            const addReviewSection = document.getElementById('addReviewSection');
+            if (currentUserType.toLowerCase() === 'buyer' && currentUserId) {
+                addReviewSection.style.display = 'block';
+                setupStarRating();
+            } else {
+                addReviewSection.style.display = 'none';
+            }
+        }
+        
+        // Setup star rating click handlers
+        function setupStarRating() {
+            const stars = document.querySelectorAll('.star-rating .star');
+            stars.forEach(star => {
+                star.addEventListener('click', function() {
+                    selectedRating = parseInt(this.getAttribute('data-rating'));
+                    document.getElementById('reviewRating').value = selectedRating;
+                    updateStarDisplay(selectedRating);
+                });
+                
+                star.addEventListener('mouseenter', function() {
+                    const rating = parseInt(this.getAttribute('data-rating'));
+                    updateStarDisplay(rating);
+                });
+            });
+            
+            document.querySelector('.star-rating').addEventListener('mouseleave', function() {
+                updateStarDisplay(selectedRating);
+            });
+        }
+        
+        function updateStarDisplay(rating) {
+            const stars = document.querySelectorAll('.star-rating .star');
+            stars.forEach((star, index) => {
+                if (index < rating) {
+                    star.style.color = '#fbbf24';
+                } else {
+                    star.style.color = '#d1d5db';
+                }
+            });
+        }
+        
+        // Submit review
+        async function submitReview() {
+            if (!currentUserId) {
+                alert('Please login to submit a review');
+                window.location.href = '/Home/Login';
+                return;
+            }
+            
+            if (currentUserType.toLowerCase() !== 'buyer') {
+                alert('Only buyers can submit reviews');
+                return;
+            }
+            
+            const rating = parseInt(document.getElementById('reviewRating').value);
+            const comment = document.getElementById('reviewComment').value.trim();
+            
+            if (rating === 0) {
+                alert('Please select a rating');
+                return;
+            }
+            
+            try {
+                const result = await window.firebaseAddReview({
+                    sellerId: sellerId,
+                    sellerName: sellerName,
+                    buyerId: currentUserId,
+                    buyerName: currentUserName,
+                    buyerUsername: currentUserUsername,
+                    rating: rating,
+                    comment: comment
+                });
+                
+                if (result.success) {
+                    alert('Review submitted successfully!');
+                    document.getElementById('reviewComment').value = '';
+                    document.getElementById('reviewRating').value = '0';
+                    selectedRating = 0;
+                    updateStarDisplay(0);
+                    loadReviews();
+                } else {
+                    alert('Failed to submit review: ' + (result.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error submitting review:', error);
+                alert('Error submitting review. Please try again.');
+            }
+        }
+        
+        window.submitReview = submitReview;
+        
+        // Load reviews for this seller
+        async function loadReviews() {
+            const reviewsList = document.getElementById('reviewsList');
+            reviewsList.innerHTML = '<div class="loading-state"><div class="spinner-border" role="status"></div><p>Loading reviews...</p></div>';
+            
+            try {
+                await checkUserTypeAndShowReviewForm();
+                
+                const result = await window.firebaseGetSellerReviews(sellerId);
+                
+                if (result.success && result.reviews && result.reviews.length > 0) {
+                    displayReviews(result.reviews);
+                } else {
+                    reviewsList.innerHTML = `
+                        <div class="empty-tab-state">
+                            <i class="bi bi-star" style="font-size: 3rem; color: #ccc;"></i>
+                            <h4>No Reviews Yet</h4>
+                            <p>Be the first to review this seller</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading reviews:', error);
+                reviewsList.innerHTML = `
+                    <div class="empty-tab-state">
+                        <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #dc3545;"></i>
+                        <h4>Error Loading Reviews</h4>
+                        <p>${error.message || 'Please try again later'}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayReviews(reviews) {
+            const reviewsList = document.getElementById('reviewsList');
+            reviewsList.innerHTML = '';
+            
+            reviews.forEach(review => {
+                const reviewCard = createReviewCard(review);
+                reviewsList.appendChild(reviewCard);
+            });
+        }
+        
+        function createReviewCard(review) {
+            const card = document.createElement('div');
+            card.className = 'review-card';
+            card.id = `review-${review.id}`;
+            
+            const buyerInitial = review.buyer_name ? review.buyer_name.charAt(0).toUpperCase() : 'U';
+            const createdDate = review.created_at ? new Date(review.created_at.seconds * 1000).toLocaleDateString() : 'Recently';
+            
+            // Create stars
+            let starsHTML = '';
+            for (let i = 0; i < 5; i++) {
+                if (i < review.rating) {
+                    starsHTML += '<i class="bi bi-star-fill" style="color: #fbbf24;"></i>';
+                } else {
+                    starsHTML += '<i class="bi bi-star" style="color: #d1d5db;"></i>';
+                }
+            }
+            
+            // Show delete button only if current user is the review author
+            const canDelete = currentUserId === review.buyer_id;
+            
+            card.innerHTML = `
+                <div class="review-header">
+                    <div class="review-user-info">
+                        <div class="review-avatar">${buyerInitial}</div>
+                        <div class="review-user-details">
+                            <h5 class="review-user-name">${review.buyer_name || 'Anonymous'}</h5>
+                            <p class="review-username">@@${review.buyer_username || 'user'}</p>
+                        </div>
+                    </div>
+                    <div class="review-actions">
+                        ${canDelete ? `<button class="btn-delete-review" onclick="deleteReview('${review.id}')" title="Delete review"><i class="bi bi-trash"></i></button>` : ''}
+                    </div>
+                </div>
+                <div class="review-rating">
+                    ${starsHTML}
+                    <span class="review-date">${createdDate}</span>
+                </div>
+                <div class="review-comment">
+                    ${review.comment || '<em>No comment</em>'}
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        async function deleteReview(reviewId) {
+            if (!confirm('Are you sure you want to delete this review?')) {
+                return;
+            }
+            
+            try {
+                const result = await window.firebaseDeleteReview(reviewId, currentUserId);
+                
+                if (result.success) {
+                    alert('Review deleted successfully');
+                    loadReviews();
+                } else {
+                    alert('Failed to delete review: ' + (result.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error deleting review:', error);
+                alert('Error deleting review. Please try again.');
+            }
+        }
+        
+        window.deleteReview = deleteReview;
+
+        // Initialize on page load
+        window.addEventListener('load', initializeSellerProfile);
+    </script>
+}
+

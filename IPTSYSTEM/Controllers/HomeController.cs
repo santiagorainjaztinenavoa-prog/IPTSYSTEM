@@ -1,86 +1,392 @@
 using System.Diagnostics;
 using IPTSYSTEM.Models;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
+using IPTSYSTEM.Data;
+using Microsoft.EntityFrameworkCore;
+using IPTSYSTEM.Firebase;
+using Microsoft.AspNetCore.Authorization;
+using System.Text.Json;
 
 namespace IPTSYSTEM.Controllers
 {
-    public class HomeController : Controller
+    public partial class HomeController : Controller
     {
+                private static string NormalizeCategoryName(string name)
+                {
+                    if (string.IsNullOrWhiteSpace(name)) return name;
+                    var trimmed = name.Trim();
+                    if (string.Equals(trimmed, "Furniture", StringComparison.OrdinalIgnoreCase)) return "Vehicles";
+                    return trimmed;
+                }
+        private record RegisteredUser(string Username, string PasswordHash, string UserType, string Email, string FullName);
+        private static readonly List<RegisteredUser> _registeredUsers = new();
+        private static string HashPassword(string pwd)
+        {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(pwd ?? string.Empty);
+            var hash = sha.ComputeHash(bytes);
+            return Convert.ToHexString(hash);
+        }
         private readonly ILogger<HomeController> _logger;
-        // In-memory storage for demo - replace with database in production
-        private static List<Listing> _listings = new List<Listing>
-        {
-     new Listing { Id = 1, Title = "iPhone 13 Pro Max", Description = "Barely used iPhone 13 Pro Max. 256GB, Pacific Blue. Comes with original box and charger.", Price = 899, Category = "Electronics", Condition = "Like New", ImageUrl = "https://images.unsplash.com/photo-1632661674596-df8be070a5c5?w=500&h=500&fit=crop" },
-  new Listing { Id = 2, Title = "Vintage Denim Jacket", Description = "Classic 90s style denim jacket, size M. Perfect condition with minimal wear.", Price = 45, Category = "Fashion", Condition = "Good", ImageUrl = "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500&h=500&fit=crop" },
-        new Listing { Id = 3, Title = "Modern Table Lamp", Description = "Beautiful minimalist table lamp with adjustable brightness. White and gold finish.", Price = 35, Category = "Home & Living", Condition = "New", ImageUrl = "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&h=500&fit=crop" },
-      new Listing { Id = 4, Title = "MacBook Pro M2", Description = "2023 MacBook Pro with M2 chip, 16GB RAM, 512GB SSD. Space Gray, excellent condition.", Price = 1499, Category = "Electronics", Condition = "Like New", ImageUrl = "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=500&h=500&fit=crop" },
-    new Listing { Id = 5, Title = "Leather Crossbody Bag", Description = "Genuine leather crossbody bag in tan. Perfect everyday bag with adjustable strap.", Price = 65, Category = "Fashion", Condition = "Good", ImageUrl = "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=500&h=500&fit=crop" },
-  new Listing { Id = 6, Title = "Wireless Headphones", Description = "Premium noise-canceling headphones. Black, barely used with original case and cables.", Price = 199, Category = "Electronics", Condition = "Like New", ImageUrl = "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop" }
-        };
+        private readonly AppDbContext _db;
+        private readonly FirestoreService _firestore;
 
-   // In-memory message storage
-        private static List<Conversation> _conversations = new List<Conversation>
-        {
-   new Conversation { Id = 1, OtherUserId = "user1", OtherUserName = "Tech Trader", OtherUserAvatar = "https://ui-avatars.com/api/?name=Tech+Trader&background=ff6b9d&color=fff&size=48", IsOnline = true, LastMessage = "Can you do $850?", LastMessageTime = DateTime.Now.AddMinutes(-10) },
-     new Conversation { Id = 2, OtherUserId = "user2", OtherUserName = "Vintage Vibe", OtherUserAvatar = "https://ui-avatars.com/api/?name=Vintage+Vibe&background=fbbf24&color=fff&size=48", IsOnline = true, LastMessage = "Yes, it's available!", LastMessageTime = DateTime.Now.AddMinutes(-15) },
-          new Conversation { Id = 3, OtherUserId = "user3", OtherUserName = "Home Decor Pro", OtherUserAvatar = "https://ui-avatars.com/api/?name=Home+Decor+Pro&background=f97316&color=fff&size=48", IsOnline = false, LastMessage = "Thanks for your interest", LastMessageTime = DateTime.Now.AddDays(-1) },
-       new Conversation { Id = 0, OtherUserId = "bot", OtherUserName = "AI Assistant", OtherUserAvatar = "https://ui-avatars.com/api/?name=AI&background=8b5cf6&color=fff&size=48", IsOnline = true, LastMessage = "Hi! How can I help you today?", LastMessageTime = DateTime.Now }
- };
+        private static List<Listing> _listings = new List<Listing>();
 
-     private static Dictionary<int, List<Message>> _messages = new Dictionary<int, List<Message>>
+        public HomeController(ILogger<HomeController> logger, AppDbContext db, FirestoreService firestore)
         {
-     [1] = new List<Message>
-        {
-                new Message { Id = 1, ConversationId = 1, SenderId = "user1", SenderName = "Tech Trader", Content = "Hi! Is this still available?", Timestamp = DateTime.Now.AddMinutes(-30) },
-     new Message { Id = 2, ConversationId = 1, SenderId = "me", SenderName = "You", Content = "Yes, it's still available! Would you like to know more about it?", Timestamp = DateTime.Now.AddMinutes(-25) },
-                new Message { Id = 3, ConversationId = 1, SenderId = "user1", SenderName = "Tech Trader", Content = "Can you do $850?", Timestamp = DateTime.Now.AddMinutes(-10) }
-      },
-     [0] = new List<Message>
-     {
-         new Message { Id = 1, ConversationId = 0, SenderId = "bot", SenderName = "AI Assistant", Content = "?? Hello! I'm your AI shopping assistant. I can help you with:\n\n?? Product recommendations\n?? Price negotiations\n?? Listing questions\n? General marketplace info\n\nHow can I assist you today?", Timestamp = DateTime.Now.AddMinutes(-1), IsFromBot = true }
- }
-        };
-
-     public HomeController(ILogger<HomeController> logger)
-   {
-_logger = logger;
-  }
-
-   public IActionResult Index()
-{
-  // Default route renders the renamed Landing view
-        return View("Landing");
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _db = db ?? throw new ArgumentNullException(nameof(db));
+            _firestore = firestore ?? throw new ArgumentNullException(nameof(firestore));
+            
+            // ? FIX: Load listings from Firestore on startup
+            if (_firestore.IsInitialized && _listings.Count == 0)
+            {
+                try
+                {
+                    // Load listings from Firestore into memory cache
+                    var task = _firestore.GetAllListingsAsync();
+                    task.Wait(); // Synchronous wait for startup
+                    var firestoreListings = task.Result;
+                    
+                    if (firestoreListings != null && firestoreListings.Count > 0)
+                    {
+                        _listings = firestoreListings;
+                        _logger.LogInformation("? Loaded {Count} listings from Firestore on startup", _listings.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load listings from Firestore on startup");
+                }
+            }
         }
 
-        // Explicit actions for your renamed/added views
+        public IActionResult Index()
+        {
+            var latest = _listings.Where(l => l.IsActive)
+                                   .OrderByDescending(l => l.CreatedDate)
+                                   .Take(20)
+                                   .ToList();
+            return View("Landing", latest);
+        }
         public IActionResult Landing(string? q)
         {
-  ViewBag.Query = q;
-            return View();
-   }
-
-        public IActionResult Categories()
+            ViewBag.Query = q;
+            var latest = _listings.Where(l => l.IsActive)
+                                   .OrderByDescending(l => l.CreatedDate)
+                                   .Take(20)
+                                   .ToList();
+            return View(latest);
+        }
+        public async Task<IActionResult> Categories()
         {
-        return View();
-  }
+            try
+            {
+                List<Listing> sourceListings;
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    // Try to load from Firestore for accurate counts
+                    var remote = await _firestore.GetAllListingsAsync();
+                    sourceListings = remote ?? new List<Listing>();
 
-        public IActionResult Mylisting()
+                    // Mirror into server _listings for other server-side usage (best-effort)
+                    try
+                    {
+                        // replace server cache with remote authoritative list
+                        _listings = remote ?? new List<Listing>();
+                    }
+                    catch { /* non-fatal */ }
+                }
+                else
+                {
+                    sourceListings = _listings.Where(l => l.IsActive).ToList();
+                }
+
+                var categories = new[] { "Electronics", "Fashion", "Home & Living", "Books", "Sports", "Toys & Games", "Vehicles", "Beauty" };
+                var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var cat in categories)
+                {
+                    counts[cat] = sourceListings.Count(l => l.IsActive && string.Equals(NormalizeCategoryName(l.Category), cat, StringComparison.OrdinalIgnoreCase));
+                }
+
+                ViewBag.CategoryCounts = counts;
+                return View();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed compute category counts from Firestore, falling back to server cache");
+                // fallback to previous behavior
+                var activeListings = _listings.Where(l => l.IsActive).ToList();
+                var categories = new[] { "Electronics", "Fashion", "Home & Living", "Books", "Sports", "Toys & Games", "Vehicles", "Beauty" };
+                var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var cat in categories)
+                {
+                    counts[cat] = activeListings.Count(l => string.Equals(NormalizeCategoryName(l.Category), cat, StringComparison.OrdinalIgnoreCase));
+                }
+                ViewBag.CategoryCounts = counts;
+                return View();
+            }
+        }
+        public async Task<IActionResult> Browse(string? category, string? q)
         {
-    return View(_listings.Where(l => l.IsActive).ToList());
-   }
+            try
+            {
+                List<Listing> listings;
 
-  public IActionResult Messages()
-      {
-         return View(_conversations);
+                // Load all active listings from Firestore
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    var firestoreListings = await _firestore.GetAllListingsAsync();
+                    listings = firestoreListings?.Where(l => l.IsActive).ToList() ?? new List<Listing>();
+
+                    // Refresh in-memory cache for Landing/Categories
+                    if (firestoreListings != null && firestoreListings.Count > 0)
+                    {
+                        _listings = firestoreListings;
+                    }
+                }
+                else
+                {
+                    listings = _listings.Where(l => l.IsActive).ToList();
+                }
+
+                // Filter: Sellers should not see their own items in Browse
+                var currentUserId = HttpContext.Session.GetString("UserId");
+                var currentUserType = HttpContext.Session.GetString("UserType");
+                if (!string.IsNullOrWhiteSpace(currentUserId) && string.Equals(currentUserType, "Seller", StringComparison.OrdinalIgnoreCase))
+                {
+                    listings = listings.Where(l => l.SellerUserId != currentUserId).ToList();
+                    _logger.LogInformation("Filtered out seller's own listings for user {UserId}", currentUserId);
+                }
+
+                // Filters
+                if (!string.IsNullOrWhiteSpace(category))
+                {
+                    listings = listings.Where(l => string.Equals(NormalizeCategoryName(l.Category), category, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    var query = q.ToLowerInvariant();
+                    listings = listings.Where(l => (l.Title?.ToLowerInvariant().Contains(query) ?? false) || (l.Description?.ToLowerInvariant().Contains(query) ?? false)).ToList();
+                }
+
+                // Sort
+                listings = listings.OrderByDescending(l => l.CreatedDate).ToList();
+
+                ViewBag.SelectedCategory = category ?? string.Empty;
+                ViewBag.Query = q ?? string.Empty;
+
+                _logger.LogInformation("Browse page showing {Count} listings", listings.Count);
+                return View(listings);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading Browse page");
+                ViewBag.SelectedCategory = category ?? string.Empty;
+                ViewBag.Query = q ?? string.Empty;
+                return View(new List<Listing>());
+            }
         }
 
-        // ========== AUTHENTICATION OPERATIONS ==========
-        
+        public IActionResult SellerProfile() => View();
+
+        // Profile - User's own profile with listings
         [HttpGet]
-        public IActionResult Login()
+        public async Task<IActionResult> Profile()
         {
-            return View(new LoginViewModel());
+            var model = new UserProfileViewModel
+            {
+                UserId = HttpContext.Session.GetString("UserId") ?? string.Empty,
+                Username = HttpContext.Session.GetString("Username") ?? string.Empty,
+                FullName = HttpContext.Session.GetString("FullName") ?? string.Empty,
+                AccountType = HttpContext.Session.GetString("UserType") ?? string.Empty,
+                Email = HttpContext.Session.GetString("Email") ?? string.Empty,
+                PhoneNumber = HttpContext.Session.GetString("PhoneNumber") ?? string.Empty,
+                Region = HttpContext.Session.GetString("Region") ?? string.Empty,
+                Province = HttpContext.Session.GetString("Province") ?? string.Empty,
+                City = HttpContext.Session.GetString("City") ?? string.Empty,
+                Barangay = HttpContext.Session.GetString("Barangay") ?? string.Empty,
+                PostalCode = HttpContext.Session.GetString("PostalCode") ?? string.Empty,
+                StreetAddress = HttpContext.Session.GetString("StreetAddress") ?? string.Empty,
+                AddressFull = HttpContext.Session.GetString("Address") ?? string.Empty,
+            };
+
+            try
+            {
+                // Attempt to enrich with Firestore profile if available
+                if (!string.IsNullOrWhiteSpace(model.UserId))
+                {
+                    var doc = await _firestore.GetUserAsync(model.UserId);
+                    if (doc != null)
+                    {
+                        model.RawFirestore = doc;
+                        if (doc.TryGetValue("full_name", out var fn) && fn is string s1 && !string.IsNullOrWhiteSpace(s1)) model.FullName = s1;
+                        if (doc.TryGetValue("email", out var em) && em is string s2 && !string.IsNullOrWhiteSpace(s2)) model.Email = s2;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Skipping Firestore user fetch");
+            }
+
+            return View(model);
         }
+
+        // Account Settings
+        [HttpGet]
+        public async Task<IActionResult> AccountSettings()
+        {
+            var model = new UserProfileViewModel
+            {
+                UserId = HttpContext.Session.GetString("UserId") ?? string.Empty,
+                Username = HttpContext.Session.GetString("Username") ?? string.Empty,
+                FullName = HttpContext.Session.GetString("FullName") ?? string.Empty,
+                AccountType = HttpContext.Session.GetString("UserType") ?? string.Empty,
+                Email = HttpContext.Session.GetString("Email") ?? string.Empty,
+                PhoneNumber = HttpContext.Session.GetString("PhoneNumber") ?? string.Empty,
+                Region = HttpContext.Session.GetString("Region") ?? string.Empty,
+                Province = HttpContext.Session.GetString("Province") ?? string.Empty,
+                City = HttpContext.Session.GetString("City") ?? string.Empty,
+                Barangay = HttpContext.Session.GetString("Barangay") ?? string.Empty,
+                PostalCode = HttpContext.Session.GetString("PostalCode") ?? string.Empty,
+                StreetAddress = HttpContext.Session.GetString("StreetAddress") ?? string.Empty,
+                AddressFull = HttpContext.Session.GetString("Address") ?? string.Empty,
+            };
+
+            try
+            {
+                // Attempt to enrich with Firestore profile if available
+                if (!string.IsNullOrWhiteSpace(model.UserId))
+                {
+                    var doc = await _firestore.GetUserAsync(model.UserId);
+                    if (doc != null)
+                    {
+                        model.RawFirestore = doc;
+                        if (doc.TryGetValue("full_name", out var fn) && fn is string s1 && !string.IsNullOrWhiteSpace(s1)) model.FullName = s1;
+                        if (doc.TryGetValue("first_name", out var fname) && fname is string s2 && !string.IsNullOrWhiteSpace(s2)) model.FirstName = s2;
+                        if (doc.TryGetValue("last_name", out var lname) && lname is string s3 && !string.IsNullOrWhiteSpace(s3)) model.LastName = s3;
+                        if (doc.TryGetValue("middle_name", out var mname) && mname is string s4 && !string.IsNullOrWhiteSpace(s4)) model.MiddleName = s4;
+                        if (doc.TryGetValue("email", out var em) && em is string s5 && !string.IsNullOrWhiteSpace(s5)) model.Email = s5;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Skipping Firestore user fetch");
+            }
+
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult UpdateProfile([FromBody] UserProfileUpdateRequest request)
+        {
+            try
+            {
+                if (request == null) return Json(new { success = false, message = "Invalid payload" });
+
+                // Update session values as our minimal persistence
+                if (!string.IsNullOrWhiteSpace(request.Username)) HttpContext.Session.SetString("Username", request.Username);
+                if (!string.IsNullOrWhiteSpace(request.FullName)) HttpContext.Session.SetString("FullName", request.FullName);
+                if (!string.IsNullOrWhiteSpace(request.PhoneNumber)) HttpContext.Session.SetString("PhoneNumber", request.PhoneNumber);
+
+                var uid = HttpContext.Session.GetString("UserId") ?? (HttpContext.Session.GetString("Username") ?? string.Empty);
+                var email = HttpContext.Session.GetString("Email") ?? string.Empty;
+
+                // Mirror to Firestore when possible (best-effort)
+                try
+                {
+                    _ = _firestore.MirrorUserAsync(uid, new
+                    {
+                        username = request.Username,
+                        full_name = request.FullName,
+                        first_name = request.FirstName,
+                        last_name = request.LastName,
+                        middle_name = request.MiddleName,
+                        email,
+                        phone_number = request.PhoneNumber,
+                        additional_emails = request.AdditionalEmails,
+                        additional_phones = request.AdditionalPhones,
+                        date_last_updated_server = DateTime.UtcNow
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "MirrorUserAsync failed (non-fatal)");
+                }
+
+                return Json(new { success = true, message = "Profile updated" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "UpdateProfile error");
+                return Json(new { success = false, message = "Server error" });
+            }
+        }
+
+        public class ChangePasswordRequest
+        {
+            public string? CurrentPassword { get; set; }
+            public string? NewPassword { get; set; }
+            public string? ConfirmPassword { get; set; }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult UpdatePassword([FromBody] ChangePasswordRequest req)
+        {
+            try
+            {
+                if (req == null) return Json(new { success = false, message = "Invalid payload" });
+                if (string.IsNullOrWhiteSpace(req.NewPassword) || req.NewPassword.Length < 6)
+                    return Json(new { success = false, message = "New password must be at least 6 characters" });
+                if (req.NewPassword != req.ConfirmPassword)
+                    return Json(new { success = false, message = "Passwords do not match" });
+
+                var username = HttpContext.Session.GetString("Username") ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(username))
+                {
+                    var idx = _registeredUsers.FindIndex(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase));
+                    if (idx >= 0)
+                    {
+                        var u = _registeredUsers[idx];
+                        if (!string.IsNullOrWhiteSpace(req.CurrentPassword))
+                        {
+                            var curHash = HashPassword(req.CurrentPassword);
+                            if (!string.Equals(curHash, u.PasswordHash, StringComparison.Ordinal))
+                                return Json(new { success = false, message = "Current password is incorrect" });
+                        }
+                        var updated = new RegisteredUser(u.Username, HashPassword(req.NewPassword!), u.UserType, u.Email, u.FullName);
+                        _registeredUsers[idx] = updated;
+                    }
+                }
+
+                return Json(new { success = true, message = "Password updated" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "UpdatePassword error");
+                return Json(new { success = false, message = "Server error" });
+            }
+        }
+
+        public IActionResult Messages()
+        {
+            if (_db == null)
+            {
+                _logger.LogError("DbContext is null in Messages");
+                return View(new List<Conversation>());
+            }
+            var conversations = _db.Conversations.AsNoTracking().OrderByDescending(c => c.LastMessageTime).ToList();
+            return View(conversations);
+        }
+
+        [HttpGet] public IActionResult Login() => View(new LoginViewModel());
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -88,85 +394,51 @@ _logger = logger;
         {
             try
             {
-                // Validate input
+                if (request == null)
+                    return Json(new LoginResponse { Success = false, Message = "Invalid request payload" });
                 if (string.IsNullOrWhiteSpace(request.EmailOrUsername) || string.IsNullOrWhiteSpace(request.Password))
-                {
-                    return Json(new LoginResponse
-                    {
-                        Success = false,
-                        Message = "Email/Username and Password are required"
-                    });
-                }
+                    return Json(new LoginResponse { Success = false, Message = "Email/Username and Password are required" });
 
-                // Check for admin credentials (static account)
                 const string ADMIN_USERNAME = "admin@gmail.com";
                 const string ADMIN_PASSWORD = "admin123!";
+                var loginIdentifier = request.EmailOrUsername?.Trim() ?? string.Empty;
+                var loginPassword = request.Password?.Trim() ?? string.Empty;
 
-                bool isAdmin = false;
-                
-                // Check if logging in as admin
-                if (request.EmailOrUsername.ToLower() == ADMIN_USERNAME && request.Password == ADMIN_PASSWORD)
+                if (string.Equals(loginIdentifier, ADMIN_USERNAME, StringComparison.OrdinalIgnoreCase) && string.Equals(loginPassword, ADMIN_PASSWORD, StringComparison.Ordinal))
                 {
-                    isAdmin = true;
-                    
-                    // Set admin session
                     HttpContext.Session.SetString("IsAdmin", "true");
                     HttpContext.Session.SetString("Username", ADMIN_USERNAME);
-                    
-                    // Simulate authentication delay
+                    HttpContext.Session.SetString("UserType", "admin");
+                    HttpContext.Session.SetString("FullName", "Admin");
+                    HttpContext.Session.SetString("UserId", "admin-user-id");
                     await Task.Delay(500);
-
-                    return Json(new LoginResponse
-                    {
-                        Success = true,
-                        Message = "Admin login successful! Redirecting...",
-                        RedirectUrl = "/Home/Landing"
-                    });
+                    return Json(new LoginResponse { Success = true, Message = "Admin login successful! Redirecting...", RedirectUrl = "/Home/Landing" });
                 }
 
-                // Demo authentication - Replace with actual authentication service in production
-                // For demo purposes, accept any credentials with password length >= 6
-                if (request.Password.Length >= 6)
+                var hashed = HashPassword(loginPassword);
+                var regUser = _registeredUsers.FirstOrDefault(u => (string.Equals(u.Username, loginIdentifier, StringComparison.OrdinalIgnoreCase) || string.Equals(u.Email, loginIdentifier, StringComparison.OrdinalIgnoreCase)) && u.PasswordHash == hashed);
+                if (regUser != null)
                 {
-                    // Simulate authentication delay
-                    await Task.Delay(500);
-
-                    // Set regular user session (not admin)
                     HttpContext.Session.SetString("IsAdmin", "false");
-                    HttpContext.Session.SetString("Username", request.EmailOrUsername);
-                    
-                    return Json(new LoginResponse
-                    {
-                        Success = true,
-                        Message = "Login successful! Redirecting...",
-                        RedirectUrl = "/Home/Landing"
-                    });
+                    HttpContext.Session.SetString("Username", regUser.Username);
+                    HttpContext.Session.SetString("UserType", regUser.UserType);
+                    HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+                    HttpContext.Session.SetString("UserId", regUser.Username);
+                    HttpContext.Session.SetString("Email", regUser.Email ?? string.Empty);
+                    await Task.Delay(500);
+                    return Json(new LoginResponse { Success = true, Message = $"{regUser.UserType.ToUpper()} login successful! Redirecting...", RedirectUrl = "/Home/Landing" });
                 }
-                else
-                {
-                    return Json(new LoginResponse
-                    {
-                        Success = false,
-                        Message = "Invalid credentials. Please try again."
-                    });
-                }
+
+                return Json(new LoginResponse { Success = false, Message = "Invalid credentials. Please try again." });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Login error");
-                return Json(new LoginResponse
-                {
-                    Success = false,
-                    Message = "An error occurred during login. Please try again."
-                });
+                return Json(new LoginResponse { Success = false, Message = "An error occurred during login. Please try again." });
             }
         }
 
-        [HttpGet]
-        public IActionResult Register()
-        {
-            return View(new RegisterViewModel());
-        }
+        [HttpGet] public IActionResult Register() => View(new RegisterViewModel());
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -174,405 +446,487 @@ _logger = logger;
         {
             try
             {
-                // Validate input
-                if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email) || 
-                    string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+                if (request == null)
+                    return Json(new RegisterResponse { Success = false, Message = "Invalid request payload" });
+                if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+                    return Json(new RegisterResponse { Success = false, Message = "All fields are required" });
+                if (!request.Email.Contains("@")) return Json(new RegisterResponse { Success = false, Message = "Please enter a valid email address" });
+                if (request.Password.Length < 6) return Json(new RegisterResponse { Success = false, Message = "Password must be at least 6 characters" });
+                if (request.Password != request.ConfirmPassword) return Json(new RegisterResponse { Success = false, Message = "Passwords do not match" });
+                if (!request.AgreeToTerms) return Json(new RegisterResponse { Success = false, Message = "You must agree to the Terms and Conditions" });
+                await Task.Delay(200);
+                if (_registeredUsers.Any(u => u.Username == request.Username || u.Email == request.Email))
+                    return Json(new RegisterResponse { Success = false, Message = "Username or email already in use." });
+
+                var userHash = HashPassword(request.Password);
+                var userType = string.IsNullOrWhiteSpace(request.AccountType) ? "Buyer" : request.AccountType;
+                _registeredUsers.Add(new RegisteredUser(request.Username, userHash, userType.ToLowerInvariant(), request.Email, request.FullName));
+
+                _ = _firestore.MirrorUserAsync(request.Username, new
                 {
-                    return Json(new RegisterResponse
-                    {
-                        Success = false,
-                        Message = "All fields are required"
-                    });
-                }
-
-                // Validate email format
-                if (!request.Email.Contains("@"))
-                {
-                    return Json(new RegisterResponse
-                    {
-                        Success = false,
-                        Message = "Please enter a valid email address"
-                    });
-                }
-
-                // Validate password length
-                if (request.Password.Length < 6)
-                {
-                    return Json(new RegisterResponse
-                    {
-                        Success = false,
-                        Message = "Password must be at least 6 characters"
-                    });
-                }
-
-                // Validate password match
-                if (request.Password != request.ConfirmPassword)
-                {
-                    return Json(new RegisterResponse
-                    {
-                        Success = false,
-                        Message = "Passwords do not match"
-                    });
-                }
-
-                // Validate terms agreement
-                if (!request.AgreeToTerms)
-                {
-                    return Json(new RegisterResponse
-                    {
-                        Success = false,
-                        Message = "You must agree to the Terms and Conditions"
-                    });
-                }
-
-                // Demo registration - Replace with actual user creation in production
-                // Simulate registration delay
-                await Task.Delay(800);
-
-                // In production, create user in database
-                // Example:
-                // var user = new ApplicationUser
-                // {
-                //     UserName = request.Username,
-                //     Email = request.Email,
-                //     FullName = request.FullName
-                // };
-                // var result = await _userManager.CreateAsync(user, request.Password);
-
-                // For demo, accept all valid registrations
-                return Json(new RegisterResponse
-                {
-                    Success = true,
-                    Message = "Account created successfully! Redirecting to login...",
-                    RedirectUrl = "/Home/Login"
+                    username = request.Username,
+                    email = request.Email,
+                    full_name = request.FullName,
+                    account_type = userType.ToLowerInvariant(),
+                    phone_number = request.PhoneNumber,
+                    region = request.Region,
+                    province = request.Province,
+                    city = request.City,
+                    barangay = request.Barangay,
+                    postal_code = request.PostalCode,
+                    street_address = request.StreetAddress,
+                    address_full = request.Address,
+                    date_created_server = DateTime.UtcNow
                 });
+
+                HttpContext.Session.SetString("Email", request.Email ?? string.Empty);
+                HttpContext.Session.SetString("PhoneNumber", request.PhoneNumber ?? string.Empty);
+                HttpContext.Session.SetString("Region", request.Region ?? string.Empty);
+                HttpContext.Session.SetString("Province", request.Province ?? string.Empty);
+                HttpContext.Session.SetString("City", request.City ?? string.Empty);
+                HttpContext.Session.SetString("Barangay", request.Barangay ?? string.Empty);
+                HttpContext.Session.SetString("PostalCode", request.PostalCode ?? string.Empty);
+                HttpContext.Session.SetString("StreetAddress", request.StreetAddress ?? string.Empty);
+                HttpContext.Session.SetString("Address", request.Address ?? string.Empty);
+
+                return Json(new RegisterResponse { Success = true, Message = "Account created successfully! Redirecting to login...", RedirectUrl = "/Home/Login" });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Registration error");
-                return Json(new RegisterResponse
-                {
-                    Success = false,
-                    Message = "An error occurred during registration. Please try again."
-                });
+                return Json(new RegisterResponse { Success = false, Message = "An error occurred during registration. Please try again." });
             }
         }
 
-        [HttpGet]
-        public IActionResult ExternalLogin(string provider)
+        [HttpGet] public IActionResult ExternalLogin(string provider)
         {
-            // Handle external authentication (Google, Facebook)
-            // In production, implement OAuth flow
             _logger.LogInformation($"External login initiated for provider: {provider}");
-            
-            // Redirect to OAuth provider
-            // Example: return Challenge(new AuthenticationProperties { RedirectUri = "/Home/ExternalLoginCallback" }, provider);
-            
             return RedirectToAction("Login");
         }
+        [HttpGet] public async Task<IActionResult> ExternalLoginCallback() { await Task.CompletedTask; return RedirectToAction("Landing"); }
+        [HttpPost] public IActionResult Logout() { HttpContext.Session.Clear(); return RedirectToAction("Login"); }
 
-        [HttpGet]
-        public async Task<IActionResult> ExternalLoginCallback()
-        {
-            // Handle OAuth callback
-            // Authenticate user and create session
-            await Task.CompletedTask;
-            return RedirectToAction("Landing");
-        }
-
+        public class ClientLoginRequest { public string? Email { get; set; } public string? Uid { get; set; } public string? Username { get; set; } public string? UserType { get; set; } public string? FullName { get; set; } public string? PhoneNumber { get; set; } public string? Region { get; set; } public string? Province { get; set; } public string? City { get; set; } public string? Barangay { get; set; } public string? PostalCode { get; set; } public string? StreetAddress { get; set; } public string? Address { get; set; } }
         [HttpPost]
-        public IActionResult Logout()
+        public IActionResult ClientLogin([FromBody] ClientLoginRequest req)
         {
-            // Clear all session data including admin status
-            HttpContext.Session.Clear();
-            
-            return RedirectToAction("Login");
+            try
+            {
+                if (req == null || string.IsNullOrWhiteSpace(req.Email)) return Json(new LoginResponse { Success = false, Message = "Invalid request" });
+                if (!string.IsNullOrWhiteSpace(req.Username))
+                {
+                    HttpContext.Session.SetString("IsAdmin", "false");
+                    HttpContext.Session.SetString("Username", req.Username);
+                    HttpContext.Session.SetString("UserType", (req.UserType ?? "buyer").ToLowerInvariant());
+                    HttpContext.Session.SetString("FullName", req.FullName ?? string.Empty);
+                    HttpContext.Session.SetString("UserId", req.Uid ?? req.Username);
+                    HttpContext.Session.SetString("Email", req.Email ?? string.Empty);
+                    if (!string.IsNullOrWhiteSpace(req.PhoneNumber)) HttpContext.Session.SetString("PhoneNumber", req.PhoneNumber);
+                    if (!string.IsNullOrWhiteSpace(req.Region)) HttpContext.Session.SetString("Region", req.Region);
+                    if (!string.IsNullOrWhiteSpace(req.Province)) HttpContext.Session.SetString("Province", req.Province);
+                    if (!string.IsNullOrWhiteSpace(req.City)) HttpContext.Session.SetString("City", req.City);
+                    if (!string.IsNullOrWhiteSpace(req.Barangay)) HttpContext.Session.SetString("Barangay", req.Barangay);
+                    if (!string.IsNullOrWhiteSpace(req.PostalCode)) HttpContext.Session.SetString("PostalCode", req.PostalCode);
+                    if (!string.IsNullOrWhiteSpace(req.StreetAddress)) HttpContext.Session.SetString("StreetAddress", req.StreetAddress);
+                    if (!string.IsNullOrWhiteSpace(req.Address)) HttpContext.Session.SetString("Address", req.Address);
+                    return Json(new LoginResponse { Success = true, Message = "Server session established" });
+                }
+                var regUser = _registeredUsers.FirstOrDefault(u => string.Equals(u.Email, req.Email, StringComparison.OrdinalIgnoreCase));
+                if (regUser == null) return Json(new LoginResponse { Success = false, Message = "No server-side profile found for this account" });
+                HttpContext.Session.SetString("IsAdmin", "false");
+                HttpContext.Session.SetString("Username", regUser.Username);
+                HttpContext.Session.SetString("UserType", regUser.UserType);
+                HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
+                HttpContext.Session.SetString("UserId", req.Uid ?? regUser.Username);
+                HttpContext.Session.SetString("Email", regUser.Email ?? string.Empty);
+                return Json(new LoginResponse { Success = true, Message = "Server session established" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ClientLogin error");
+                return Json(new LoginResponse { Success = false, Message = "Server error" });
+            }
         }
 
-     // ========== CRUD OPERATIONS FOR LISTINGS ==========
-        
+        // LISTINGS CRUD
         [HttpGet]
         public IActionResult GetListing(int id)
         {
-      var listing = _listings.FirstOrDefault(l => l.Id == id);
-     if (listing == null)
-           return NotFound();
-            
- return Json(listing);
-      }
-
-        [HttpPost]
-     public IActionResult CreateListing([FromBody] Listing listing)
- {
-       try
- {
-     listing.Id = _listings.Any() ? _listings.Max(l => l.Id) + 1 : 1;
-     listing.CreatedDate = DateTime.Now;
-         listing.IsActive = true;
-   _listings.Add(listing);
-       
-   return Json(new { success = true, message = "Listing created successfully!", listing });
-       }
-    catch (Exception ex)
-            {
-  return Json(new { success = false, message = ex.Message });
-      }
+            var listing = _listings.FirstOrDefault(l => l.Id == id);
+            if (listing == null) return NotFound();
+            return Json(listing);
         }
 
-        [HttpPost]
-public IActionResult UpdateListing([FromBody] Listing listing)
-  {
-       try
-         {
-  var existingListing = _listings.FirstOrDefault(l => l.Id == listing.Id);
-       if (existingListing == null)
-   return Json(new { success = false, message = "Listing not found" });
-
-  existingListing.Title = listing.Title;
-    existingListing.Description = listing.Description;
-             existingListing.Price = listing.Price;
-  existingListing.Category = listing.Category;
-  existingListing.Condition = listing.Condition;
-       existingListing.ImageUrl = listing.ImageUrl;
-
-             return Json(new { success = true, message = "Listing updated successfully!", listing = existingListing });
- }
-      catch (Exception ex)
-     {
-      return Json(new { success = false, message = ex.Message });
- }
- }
-
-        [HttpPost]
-    public IActionResult DeleteListing(int id)
-   {
-       try
-  {
-  var listing = _listings.FirstOrDefault(l => l.Id == id);
-if (listing == null)
-         return Json(new { success = false, message = "Listing not found" });
-
-     listing.IsActive = false; // Soft delete
-   // Or for hard delete: _listings.Remove(listing);
-
-        return Json(new { success = true, message = "Listing deleted successfully!" });
-  }
- catch (Exception ex)
-    {
- return Json(new { success = false, message = ex.Message });
-      }
-      }
-
-        // ========== MESSAGING OPERATIONS ==========
-
-        [HttpGet]
-     public IActionResult GetMessages(int conversationId)
+        // Centralized Firestore sync for listings
+        private void SyncListingToFirestore(Listing listing, string action)
         {
-  if (!_messages.ContainsKey(conversationId))
-          {
-      _messages[conversationId] = new List<Message>();
-}
-
-        return Json(_messages[conversationId]);
-        }
-
-        [HttpPost]
-        public IActionResult SendMessage([FromBody] ChatRequest request)
-  {
             try
             {
-     if (!_messages.ContainsKey(request.ConversationId))
-    {
-          _messages[request.ConversationId] = new List<Message>();
-         }
-
-     var newMessage = new Message
-      {
-    Id = _messages[request.ConversationId].Any() ? _messages[request.ConversationId].Max(m => m.Id) + 1 : 1,
-            ConversationId = request.ConversationId,
-   SenderId = "me",
-          SenderName = "You",
-        Content = request.Message,
-     Timestamp = DateTime.Now,
-          IsRead = true
-        };
-
-              _messages[request.ConversationId].Add(newMessage);
-
-      // Update conversation last message
-            var conversation = _conversations.FirstOrDefault(c => c.Id == request.ConversationId);
-      if (conversation != null)
-         {
-      conversation.LastMessage = request.Message;
-        conversation.LastMessageTime = DateTime.Now;
-       }
-
- return Json(new { success = true, message = newMessage });
-    }
-     catch (Exception ex)
-            {
-    return Json(new { success = false, message = ex.Message });
- }
- }
-
- [HttpPost]
-        public IActionResult AskBot([FromBody] BotRequest request)
-        {
-   try
- {
-             // AI Bot Logic - Simulated intelligent responses
-                string botResponse = GenerateBotResponse(request.Message.ToLower());
-
-      // Add user message
-    if (!_messages.ContainsKey(0))
-    {
-      _messages[0] = new List<Message>();
-   }
-
-        var userMessage = new Message
-        {
-         Id = _messages[0].Any() ? _messages[0].Max(m => m.Id) + 1 : 1,
-        ConversationId = 0,
-           SenderId = "me",
-          SenderName = "You",
-             Content = request.Message,
-          Timestamp = DateTime.Now,
-          IsRead = true
-             };
-
-      _messages[0].Add(userMessage);
-
-   // Add bot response
-                var botMessage = new Message
-  {
-             Id = _messages[0].Max(m => m.Id) + 1,
-           ConversationId = 0,
-           SenderId = "bot",
-         SenderName = "AI Assistant",
-      Content = botResponse,
-   Timestamp = DateTime.Now.AddSeconds(1),
-    IsRead = false,
-         IsFromBot = true
-           };
-
-           _messages[0].Add(botMessage);
-
-             // Update bot conversation
-  var botConversation = _conversations.FirstOrDefault(c => c.Id == 0);
-     if (botConversation != null)
-      {
- botConversation.LastMessage = botResponse;
-       botConversation.LastMessageTime = DateTime.Now;
-        }
-
-      return Json(new { success = true, message = botMessage });
-         }
+                _ = _firestore.MirrorListingAsync(listing.Id, new
+                {
+                    product_id = listing.Id,
+                    title = listing.Title,
+                    description = listing.Description,
+                    price = listing.Price,
+                    category = listing.Category,
+                    condition = listing.Condition,
+                    imageUrl = listing.ImageUrl,
+                    is_active = listing.IsActive,
+                    user_id = listing.SellerUserId,
+                    seller_username = listing.SellerUsername,
+                    seller_name = listing.SellerFullName,
+                    date_created_server = listing.CreatedDate.ToUniversalTime(),
+                    date_last_synced_server = DateTime.UtcNow,
+                    last_sync_action = action
+                });
+            }
             catch (Exception ex)
-      {
-return Json(new { success = false, message = ex.Message });
+            {
+                _logger.LogWarning(ex, "Failed Firestore sync for listing {Id}", listing.Id);
             }
-  }
+        }
 
- private string GenerateBotResponse(string userMessage)
+        [HttpPost]
+        public async Task<IActionResult> CreateListing()
         {
-        // Smart pattern matching for common queries
-        if (userMessage.Contains("hello") || userMessage.Contains("hi") || userMessage.Contains("hey"))
-       {
-                return "?? Hello! I'm here to help. What would you like to know about our marketplace?";
-            }
-            else if (userMessage.Contains("price") || userMessage.Contains("cost") || userMessage.Contains("how much"))
+            try
             {
-       return "?? I can help you with pricing! Our items range from budget-friendly to premium options. Would you like recommendations in a specific category?";
-   }
-       else if (userMessage.Contains("recommend") || userMessage.Contains("suggest"))
-       {
-          return "?? I'd be happy to recommend items! What category interests you?\n\n?? Electronics\n?? Fashion\n?? Home & Living\n?? Books\n? Sports\n\nJust let me know!";
+                // Ensure request body can be read multiple times
+                Request.EnableBuffering();
+
+                // Read raw body
+                using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+                var raw = await reader.ReadToEndAsync();
+                // rewind for other readers
+                Request.Body.Position = 0;
+
+                Listing? payload = null;
+
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    try
+                    {
+                        var doc = JsonDocument.Parse(raw);
+                        var root = doc.RootElement;
+                        payload = new Listing
+                        {
+                            Id = root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt32() : (root.TryGetProperty("Id", out var idEl2) && idEl2.ValueKind == JsonValueKind.Number ? idEl2.GetInt32() : 0),
+                            Title = root.TryGetProperty("title", out var tEl) ? tEl.GetString() ?? string.Empty : (root.TryGetProperty("Title", out var tEl2) ? tEl2.GetString() ?? string.Empty : string.Empty),
+                            Description = root.TryGetProperty("description", out var dEl) ? dEl.GetString() ?? string.Empty : (root.TryGetProperty("Description", out var dEl2) ? dEl2.GetString() ?? string.Empty : string.Empty),
+                            Price = root.TryGetProperty("price", out var pEl) && pEl.TryGetDecimal(out var dec) ? dec : (root.TryGetProperty("Price", out var pEl2) && pEl2.TryGetDecimal(out var dec2) ? dec2 : 0m),
+                            Category = root.TryGetProperty("category", out var cEl) ? cEl.GetString() ?? string.Empty : (root.TryGetProperty("Category", out var cEl2) ? cEl2.GetString() ?? string.Empty : string.Empty),
+                            Condition = root.TryGetProperty("condition", out var condEl) ? condEl.GetString() ?? string.Empty : (root.TryGetProperty("Condition", out var condEl2) ? condEl2.GetString() ?? string.Empty : string.Empty),
+                            ImageUrl = root.TryGetProperty("imageUrl", out var iEl) ? iEl.GetString() ?? string.Empty : (root.TryGetProperty("ImageUrl", out var iEl2) ? iEl2.GetString() ?? string.Empty : string.Empty)
+                        };
+                    }
+                    catch (Exception jex)
+                    {
+                        _logger.LogDebug(jex, "Failed parse JSON body in CreateListing");
+                    }
+                }
+
+                // If not JSON, try form
+                if (payload == null && Request.HasFormContentType)
+                {
+                    var form = Request.Form;
+                    payload = new Listing
+                    {
+                        Title = form.TryGetValue("title", out var t) ? t.ToString() : string.Empty,
+                        Description = form.TryGetValue("description", out var d) ? d.ToString() : string.Empty,
+                        Price = form.TryGetValue("price", out var p) && decimal.TryParse(p, out var dec) ? dec : 0m,
+                        Category = form.TryGetValue("category", out var c) ? c.ToString() : string.Empty,
+                        Condition = form.TryGetValue("condition", out var cond) ? cond.ToString() : string.Empty,
+                        ImageUrl = form.TryGetValue("imageUrl", out var img) ? img.ToString() : string.Empty
+                    };
+                }
+
+                if (payload == null)
+                {
+                    _logger.LogWarning("CreateListing called with empty or invalid payload. ContentType={ContentType} RawLength={RawLength}", Request.ContentType, raw?.Length ?? 0);
+                    return Json(new { success = false, message = "Invalid listing payload" });
+                }
+
+                // Normalize and set defaults
+                var sellerUsername = HttpContext.Session.GetString("Username") ?? "Anonymous";
+                var sellerFullName = HttpContext.Session.GetString("FullName") ?? "Unknown";
+                var sellerUserId = HttpContext.Session.GetString("UserId") ?? string.Empty;
+
+                // If payload contained an Id and a listing with that Id already exists, update it instead of creating a duplicate
+                if (payload.Id > 0)
+                {
+                    var existing = _listings.FirstOrDefault(l => l.Id == payload.Id);
+                    if (existing != null)
+                    {
+                        // Only allow the owner or an admin to update the listing
+                        var isAdmin = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
+                        var isOwner = string.IsNullOrEmpty(existing.SellerUserId) || existing.SellerUserId == sellerUserId;
+                        if (!isOwner && !isAdmin)
+                        {
+                            return Json(new { success = false, message = "You are not authorized to modify this listing" });
+                        }
+
+                        existing.Title = payload.Title?.Trim() ?? existing.Title;
+                        existing.Description = payload.Description?.Trim() ?? existing.Description;
+                        existing.Price = payload.Price;
+                        existing.Category = payload.Category?.Trim() ?? existing.Category;
+                        existing.Condition = payload.Condition?.Trim() ?? existing.Condition;
+                        existing.ImageUrl = payload.ImageUrl?.Trim() ?? existing.ImageUrl;
+                        // keep existing.CreatedDate as-is
+
+                        SyncListingToFirestore(existing, "update");
+                        return Json(new { success = true, message = "Listing updated successfully!", listing = existing });
+                    }
+                    // If Id provided but not found, fall through to create a new listing with a new Id
+                }
+
+                // Extra safety: if client didn't send an Id but a listing with the same title by the same seller exists,
+                // treat this as an update to avoid creating accidental duplicates from the UI.
+                if (!string.IsNullOrWhiteSpace(payload.Title))
+                {
+                    var candidateTitle = payload.Title.Trim();
+                    var existingByTitle = _listings.FirstOrDefault(l => l.IsActive
+                        && string.Equals(l.Title?.Trim(), candidateTitle, StringComparison.OrdinalIgnoreCase)
+                        && (string.IsNullOrEmpty(l.SellerUserId) && string.IsNullOrEmpty(sellerUserId) || l.SellerUserId == sellerUserId));
+                    if (existingByTitle != null)
+                    {
+                        // Owner/admin check
+                        var isAdmin = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
+                        var isOwner = string.IsNullOrEmpty(existingByTitle.SellerUserId) || existingByTitle.SellerUserId == sellerUserId;
+                        if (!isOwner && !isAdmin)
+                        {
+                            return Json(new { success = false, message = "You are not authorized to modify this listing" });
+                        }
+
+                        existingByTitle.Description = payload.Description?.Trim() ?? existingByTitle.Description;
+                        existingByTitle.Price = payload.Price;
+                        existingByTitle.Category = payload.Category?.Trim() ?? existingByTitle.Category;
+                        existingByTitle.Condition = payload.Condition?.Trim() ?? existingByTitle.Condition;
+                        existingByTitle.ImageUrl = payload.ImageUrl?.Trim() ?? existingByTitle.ImageUrl;
+
+                        SyncListingToFirestore(existingByTitle, "update");
+                        return Json(new { success = true, message = "Listing updated successfully (merged with existing)!", listing = existingByTitle });
+                    }
+                }
+
+                var newListing = new Listing
+                {
+                    Id = _listings.Any() ? _listings.Max(l => l.Id) + 1 : 1,
+                    Title = payload.Title?.Trim() ?? string.Empty,
+                    Description = payload.Description?.Trim() ?? string.Empty,
+                    Price = payload.Price,
+                    Category = payload.Category?.Trim() ?? string.Empty,
+                    Condition = payload.Condition?.Trim() ?? string.Empty,
+                    ImageUrl = payload.ImageUrl?.Trim() ?? string.Empty,
+                    CreatedDate = DateTime.UtcNow,
+                    IsActive = true,
+                    SellerUsername = sellerUsername,
+                    SellerFullName = sellerFullName,
+                    SellerUserId = sellerUserId
+                };
+
+                _listings.Add(newListing);
+                SyncListingToFirestore(newListing, "create");
+                return Json(new { success = true, message = "Listing created successfully!", listing = newListing });
             }
-    else if (userMessage.Contains("problem") || userMessage.Contains("issue") || userMessage.Contains("help") || userMessage.Contains("concern"))
-  {
-        return "?? I'm sorry you're experiencing an issue. I can help with:\n\n1. Account problems\n2. Payment issues\n3. Listing questions\n4. Shipping concerns\n5. Return policies\n\nPlease describe your specific problem and I'll assist you right away!";
-            }
-       else if (userMessage.Contains("ship") || userMessage.Contains("deliver"))
-       {
-   return "?? Shipping Information:\n\n?? Standard: 5-7 business days\n? Express: 2-3 business days\n?? Tracking provided for all orders\n?? Free shipping on orders over $50\n\nNeed more details?";
-            }
- else if (userMessage.Contains("return") || userMessage.Contains("refund"))
-  {
-     return "?? Return Policy:\n\n? 30-day return window\n?? Items must be in original condition\n?? Full refund or exchange available\n?? Free return shipping\n\nWould you like to initiate a return?";
-            }
-            else if (userMessage.Contains("pay") || userMessage.Contains("payment"))
-{
-         return "?? We accept:\n\n?? Credit/Debit Cards\n??? PayPal\n?? Apple Pay\n?? Google Pay\n?? Bank Transfer\n\nAll transactions are secure and encrypted. Need payment assistance?";
-  }
-       else if (userMessage.Contains("account") || userMessage.Contains("profile"))
-    {
-            return "?? Account Help:\n\n?? Update profile information\n?? Change password\n?? Manage notifications\n?? View order history\n\nWhat would you like to do with your account?";
-   }
-            else if (userMessage.Contains("thank") || userMessage.Contains("thanks"))
-     {
-           return "?? You're very welcome! Is there anything else I can help you with today?";
-         }
-            else if (userMessage.Contains("bye") || userMessage.Contains("goodbye"))
-      {
-   return "?? Goodbye! Feel free to message me anytime you need assistance. Happy shopping!";
-      }
-    else
-            {
-     return "I understand you're asking about: \"" + userMessage + "\"\n\n?? I can help you with:\n\n?? Product recommendations\n?? Price inquiries\n?? Shipping & returns\n?? Account issues\n? General marketplace questions\n\nCould you please provide more specific details so I can assist you better?";
-            }
+            catch (Exception ex) { _logger.LogError(ex, "CreateListing error"); return Json(new { success = false, message = ex.Message }); }
         }
 
-        public IActionResult Privacy()
-    {
-            // Map legacy Privacy action to the Mylisting view to avoid missing view errors
-         return View("Mylisting");
+        [HttpPost]
+        public async Task<IActionResult> UpdateListing()
+        {
+            try
+            {
+                Request.EnableBuffering();
+                using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+                var raw = await reader.ReadToEndAsync();
+                Request.Body.Position = 0;
+
+                Listing? payload = null;
+
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    try
+                    {
+                        var doc = JsonDocument.Parse(raw);
+                        var root = doc.RootElement;
+                        payload = new Listing
+                        {
+                            Id = root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt32() : (root.TryGetProperty("Id", out var idEl2) && idEl2.ValueKind == JsonValueKind.Number ? idEl2.GetInt32() : 0),
+                            Title = root.TryGetProperty("title", out var tEl) ? tEl.GetString() ?? string.Empty : (root.TryGetProperty("Title", out var tEl2) ? tEl2.GetString() ?? string.Empty : string.Empty),
+                            Description = root.TryGetProperty("description", out var dEl) ? dEl.GetString() ?? string.Empty : (root.TryGetProperty("Description", out var dEl2) ? dEl2.GetString() ?? string.Empty : string.Empty),
+                            Price = root.TryGetProperty("price", out var pEl) && pEl.TryGetDecimal(out var dec) ? dec : (root.TryGetProperty("Price", out var pEl2) && pEl2.TryGetDecimal(out var dec2) ? dec2 : 0m),
+                            Category = root.TryGetProperty("category", out var cEl) ? cEl.GetString() ?? string.Empty : (root.TryGetProperty("Category", out var cEl2) ? cEl2.GetString() ?? string.Empty : string.Empty),
+                            Condition = root.TryGetProperty("condition", out var condEl) ? condEl.GetString() ?? string.Empty : (root.TryGetProperty("Condition", out var condEl2) ? condEl2.GetString() ?? string.Empty : string.Empty),
+                            ImageUrl = root.TryGetProperty("imageUrl", out var iEl) ? iEl.GetString() ?? string.Empty : (root.TryGetProperty("ImageUrl", out var iEl2) ? iEl2.GetString() ?? string.Empty : string.Empty)
+                        };
+                    }
+                    catch (Exception jex)
+                    {
+                        _logger.LogDebug(jex, "Failed parse JSON body in UpdateListing");
+                    }
+                }
+
+                if (payload == null && Request.HasFormContentType)
+                {
+                    var form = Request.Form;
+                    payload = new Listing
+                    {
+                        Id = form.TryGetValue("id", out var idv) && int.TryParse(idv, out var iid) ? iid : 0,
+                        Title = form.TryGetValue("title", out var t) ? t.ToString() : string.Empty,
+                        Description = form.TryGetValue("description", out var d) ? d.ToString() : string.Empty,
+                        Price = form.TryGetValue("price", out var p) && decimal.TryParse(p, out var dec) ? dec : 0m,
+                        Category = form.TryGetValue("category", out var c) ? c.ToString() : string.Empty,
+                        Condition = form.TryGetValue("condition", out var cond) ? cond.ToString() : string.Empty,
+                        ImageUrl = form.TryGetValue("imageUrl", out var img) ? img.ToString() : string.Empty
+                    };
+                }
+
+                if (payload == null)
+                {
+                    _logger.LogWarning("UpdateListing called with null payload. ContentType={ContentType}", Request.ContentType);
+                    return Json(new { success = false, message = "Invalid listing payload" });
+                }
+
+                var existingListing = _listings.FirstOrDefault(l => l.Id == payload.Id);
+                if (existingListing == null) return Json(new { success = false, message = "Listing not found" });
+
+                // Authorization: only owner or admin can modify
+                var currentUserId = HttpContext.Session.GetString("UserId") ?? string.Empty;
+                var isAdminUser = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
+                var isOwnerUser = string.IsNullOrEmpty(existingListing.SellerUserId) || existingListing.SellerUserId == currentUserId;
+                if (!isOwnerUser && !isAdminUser)
+                {
+                    return Json(new { success = false, message = "You are not authorized to modify this listing" });
+                }
+
+                existingListing.Title = payload.Title?.Trim() ?? existingListing.Title;
+                existingListing.Description = payload.Description?.Trim() ?? existingListing.Description;
+                existingListing.Price = payload.Price;
+                existingListing.Category = payload.Category?.Trim() ?? existingListing.Category;
+                existingListing.Condition = payload.Condition?.Trim() ?? existingListing.Condition;
+                existingListing.ImageUrl = payload.ImageUrl?.Trim() ?? existingListing.ImageUrl;
+                // preserve CreatedDate and seller information
+                SyncListingToFirestore(existingListing, "update");
+                return Json(new { success = true, message = "Listing updated successfully!", listing = existingListing });
+            }
+            catch (Exception ex) { _logger.LogError(ex, "UpdateListing error"); return Json(new { success = false, message = ex.Message }); }
         }
 
-        // ========== ADMIN DASHBOARD ==========
-        
+        [HttpPost]
+        public IActionResult DeleteListing(int id)
+        {
+            try
+            {
+                var listing = _listings.FirstOrDefault(l => l.Id == id);
+                if (listing == null) return Json(new { success = false, message = "Listing not found" });
+                listing.IsActive = false;
+                SyncListingToFirestore(listing, "delete");
+                return Json(new { success = true, message = "Listing deleted successfully!" });
+            }
+            catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        }
+
+        // New: expose user listings (server fallback for UI)
         [HttpGet]
-        public IActionResult AdminDashboard(string menu = "overview")
+        public IActionResult GetUserListings()
         {
-            // Check if user is admin
-            if (HttpContext.Session.GetString("IsAdmin") != "true")
+            var uid = HttpContext.Session.GetString("UserId") ?? string.Empty;
+            var username = HttpContext.Session.GetString("Username") ?? string.Empty;
+            
+            // Use either uid or username to filter
+            var userIdentifier = !string.IsNullOrEmpty(uid) ? uid : username;
+            
+            if (string.IsNullOrEmpty(userIdentifier))
             {
-                return RedirectToAction("Login");
+                return Json(new { success = false, message = "User not logged in", listings = new List<Listing>() });
             }
-
-            // Prepare dashboard data
-            var viewModel = new AdminDashboardViewModel
-            {
-                Stats = new DashboardStats
-                {
-                    TotalUsers = 12453,
-                    TotalListings = 8921,
-                    TotalRevenue = 456230,
-                    ActiveTransactions = 342
-                },
-                RecentUsers = new List<RecentUser>
-                {
-                    new RecentUser { Id = 1, Name = "Juan Dela Cruz", Email = "juan@example.com", JoinDate = "2025-10-25", Status = "active" },
-                    new RecentUser { Id = 2, Name = "Maria Santos", Email = "maria@example.com", JoinDate = "2025-10-24", Status = "active" },
-                    new RecentUser { Id = 3, Name = "Carlo Reyes", Email = "carlo@example.com", JoinDate = "2025-10-23", Status = "inactive" },
-                    new RecentUser { Id = 4, Name = "Ana Garcia", Email = "ana@example.com", JoinDate = "2025-10-22", Status = "active" }
-                },
-                RecentListings = new List<RecentListing>
-                {
-                    new RecentListing { Id = 1, Title = "iPhone 14 Pro", Seller = "Juan Dela Cruz", Price = 35000, Views = 452, Status = "active" },
-                    new RecentListing { Id = 2, Title = "Nike Air Max", Seller = "Maria Santos", Price = 4500, Views = 128, Status = "active" },
-                    new RecentListing { Id = 3, Title = "MacBook Pro M2", Seller = "Carlo Reyes", Price = 89000, Views = 876, Status = "flagged" },
-                    new RecentListing { Id = 4, Title = "Samsung 65\" TV", Seller = "Ana Garcia", Price = 28000, Views = 234, Status = "active" }
-                },
-                ActiveMenu = menu
-            };
-
-            return View(viewModel);
+            
+            var listings = _listings.Where(l => 
+                l.IsActive && 
+                (!string.IsNullOrEmpty(l.SellerUserId) && l.SellerUserId == userIdentifier || 
+                 !string.IsNullOrEmpty(l.SellerUsername) && l.SellerUsername == username)
+            ).OrderByDescending(l => l.CreatedDate).ToList();
+            
+            return Json(new { success = true, listings });
         }
 
-    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-    {
-    return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-   }
+        public IActionResult Privacy() => View();
+
+        // Diagnostics: quick health check for Firestore and listings
+        [HttpGet]
+        public async Task<IActionResult> Diagnostics()
+        {
+            var diag = new Dictionary<string, object?>();
+            try
+            {
+                diag["firestoreInitialized"] = _firestore?.IsInitialized == true;
+                diag["cacheCount"] = _listings?.Count ?? 0;
+
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    var remote = await _firestore.GetAllListingsAsync();
+                    diag["firestoreCount"] = remote?.Count ?? 0;
+                    diag["sampleTitles"] = remote?.Take(5).Select(l => l.Title).ToArray();
+                }
+                else
+                {
+                    diag["firestoreCount"] = -1;
+                    diag["message"] = "Firestore not initialized. Ensure GOOGLE_APPLICATION_CREDENTIALS is set to a valid service account JSON.";
+                }
+
+                _logger.LogInformation("Diagnostics: FS={FS}, cache={Cache}, fsCount={FsCount}", diag["firestoreInitialized"], diag["cacheCount"], diag["firestoreCount"]);
+                return Json(new { ok = true, diagnostics = diag });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Diagnostics error");
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // Seller public dashboard: view another seller's listings
+        [HttpGet]
+        [Route("Home/Seller/{seller}")]
+        public async Task<IActionResult> Seller(string seller)
+        {
+            if (string.IsNullOrWhiteSpace(seller))
+            {
+                return RedirectToAction("Browse");
+            }
+            try
+            {
+                List<Listing> listings;
+                if (_firestore != null && _firestore.IsInitialized)
+                {
+                    var all = await _firestore.GetAllListingsAsync();
+                    listings = all.Where(l => l.IsActive && (
+                        string.Equals(l.SellerUserId?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerUsername?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerFullName?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase)
+                    )).OrderByDescending(l => l.CreatedDate).ToList();
+
+                    if (all != null && all.Count > 0) _listings = all;
+                }
+                else
+                {
+                    listings = _listings.Where(l => l.IsActive && (
+                        string.Equals(l.SellerUserId?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerUsername?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(l.SellerFullName?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase)
+                    )).OrderByDescending(l => l.CreatedDate).ToList();
+                }
+
+                ViewBag.Seller = seller;
+                ViewBag.SellerDisplay = listings.FirstOrDefault()?.SellerFullName ?? listings.FirstOrDefault()?.SellerUsername ?? seller;
+                _logger.LogInformation("Seller dashboard for {Seller} showing {Count} listings", seller, listings.Count);
+                return View("BrowseSeller", listings);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error loading seller dashboard for {Seller}", seller);
+                ViewBag.Seller = seller;
+                return View("BrowseSeller", new List<Listing>());
+            }
+        }
     }
 }

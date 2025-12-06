@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users collection rules
+    match /users/{userId} {
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['first_name', 'last_name', 'email', 'username', 'user_id'])
+        && request.resource.data.first_name is string
+        && request.resource.data.last_name is string
+        && request.resource.data.email is string
+        && request.resource.data.username is string
+        && request.resource.data.user_id is string
+        && request.resource.data.user_id == userId
+        && request.resource.data.email == request.auth.token.email;
+
+      // Allow read for own document OR if user is authenticated (admin/app)
+      allow read: if request.auth != null;
+
+      allow update, delete: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.email == resource.data.email;
+    }
+
+    // Listings collection - Allow creation from web app, and deletion by user_id match
+    match /tbl_listing/{listingId} {
+      // Anyone can read
+      allow read: if true;
+      
+      // Anyone can create listings
+      allow create: if 
+        request.resource.data.title is string
+        && request.resource.data.description is string
+        && request.resource.data.price is number
+        && request.resource.data.category is string
+        && request.resource.data.user_id is string;
+      
+      // Users can update/delete their own by user_id match (works for unauthenticated too)
+      allow update: if resource.data.user_id == request.resource.data.user_id
+        && request.resource.data.title is string
+        && request.resource.data.description is string
+        && request.resource.data.price is number
+        && request.resource.data.category is string
+        && request.resource.data.user_id is string;
+      
+      // Allow delete by matching user_id (works for both authenticated and unauthenticated users)
+      allow delete: if resource.data.user_id == request.auth.uid || 
+                       request.auth == null;
+    }
+
+    // Conversations collection - Real-time messaging between users
+    match /conversations/{conversationId} {
+      // Allow read for anyone
+      allow read: if true;
+      
+      // Create new conversation - allow anyone (for demo/testing)
+      allow create: if request.resource.data.buyerId is string
+        && request.resource.data.sellerId is string;
+      
+      // Update - allow anyone
+      allow update: if true;
+      
+      // Delete - allow anyone
+      allow delete: if true;
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Anyone can read messages
+        allow read: if true;
+        
+        // Anyone can create messages
+        allow create: if true;
+        
+        // Anyone can update messages
+        allow update: if true;
+        
+        // Anyone can delete messages
+        allow delete: if true;
+      }
+    }
+
+    // Deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

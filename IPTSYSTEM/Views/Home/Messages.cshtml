@@ -1,6 +1,9 @@
 ﻿@model List<IPTSYSTEM.Models.Conversation>
 @{
     ViewData["Title"] = "Messages";
+    var currentUserId = Context.Session.GetString("UserId") ?? "";
+    var currentUserName = Context.Session.GetString("FullName") ?? Context.Session.GetString("Username") ?? "";
+    var conversationIdParam = Context.Request.Query["conversationId"].ToString();
 }
 
 @section Styles {
@@ -11,15 +14,9 @@
 <section class="messages-page">
     <div class="container-fluid py-4">
         <!-- Page Header -->
- <div class="mb-4 d-flex justify-content-between align-items-center">
-      <div>
+ <div class="mb-4">
        <h1 class="messages-page-title mb-1">Messages</h1>
-       <p class="messages-page-subtitle text-muted mb-0">Chat with buyers, sellers, and our AI assistant</p>
-      </div>
-   <button class="btn-ai-assistant" onclick="openAIChat()">
-  <i class="bi bi-robot me-2"></i>
-     AI Assistant
-  </button>
+       <p class="messages-page-subtitle text-muted mb-0">Chat with buyers and sellers</p>
       </div>
 
      <!-- Messages Container -->
@@ -34,35 +31,11 @@
 
       <!-- Conversation List -->
        <div class="conversation-list" id="conversationList">
-    @if (Model != null && Model.Any())
-   {
-      @foreach (var conversation in Model.OrderByDescending(c => c.LastMessageTime))
-   {
-     <div class="conversation-item @(conversation.Id == 0 ? "ai-conversation" : "")" onclick="loadConversation(@conversation.Id)" data-conversation-id="@conversation.Id">
-           <div class="conversation-avatar">
-        <img src="@conversation.OtherUserAvatar" alt="@conversation.OtherUserName">
-           <span class="status-indicator @(conversation.IsOnline ? "online" : "offline")"></span>
-     </div>
- <div class="conversation-info">
-      <h4 class="conversation-name">
-        @conversation.OtherUserName
-      @if (conversation.Id == 0)
-{
-     <i class="bi bi-robot ms-1" style="font-size: 0.9rem; color: #8b5cf6;"></i>
-       }
-       </h4>
-     <p class="conversation-preview">@conversation.LastMessage</p>
- </div>
-     <div class="conversation-meta">
-  <span class="conversation-time">@GetTimeAgo(conversation.LastMessageTime)</span>
-        @if (conversation.UnreadCount > 0)
-     {
-  <span class="unread-badge">@conversation.UnreadCount</span>
-         }
-      </div>
-       </div>
-      }
-    }
+            <!-- Conversations will be loaded dynamically from Firestore -->
+            <div class="loading-conversations">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="ms-2">Loading conversations...</span>
+            </div>
        </div>
     </div>
 
@@ -91,10 +64,6 @@
        <i class="bi bi-chat-dots" style="font-size: 5rem; color: #d1d5db;"></i>
        <h3 class="mt-4 mb-2" style="color: #6b7280;">Select a conversation</h3>
      <p style="color: #9ca3af;">Choose a conversation from the list to start chatting</p>
-      <button class="btn-ai-assistant mt-3" onclick="openAIChat()">
-       <i class="bi bi-robot me-2"></i>
-  Chat with AI Assistant
-   </button>
          </div>
      </div>
 
@@ -133,6 +102,13 @@
 </div>
 
 @section Scripts {
+    <script>
+        // Pass server-side values to JavaScript
+        const currentUserId = '@currentUserId';
+        const currentUserName = '@currentUserName';
+        const initialConversationId = '@conversationIdParam';
+    </script>
+    <script src="~/js/firebase-client.js" type="module"></script>
     <script src="~/js/messages-manager.js"></script>
 }
 
