@@ -118,6 +118,7 @@
                 <input type="hidden" name="Province" id="Province" />
                 <input type="hidden" name="City" id="City" />
                 <input type="hidden" name="Barangay" id="Barangay" />
+                <span class="text-danger" id="locationValidation"></span>
             </div>
             <div class="form-group">
                 <label class="form-label">Address</label>
@@ -128,6 +129,7 @@
                 </div>
             </div>
             <div class="form-group">
+                <label class="form-label">Postal Code & Street Address <span class="required-asterisk">*</span></label>
                 <div class="row g-2">
                     <div class="col-12 col-sm-4">
                         <div class="input-with-icon">
@@ -143,6 +145,7 @@
                         </div>
                     </div>
                 </div>
+                <span class="text-danger" id="addressValidation"></span>
             </div>
             <div class="form-group">
                 <label asp-for="Password" class="form-label">Password <span class="required-asterisk">*</span></label>

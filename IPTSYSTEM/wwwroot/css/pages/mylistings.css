@@ -209,39 +209,57 @@
 /* Product Actions */
 .product-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     margin-top: auto;
+    flex-wrap: wrap;
 }
 
 .btn-action {
-    flex: 1;
-    padding: 12px;
-    font-size: 0.9rem;
+    flex: 1 1 auto;
+    min-width: 60px;
+    padding: 10px 8px;
+    font-size: 0.85rem;
     font-weight: 600;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     transition: all 0.3s ease;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .btn-edit-minimal {
-    background: #f3f4f6;
-    color: #1f2937;
-    border: 2px solid #e5e7eb;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
 }
 
 .btn-edit-minimal:hover {
-    background: #e5e7eb;
-    border-color: #d1d5db;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-soldout-minimal {
+    background: linear-gradient(135deg, #10b981 0%, #16a34a 100%);
+    color: white;
+    border: none;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.btn-soldout-minimal:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
 }
 
 .btn-delete-minimal {
-    flex: 1;
     background: #f3f4f6;
     color: #dc2626;
     border: 2px solid #fee2e2;
@@ -251,6 +269,50 @@
     background: #fef2f2;
     border-color: #dc2626;
     transform: translateY(-2px);
+}
+
+/* Sold badge for history items */
+.sold-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+    z-index: 2;
+}
+
+.sold-item {
+    opacity: 0.9;
+}
+
+.sold-item .product-image {
+    filter: grayscale(20%);
+}
+
+/* Responsive button adjustments */
+@media (max-width: 768px) {
+    .btn-action {
+        font-size: 0.75rem;
+        padding: 8px 6px;
+    }
+}
+
+@media (min-width: 1200px) {
+    .product-actions {
+        gap: 8px;
+    }
+    
+    .btn-action {
+        padding: 12px 10px;
+        font-size: 0.9rem;
+    }
 }
 
 /* Empty State */

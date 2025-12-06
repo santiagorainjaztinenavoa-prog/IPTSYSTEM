@@ -47,43 +47,117 @@ function setCache(cache, key, data, isMap = true) {
 
 // Clear specific cache types
 window.firebaseClearCache = function(cacheType) {
-    if (cacheType === 'all') {
-        dataCache.allProducts = { data: null, timestamp: 0 };
-        dataCache.sellerProducts.clear();
-        dataCache.profiles.clear();
-        dataCache.savedProducts.clear();
-        dataCache.savedIds.clear();
-        dataCache.conversations.clear();
-    } else if (cacheType === 'products') {
-        dataCache.allProducts = { data: null, timestamp: 0 };
-        dataCache.sellerProducts.clear();
-    } else if (cacheType === 'saved') {
-        dataCache.savedProducts.clear();
-        dataCache.savedIds.clear();
-    }
-    console.log('🗑️ Cache cleared:', cacheType);
+    // Always clear all caches for reliability
+    dataCache.allProducts = { data: null, timestamp: 0 };
+    dataCache.sellerProducts.clear();
+    dataCache.profiles.clear();
+    dataCache.savedProducts.clear();
+    dataCache.savedIds.clear();
+    dataCache.conversations.clear();
+    console.log('✅ Cleared ALL caches');
 };
 
 // -----------------------
-// Geo data (Regions/Provinces/Cities/Barangays) from Firestore
-// Expected collections (client-managed):
-//   ph_regions:      { code, name }
-//   ph_provinces:    { code, name, regionCode }
-//   ph_cities:       { code, name, regionCode, provinceCode }
-//   ph_barangays:    { code, name, cityCode }
-// Field naming is flexible; common aliases are supported (region_code, province_code, city_code, regionName)
+// Geo data (Regions/Provinces/Cities/Barangays) from LOCAL JSON (ZERO Firestore reads!)
+// Data file: /data/ph-addresses.json
+// Structure: { regions: [], provinces: [], cities: [], barangays: [] }
 // -----------------------
-const geoCache = { regions: null, provincesByRegion: {}, citiesByRegion: {}, citiesByProvince: {}, barangaysByCity: {} };
-function mapName(d) { return d.name || d.regionName || d.cityName || d.provinceName || d.barangayName || d.title || ''; }
-function mapRegionCode(d, fallbackId) { return d.regionCode || d.region_code || d.region || fallbackId; }
-function mapProvinceCode(d, fallbackId) { return d.provinceCode || d.province_code || d.province || fallbackId; }
-function mapCityCode(d, fallbackId) { return d.cityCode || d.city_code || d.municipalityCode || d.municipality_code || d.city || fallbackId; }
+const geoCache = { 
+    loaded: false,
+    allData: null,
+    regions: null, 
+    provincesByRegion: {}, 
+    citiesByRegion: {}, 
+    citiesByProvince: {}, 
+    barangaysByCity: {} 
+};
 
-async function geoLoadRegions() { if (geoCache.regions) return geoCache.regions; const snaps = await getDocs(collection(db, 'ph_regions')); const arr = []; snaps.forEach(docSnap => { const d = docSnap.data() || {}; arr.push({ code: d.code || docSnap.id, name: mapName(d) || (d.code || docSnap.id) }); }); arr.sort((a,b)=>a.name.localeCompare(b.name)); geoCache.regions = arr; return arr; }
-async function geoLoadProvincesByRegion(regionCode) { if (!regionCode) return []; if (geoCache.provincesByRegion[regionCode]) return geoCache.provincesByRegion[regionCode]; const col = collection(db, 'ph_provinces'); const results = []; for (const f of ['regionCode','region_code','region']) { const qy = query(col, where(f,'==',regionCode)); const snaps = await getDocs(qy); snaps.forEach(s=>{ const d=s.data()||{}; results.push({ code:d.code||s.id, name:mapName(d)|| (d.code||s.id), regionCode: mapRegionCode(d,regionCode) }); }); if (results.length>0) break; } results.sort((a,b)=>a.name.localeCompare(b.name)); geoCache.provincesByRegion[regionCode]=results; return results; }
-async function geoLoadCitiesByRegion(regionCode) { if (!regionCode) return []; if (geoCache.citiesByRegion[regionCode]) return geoCache.citiesByRegion[regionCode]; const col = collection(db,'ph_cities'); const results=[]; for (const f of ['regionCode','region_code','region']) { const qy=query(col, where(f,'==',regionCode)); const snaps=await getDocs(qy); snaps.forEach(s=>{ const d=s.data()||{}; results.push({ code:d.code||s.id, name:mapName(d)|| (d.code||s.id), regionCode: mapRegionCode(d,regionCode), provinceCode: mapProvinceCode(d,null) }); }); if (results.length>0) break; } results.sort((a,b)=>a.name.localeCompare(b.name)); geoCache.citiesByRegion[regionCode]=results; return results; }
-async function geoLoadCitiesByProvince(provinceCode) { if (!provinceCode) return []; if (geoCache.citiesByProvince[provinceCode]) return geoCache.citiesByProvince[provinceCode]; const col=collection(db,'ph_cities'); const results=[]; for (const f of ['provinceCode','province_code','province']) { const qy=query(col, where(f,'==',provinceCode)); const snaps=await getDocs(qy); snaps.forEach(s=>{ const d=s.data()||{}; results.push({ code:d.code||s.id, name:mapName(d)|| (d.code||s.id), regionCode: mapRegionCode(d,null), provinceCode: mapProvinceCode(d,provinceCode) }); }); if (results.length>0) break; } results.sort((a,b)=>a.name.localeCompare(b.name)); geoCache.citiesByProvince[provinceCode]=results; return results; }
-async function geoLoadBarangaysByCity(cityCode) { if (!cityCode) return []; if (geoCache.barangaysByCity[cityCode]) return geoCache.barangaysByCity[cityCode]; const col=collection(db,'ph_barangays'); const results=[]; for (const f of ['cityCode','city_code','municipalityCode','municipality_code','city']) { const qy=query(col, where(f,'==',cityCode)); const snaps=await getDocs(qy); snaps.forEach(s=>{ const d=s.data()||{}; results.push({ code:d.code||s.id, name:mapName(d)|| (d.code||s.id), cityCode: mapCityCode(d,cityCode) }); }); if (results.length>0) break; } results.sort((a,b)=>a.name.localeCompare(b.name)); geoCache.barangaysByCity[cityCode]=results; return results; }
+// Load all geo data from local JSON file (one-time fetch, zero Firestore reads)
+async function loadGeoDataFromJson() {
+    if (geoCache.loaded && geoCache.allData) {
+        return geoCache.allData;
+    }
+    
+    try {
+        console.log('📍 Loading PH address data from local JSON...');
+        const response = await fetch('/data/ph-addresses.json');
+        if (!response.ok) {
+            throw new Error(`Failed to load ph-addresses.json: ${response.status}`);
+        }
+        const data = await response.json();
+        geoCache.allData = data;
+        geoCache.loaded = true;
+        console.log('✅ PH address data loaded:', {
+            regions: data.regions?.length || 0,
+            provinces: data.provinces?.length || 0,
+            cities: data.cities?.length || 0,
+            barangays: data.barangays?.length || 0
+        });
+        return data;
+    } catch (err) {
+        console.error('❌ Failed to load PH address JSON:', err);
+        // Return empty structure to prevent crashes
+        return { regions: [], provinces: [], cities: [], barangays: [] };
+    }
+}
+
+async function geoLoadRegions() { 
+    if (geoCache.regions) return geoCache.regions; 
+    const data = await loadGeoDataFromJson();
+    const arr = (data.regions || []).map(r => ({ code: r.code, name: r.name }));
+    arr.sort((a,b) => a.name.localeCompare(b.name)); 
+    geoCache.regions = arr; 
+    return arr; 
+}
+
+async function geoLoadProvincesByRegion(regionCode) { 
+    if (!regionCode) return []; 
+    if (geoCache.provincesByRegion[regionCode]) return geoCache.provincesByRegion[regionCode]; 
+    const data = await loadGeoDataFromJson();
+    const results = (data.provinces || [])
+        .filter(p => p.regionCode === regionCode)
+        .map(p => ({ code: p.code, name: p.name, regionCode: p.regionCode }));
+    results.sort((a,b) => a.name.localeCompare(b.name)); 
+    geoCache.provincesByRegion[regionCode] = results; 
+    return results; 
+}
+
+async function geoLoadCitiesByRegion(regionCode) { 
+    if (!regionCode) return []; 
+    if (geoCache.citiesByRegion[regionCode]) return geoCache.citiesByRegion[regionCode]; 
+    const data = await loadGeoDataFromJson();
+    const results = (data.cities || [])
+        .filter(c => c.regionCode === regionCode)
+        .map(c => ({ code: c.code, name: c.name, regionCode: c.regionCode, provinceCode: c.provinceCode }));
+    results.sort((a,b) => a.name.localeCompare(b.name)); 
+    geoCache.citiesByRegion[regionCode] = results; 
+    return results; 
+}
+
+async function geoLoadCitiesByProvince(provinceCode) { 
+    if (!provinceCode) return []; 
+    if (geoCache.citiesByProvince[provinceCode]) return geoCache.citiesByProvince[provinceCode]; 
+    const data = await loadGeoDataFromJson();
+    const results = (data.cities || [])
+        .filter(c => c.provinceCode === provinceCode)
+        .map(c => ({ code: c.code, name: c.name, regionCode: c.regionCode, provinceCode: c.provinceCode }));
+    results.sort((a,b) => a.name.localeCompare(b.name)); 
+    geoCache.citiesByProvince[provinceCode] = results; 
+    return results; 
+}
+
+async function geoLoadBarangaysByCity(cityCode) { 
+    if (!cityCode) return []; 
+    if (geoCache.barangaysByCity[cityCode]) return geoCache.barangaysByCity[cityCode]; 
+    const data = await loadGeoDataFromJson();
+    const results = (data.barangays || [])
+        .filter(b => b.cityCode === cityCode)
+        .map(b => ({ code: b.code, name: b.name, cityCode: b.cityCode }));
+    results.sort((a,b) => a.name.localeCompare(b.name)); 
+    geoCache.barangaysByCity[cityCode] = results; 
+    return results; 
+}
+
 window.firebaseGeo = { loadRegions: geoLoadRegions, loadProvincesByRegion: geoLoadProvincesByRegion, loadCitiesByRegion: geoLoadCitiesByRegion, loadCitiesByProvince: geoLoadCitiesByProvince, loadBarangaysByCity: geoLoadBarangaysByCity };
 
 auth.onAuthStateChanged((user) => { if (user) { console.log('Firebase user authenticated:', user.uid, user.email); } else { console.log('No Firebase user authenticated'); tryAutoSignInFromSession(); } });
@@ -103,18 +177,16 @@ window.firebaseRegister = async function(firstName, lastName, email, password, u
 window.firebaseCreateListing = async function(listing) { try { console.log('🔥 firebaseCreateListing called with:', listing); let userId = null; const user = auth.currentUser; if (user) { userId = user.uid; console.log('✅ Using Firebase authenticated user:', userId); } else { userId = sessionStorage.getItem('UserId') || 'anonymous-' + Date.now(); console.log('⚠️  Using session/anonymous user ID:', userId); } const docId = listing.id || null; const payload = { title: listing.title || '', description: listing.description || '', price: typeof listing.price === 'number' ? listing.price : parseFloat(listing.price) || 0, category: listing.category || '', condition: listing.condition || '', imageUrl: listing.imageUrl || '', user_id: userId, seller_name: sessionStorage.getItem('FullName') || 'Unknown Seller', seller_username: sessionStorage.getItem('Username') || 'unknown', product_id: docId, date_created: serverTimestamp() }; console.log('📝 Payload to save:', JSON.stringify(payload, null, 2)); const col = collection(db, 'tbl_listing'); console.log('📍 Saving to collection: tbl_listing'); const docRefAdded = await addDoc(col, payload); console.log('✅ Document added successfully with ID:', docRefAdded.id); if (!docId) { try { await updateDoc(doc(db, 'tbl_listing', docRefAdded.id), { product_id: docRefAdded.id }); console.log('✅ Updated product_id field to:', docRefAdded.id); } catch (updateErr) { console.warn('⚠️  Failed to update product_id, but document was created:', updateErr.message); } } console.log('✅ Listing saved successfully to Firestore!'); return { success: true, id: docRefAdded.id }; } catch (err) { console.error('❌ firebaseCreateListing error:', err); return { success: false, message: err?.message || String(err) }; } };
 window.firebaseUpdateListing = async function(listing) { try { console.log('firebaseUpdateListing called with:', listing); const col = collection(db, 'tbl_listing'); const q = query(col, where('product_id', '==', listing.id)); const snaps = await getDocs(q); console.log('Found', snaps.size, 'documents with product_id:', listing.id); if (snaps.size === 0) { console.log('No docs found by product_id, trying as firestore doc id'); const docReference = doc(db, 'tbl_listing', String(listing.id)); await updateDoc(docReference, { title: listing.title, description: listing.description, price: listing.price, category: listing.category, condition: listing.condition, imageUrl: listing.imageUrl || '' }); console.log('Updated doc by firestore id'); return { success: true }; } for (const d of snaps.docs) { console.log('Updating doc:', d.id); await updateDoc(doc(db, 'tbl_listing', d.id), { title: listing.title, description: listing.description, price: listing.price, category: listing.category, condition: listing.condition, imageUrl: listing.imageUrl || '' }); } console.log('Update completed successfully'); return { success: true }; } catch (err) { console.error('firebaseUpdateListing error', err); return { success: false, message: err?.message || String(err) }; } };
 window.firebaseDeleteListing = async function(productIdOrDocId) { try { console.log('firebaseDeleteListing called with:', productIdOrDocId); const col = collection(db, 'tbl_listing'); const q = query(col, where('product_id', '==', productIdOrDocId)); const snaps = await getDocs(q); console.log('Found', snaps.size, 'documents with product_id:', productIdOrDocId); if (snaps.size === 0) { try { console.log('No docs found by product_id, trying as firestore doc id'); await deleteDoc(doc(db, 'tbl_listing', String(productIdOrDocId))); console.log('Deleted doc by firestore id'); return { success: true }; } catch (e) { console.error('Error deleting by doc id:', e); return { success: false, message: 'No matching listing found' }; } } for (const d of snaps.docs) { console.log('Deleting doc:', d.id); await deleteDoc(doc(db, 'tbl_listing', d.id)); } console.log('Delete completed successfully'); return { success: true }; } catch (err) { console.error('firebaseDeleteListing error', err); return { success: false, message: err?.message || String(err) }; } };
+window.firebaseMarkAsSold = async function(productIdOrDocId) { try { console.log('firebaseMarkAsSold called with:', productIdOrDocId); const col = collection(db, 'tbl_listing'); const q = query(col, where('product_id', '==', productIdOrDocId)); const snaps = await getDocs(q); console.log('Found', snaps.size, 'documents with product_id:', productIdOrDocId); if (snaps.size === 0) { try { console.log('No docs found by product_id, trying as firestore doc id'); const docReference = doc(db, 'tbl_listing', String(productIdOrDocId)); await updateDoc(docReference, { status: 'sold', sold_date: serverTimestamp() }); console.log('Marked as sold by firestore id'); return { success: true }; } catch (e) { console.error('Error marking as sold by doc id:', e); return { success: false, message: 'No matching listing found' }; } } for (const d of snaps.docs) { console.log('Marking as sold doc:', d.id); await updateDoc(doc(db, 'tbl_listing', d.id), { status: 'sold', sold_date: serverTimestamp() }); } console.log('Mark as sold completed successfully'); return { success: true }; } catch (err) { console.error('firebaseMarkAsSold error', err); return { success: false, message: err?.message || String(err) }; } };
+window.firebaseFetchSoldItems = async function(sellerUserId) { try { console.log('🔍 Fetching sold items for seller:', sellerUserId); const col = collection(db, 'tbl_listing'); let q = query(col, where('user_id', '==', sellerUserId), where('status', '==', 'sold')); let snaps = await getDocs(q); console.log('📊 Found', snaps.size, 'sold items'); const soldItems = []; snaps.forEach((docSnap) => { const data = docSnap.data(); if (data.title && typeof data.title === 'string' && data.title.trim() !== '') { soldItems.push({ id: docSnap.id, ...data }); } }); console.log('✅ Returning', soldItems.length, 'sold items'); return { success: true, items: soldItems, count: soldItems.length }; } catch (err) { console.error('firebaseFetchSoldItems error', err); return { success: false, message: err?.message || String(err), items: [] }; } };
 window.__firebaseConfig = firebaseConfig;
 window.firebaseSignIn = async function(email, password) { try { const userCred = await signInWithEmailAndPassword(auth, email, password); const uid = userCred.user.uid; const userDocRef = doc(db, 'users', uid); const snap = await getDoc(userDocRef); if (!snap.exists()) { try { console.warn('Profile document missing for uid, attempting to create minimal profile', { uid }); await setDoc(userDocRef, { first_name: userCred.user.displayName ? userCred.user.displayName.split(' ')[0] : '', last_name: userCred.user.displayName ? userCred.user.displayName.split(' ').slice(1).join(' ') : '', email: userCred.user.email || '', username: (userCred.user.email ? userCred.user.email.split('@')[0] : uid), account_type: 'Buyer', phone_number: '', user_id: uid, date_created: serverTimestamp() }); const newSnap = await getDoc(userDocRef); if (newSnap.exists()) { return { success: true, uid, profile: newSnap.data(), migrated: true }; } else { try { await signOut(auth); } catch { } return { success: false, code: 'user-doc-missing-after-create', message: 'Authenticated but profile could not be created in Firestore.' }; } } catch (createErr) { console.error('Failed to auto-create user profile document', createErr); try { await signOut(auth); } catch { } return { success: false, code: createErr?.code || 'user-doc-create-failed', message: createErr?.message || String(createErr) }; } } return { success: true, uid, profile: snap.data() }; } catch (err) { const code = err?.code || null; const message = err?.message || String(err); console.error('Firebase signIn error', { code, message, err }); return { success: false, code, message }; } };
 window.firebaseUserExistsByEmail = async function(email) { try { const q = query(collection(db, 'users'), where('email', '==', email)); const snap = await getDocs(q); return snap.size > 0; } catch (err) { console.error('Error checking user exists by email', err); return false; } };
 window.establishServerSession = async function(email, uid) { try { let profile = null; try { const userDocRef = doc(db, 'users', uid); const s = await getDoc(userDocRef); if (s.exists()) profile = s.data(); } catch (e) { console.debug('Could not load user profile for server session:', e); } const payload = { Email: email, Uid: uid, Username: profile?.username || null, UserType: profile?.account_type || null, FullName: profile?.first_name || profile?.last_name ? `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() : null }; const resp = await fetch('/Home/ClientLogin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(payload) }); return await resp.json(); } catch (e) { console.error('Failed to establish server session', e); return { success: false, message: e?.message || String(e) }; } };
-window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh = false) {
+window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh = false, includeSold = false) {
     try {
-        // Check cache first
-        const cached = dataCache.sellerProducts.get(sellerUserId);
-        if (!forceRefresh && isCacheValid(cached, CACHE_TTL.PRODUCTS)) {
-            console.log('📦 Using cached seller products for:', sellerUserId);
-            return { success: true, products: cached.data, count: cached.data.length, cached: true };
-        }
+        // Always fetch live data (ignore cache)
+        dataCache.sellerProducts.delete(sellerUserId);
         
         console.log('🔍 Fetching products for seller:', sellerUserId);
         const col = collection(db, 'tbl_listing');
@@ -139,7 +211,10 @@ window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh =
         snaps.forEach((docSnap) => {
             const data = docSnap.data();
             if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
-                products.push({ id: docSnap.id, ...data });
+                // Filter by status - exclude sold items unless includeSold is true
+                if (includeSold || data.status !== 'sold') {
+                    products.push({ id: docSnap.id, ...data });
+                }
             }
         });
         
@@ -155,11 +230,8 @@ window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh =
 };
 window.firebaseFetchAllProducts = async function(forceRefresh = false) {
     try {
-        // Check cache first (unless force refresh)
-        if (!forceRefresh && isCacheValid(dataCache.allProducts, CACHE_TTL.PRODUCTS)) {
-            console.log('📦 Using cached products (' + dataCache.allProducts.data.length + ' items)');
-            return { success: true, products: dataCache.allProducts.data, count: dataCache.allProducts.data.length, cached: true };
-        }
+        // Always fetch live data (ignore cache)
+        dataCache.allProducts = { data: null, timestamp: 0 };
         
         console.log('🔄 Fetching all active products from Firestore');
         const col = collection(db, 'tbl_listing');
@@ -167,14 +239,42 @@ window.firebaseFetchAllProducts = async function(forceRefresh = false) {
         console.log('Found', snaps.size, 'total products');
         
         const products = [];
-        snaps.forEach((docSnap) => {
+        
+        for (const docSnap of snaps.docs) {
             const data = docSnap.data();
             if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
-                if (data.is_active !== false) {
-                    products.push({ id: docSnap.id, ...data });
+                // Filter out sold items from browse
+                if (data.status === 'sold') {
+                    continue;
                 }
+                
+                const productData = { id: docSnap.id, ...data };
+                
+                // Always fetch seller info live if user_id exists
+                if (data.user_id) {
+                    try {
+                        const userDocRef = doc(db, 'users', data.user_id);
+                        const userSnap = await getDoc(userDocRef);
+                        if (userSnap.exists()) {
+                            const userData = userSnap.data();
+                            const fullName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'Unknown Seller';
+                            const username = userData.username || userData.email?.split('@')[0] || '';
+                            productData.seller_name = fullName;
+                            productData.seller_username = username;
+                        } else {
+                            productData.seller_name = productData.seller_name || 'Unknown Seller';
+                        }
+                    } catch (userErr) {
+                        console.debug('Could not fetch seller info for product', docSnap.id);
+                        productData.seller_name = productData.seller_name || 'Unknown Seller';
+                    }
+                } else {
+                    productData.seller_name = productData.seller_name || 'Unknown Seller';
+                }
+                
+                products.push(productData);
             }
-        });
+        }
         
         // Cache the results
         setCache(dataCache.allProducts, null, products, false);
@@ -485,11 +585,10 @@ window.firebaseUpdateProfile = async function(userId, profileData) {
         };
         
         if (profileData.username !== undefined) updateData.username = profileData.username;
-        if (profileData.fullName !== undefined) {
-            const nameParts = profileData.fullName.trim().split(' ');
-            updateData.first_name = nameParts[0] || '';
-            updateData.last_name = nameParts.slice(1).join(' ') || '';
-        }
+        if (profileData.firstName !== undefined) updateData.first_name = profileData.firstName;
+        if (profileData.lastName !== undefined) updateData.last_name = profileData.lastName;
+        if (profileData.middleName !== undefined) updateData.middle_name = profileData.middleName;
+        if (profileData.fullName !== undefined) updateData.full_name = profileData.fullName;
         if (profileData.phoneNumber !== undefined) updateData.phone_number = profileData.phoneNumber;
         if (profileData.additionalEmails !== undefined) updateData.additional_emails = profileData.additionalEmails;
         if (profileData.additionalPhones !== undefined) updateData.additional_phones = profileData.additionalPhones;
@@ -959,6 +1058,141 @@ window.firebaseToggleSaveProduct = async function(userId, productId, productData
         }
     } catch (err) {
         console.error('❌ firebaseToggleSaveProduct error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Alias for backward compatibility
+window.firebaseFetchSavedProducts = window.firebaseGetSavedProducts;
+
+// ========== USER REVIEWS FUNCTIONS ==========
+
+// Add a review for a seller (only buyers can add reviews)
+window.firebaseAddReview = async function(reviewData) {
+    try {
+        const { sellerId, sellerName, buyerId, buyerName, buyerUsername, rating, comment } = reviewData;
+        
+        if (!sellerId || !buyerId || !rating) {
+            throw new Error('Missing required fields: sellerId, buyerId, rating');
+        }
+        
+        const reviewDoc = {
+            seller_id: sellerId,
+            seller_name: sellerName || '',
+            buyer_id: buyerId,
+            buyer_name: buyerName || '',
+            buyer_username: buyerUsername || '',
+            rating: parseInt(rating),
+            comment: comment || '',
+            created_at: serverTimestamp(),
+            updated_at: serverTimestamp()
+        };
+        
+        const docRef = await addDoc(collection(db, 'user_reviews'), reviewDoc);
+        console.log('✅ Review added with ID:', docRef.id);
+        
+        return { success: true, reviewId: docRef.id };
+    } catch (err) {
+        console.error('❌ firebaseAddReview error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Get all reviews for a specific seller
+window.firebaseGetSellerReviews = async function(sellerId) {
+    try {
+        if (!sellerId) {
+            throw new Error('Seller ID is required');
+        }
+        
+        const col = collection(db, 'user_reviews');
+        const q = query(col, where('seller_id', '==', sellerId));
+        const snapshot = await getDocs(q);
+        
+        const reviews = [];
+        snapshot.forEach(doc => {
+            reviews.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        
+        // Sort by created_at descending (newest first)
+        reviews.sort((a, b) => {
+            const aTime = a.created_at?.seconds || 0;
+            const bTime = b.created_at?.seconds || 0;
+            return bTime - aTime;
+        });
+        
+        console.log('✅ Found', reviews.length, 'reviews for seller:', sellerId);
+        return { success: true, reviews, count: reviews.length };
+    } catch (err) {
+        console.error('❌ firebaseGetSellerReviews error:', err);
+        return { success: false, reviews: [], message: err?.message || String(err) };
+    }
+};
+
+// Delete a review (only the buyer who created it can delete)
+window.firebaseDeleteReview = async function(reviewId, buyerId) {
+    try {
+        if (!reviewId || !buyerId) {
+            throw new Error('Review ID and Buyer ID are required');
+        }
+        
+        // First check if the review belongs to this buyer
+        const reviewRef = doc(db, 'user_reviews', reviewId);
+        const reviewSnap = await getDoc(reviewRef);
+        
+        if (!reviewSnap.exists()) {
+            throw new Error('Review not found');
+        }
+        
+        const reviewData = reviewSnap.data();
+        if (reviewData.buyer_id !== buyerId) {
+            throw new Error('You can only delete your own reviews');
+        }
+        
+        await deleteDoc(reviewRef);
+        console.log('✅ Review deleted:', reviewId);
+        
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseDeleteReview error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Update a review (only the buyer who created it can update)
+window.firebaseUpdateReview = async function(reviewId, buyerId, updates) {
+    try {
+        if (!reviewId || !buyerId) {
+            throw new Error('Review ID and Buyer ID are required');
+        }
+        
+        // First check if the review belongs to this buyer
+        const reviewRef = doc(db, 'user_reviews', reviewId);
+        const reviewSnap = await getDoc(reviewRef);
+        
+        if (!reviewSnap.exists()) {
+            throw new Error('Review not found');
+        }
+        
+        const reviewData = reviewSnap.data();
+        if (reviewData.buyer_id !== buyerId) {
+            throw new Error('You can only update your own reviews');
+        }
+        
+        const updateData = {
+            ...updates,
+            updated_at: serverTimestamp()
+        };
+        
+        await updateDoc(reviewRef, updateData);
+        console.log('✅ Review updated:', reviewId);
+        
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseUpdateReview error:', err);
         return { success: false, message: err?.message || String(err) };
     }
 };

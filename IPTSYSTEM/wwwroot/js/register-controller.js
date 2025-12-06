@@ -223,6 +223,7 @@ class RegisterController {
             password: formData.get('Password'),
             confirmPassword: formData.get('ConfirmPassword'),
             agreeToTerms: formData.get('AgreeToTerms') !== null,
+            accountType: accountType,
             phoneNumber: phoneNumber,
             region,
             province,
@@ -363,64 +364,133 @@ class RegisterController {
 
     // Validate form data
     validateForm(data) {
+        // Clear all previous validation errors
+        this.clearValidationErrors();
+        
+        let isValid = true;
+        
+        // Account type validation
+        const accountTypeSelect = document.getElementById('AccountType');
+        if (!data.accountType || data.accountType.trim().length === 0) {
+            this.showFieldError(accountTypeSelect, 'Please select an account type');
+            if (isValid) { this.showToast('Validation Error', 'Please select an account type', 'warning'); isValid = false; }
+        }
+        
         // Full name validation
+        const firstName = document.getElementById('FirstName');
+        const lastName = document.getElementById('LastName');
         if (!data.fullName || data.fullName.trim().length < 2) {
-            this.showToast('Validation Error', 'Full name must be at least 2 characters', 'warning');
-            return false;
+            this.showFieldError(firstName, 'First name is required');
+            this.showFieldError(lastName, 'Last name is required');
+            if (isValid) { this.showToast('Validation Error', 'Full name must be at least 2 characters', 'warning'); isValid = false; }
         }
 
         // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const emailInput = document.getElementById('Email');
         if (!data.email || !emailRegex.test(data.email)) {
-            this.showToast('Validation Error', 'Please enter a valid email address', 'warning');
-            return false;
+            this.showFieldError(emailInput, 'Please enter a valid email address');
+            if (isValid) { this.showToast('Validation Error', 'Please enter a valid email address', 'warning'); isValid = false; }
         }
 
         // Username validation
         const usernameRegex = /^[a-zA-Z0-9_]{3,50}$/;
+        const usernameInput = document.getElementById('Username');
         if (!data.username || !usernameRegex.test(data.username)) {
-            this.showToast('Validation Error', 'Username must be 3-50 characters (letters, numbers, underscore only)', 'warning');
-            return false;
+            this.showFieldError(usernameInput, 'Username must be 3-50 characters (letters, numbers, underscore only)');
+            if (isValid) { this.showToast('Validation Error', 'Username must be 3-50 characters (letters, numbers, underscore only)', 'warning'); isValid = false; }
+        }
+
+        // Phone number validation
+        const phoneInput = document.getElementById('PhoneNumber');
+        if (!data.phoneNumber || data.phoneNumber.trim().length === 0) {
+            this.showFieldError(phoneInput, 'Phone number is required');
+            if (isValid) { this.showToast('Validation Error', 'Phone number is required', 'warning'); isValid = false; }
+        } else {
+            // Basic phone number format validation (at least 10 digits)
+            const phoneRegex = /^[\d\s\-\+\(\)]{10,20}$/;
+            if (!phoneRegex.test(data.phoneNumber)) {
+                this.showFieldError(phoneInput, 'Please enter a valid phone number');
+                if (isValid) { this.showToast('Validation Error', 'Please enter a valid phone number', 'warning'); isValid = false; }
+            }
+        }
+
+        // Location validation
+        const locationValidation = document.getElementById('locationValidation');
+        if (!data.region || !data.city || !data.barangay) {
+            if (locationValidation) locationValidation.textContent = 'Please select Region, City/Municipality and Barangay';
+            this.highlightField(this.regionSelect, !data.region);
+            this.highlightField(this.citySelect, !data.city);
+            this.highlightField(this.barangaySelect, !data.barangay);
+            if (isValid) { this.showToast('Validation Error', 'Please select Region, City/Municipality and Barangay', 'warning'); isValid = false; }
+        }
+
+        // Postal code and street address validation
+        const addressValidation = document.getElementById('addressValidation');
+        const postalCodeInput = document.getElementById('PostalCode');
+        const streetAddressInput = document.getElementById('StreetAddress');
+        
+        if (!data.postalCode || data.postalCode.trim().length === 0) {
+            this.showFieldError(postalCodeInput, 'Postal code is required');
+            if (addressValidation) addressValidation.textContent = 'Postal code is required';
+            if (isValid) { this.showToast('Validation Error', 'Postal code is required', 'warning'); isValid = false; }
+        }
+        
+        if (!data.streetAddress || data.streetAddress.trim().length === 0) {
+            this.showFieldError(streetAddressInput, 'Street address is required');
+            if (addressValidation && !addressValidation.textContent) addressValidation.textContent = 'Street address is required';
+            else if (addressValidation && addressValidation.textContent) addressValidation.textContent = 'Postal code and street address are required';
+            if (isValid) { this.showToast('Validation Error', 'Street address is required', 'warning'); isValid = false; }
         }
 
         // Password validation
         if (!data.password || data.password.length < 6) {
-            this.showToast('Validation Error', 'Password must be at least 6 characters', 'warning');
-            return false;
+            this.showFieldError(this.passwordInput, 'Password must be at least 6 characters');
+            if (isValid) { this.showToast('Validation Error', 'Password must be at least 6 characters', 'warning'); isValid = false; }
         }
 
         // Password match validation
         if (data.password !== data.confirmPassword) {
-            this.showToast('Validation Error', 'Passwords do not match', 'warning');
-            return false;
+            this.showFieldError(this.confirmPasswordInput, 'Passwords do not match');
+            if (isValid) { this.showToast('Validation Error', 'Passwords do not match', 'warning'); isValid = false; }
         }
 
         // Terms agreement validation
+        const termsCheckbox = document.getElementById('agreeToTerms');
         if (!data.agreeToTerms) {
-            this.showToast('Validation Error', 'You must agree to the Terms and Conditions', 'warning');
-            return false;
+            if (termsCheckbox) termsCheckbox.classList.add('is-invalid');
+            if (isValid) { this.showToast('Validation Error', 'You must agree to the Terms and Conditions', 'warning'); isValid = false; }
         }
 
-        // Phone number validation
-        if (!data.phoneNumber || data.phoneNumber.trim().length === 0) {
-            this.showToast('Validation Error', 'Phone number is required', 'warning');
-            return false;
+        return isValid;
+    }
+    
+    // Clear all validation error styling
+    clearValidationErrors() {
+        // Remove is-invalid class from all inputs
+        document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        // Clear validation message spans
+        document.querySelectorAll('.field-error').forEach(el => el.remove());
+        const locationValidation = document.getElementById('locationValidation');
+        const addressValidation = document.getElementById('addressValidation');
+        if (locationValidation) locationValidation.textContent = '';
+        if (addressValidation) addressValidation.textContent = '';
+    }
+    
+    // Show field error with red border
+    showFieldError(input, message) {
+        if (!input) return;
+        input.classList.add('is-invalid');
+    }
+    
+    // Highlight field with red border
+    highlightField(input, shouldHighlight) {
+        if (!input) return;
+        if (shouldHighlight) {
+            input.classList.add('is-invalid');
+        } else {
+            input.classList.remove('is-invalid');
         }
-
-        // Basic phone number format validation (at least 10 digits)
-        const phoneRegex = /^[\d\s\-\+\(\)]{10,20}$/;
-        if (!phoneRegex.test(data.phoneNumber)) {
-            this.showToast('Validation Error', 'Please enter a valid phone number', 'warning');
-            return false;
-        }
-
-        // Address selections
-        if (!data.region || !data.city || !data.barangay) {
-            this.showToast('Validation Error', 'Please select Region, City/Municipality and Barangay', 'warning');
-            return false;
-        }
-
-        return true;
     }
 
     // Validate password match in real-time

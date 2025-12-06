@@ -13,6 +13,13 @@ namespace IPTSYSTEM.Controllers
 {
     public partial class HomeController : Controller
     {
+                private static string NormalizeCategoryName(string name)
+                {
+                    if (string.IsNullOrWhiteSpace(name)) return name;
+                    var trimmed = name.Trim();
+                    if (string.Equals(trimmed, "Furniture", StringComparison.OrdinalIgnoreCase)) return "Vehicles";
+                    return trimmed;
+                }
         private record RegisteredUser(string Username, string PasswordHash, string UserType, string Email, string FullName);
         private static readonly List<RegisteredUser> _registeredUsers = new();
         private static string HashPassword(string pwd)
@@ -98,11 +105,11 @@ namespace IPTSYSTEM.Controllers
                     sourceListings = _listings.Where(l => l.IsActive).ToList();
                 }
 
-                var categories = new[] { "Electronics", "Fashion", "Home & Living", "Books", "Sports", "Toys & Games", "Furniture", "Beauty" };
+                var categories = new[] { "Electronics", "Fashion", "Home & Living", "Books", "Sports", "Toys & Games", "Vehicles", "Beauty" };
                 var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (var cat in categories)
                 {
-                    counts[cat] = sourceListings.Count(l => l.IsActive && string.Equals(l.Category?.Trim(), cat, StringComparison.OrdinalIgnoreCase));
+                    counts[cat] = sourceListings.Count(l => l.IsActive && string.Equals(NormalizeCategoryName(l.Category), cat, StringComparison.OrdinalIgnoreCase));
                 }
 
                 ViewBag.CategoryCounts = counts;
@@ -113,11 +120,11 @@ namespace IPTSYSTEM.Controllers
                 _logger.LogWarning(ex, "Failed compute category counts from Firestore, falling back to server cache");
                 // fallback to previous behavior
                 var activeListings = _listings.Where(l => l.IsActive).ToList();
-                var categories = new[] { "Electronics", "Fashion", "Home & Living", "Books", "Sports", "Toys & Games", "Furniture", "Beauty" };
+                var categories = new[] { "Electronics", "Fashion", "Home & Living", "Books", "Sports", "Toys & Games", "Vehicles", "Beauty" };
                 var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (var cat in categories)
                 {
-                    counts[cat] = activeListings.Count(l => string.Equals(l.Category?.Trim(), cat, StringComparison.OrdinalIgnoreCase));
+                    counts[cat] = activeListings.Count(l => string.Equals(NormalizeCategoryName(l.Category), cat, StringComparison.OrdinalIgnoreCase));
                 }
                 ViewBag.CategoryCounts = counts;
                 return View();
@@ -146,10 +153,19 @@ namespace IPTSYSTEM.Controllers
                     listings = _listings.Where(l => l.IsActive).ToList();
                 }
 
+                // Filter: Sellers should not see their own items in Browse
+                var currentUserId = HttpContext.Session.GetString("UserId");
+                var currentUserType = HttpContext.Session.GetString("UserType");
+                if (!string.IsNullOrWhiteSpace(currentUserId) && string.Equals(currentUserType, "Seller", StringComparison.OrdinalIgnoreCase))
+                {
+                    listings = listings.Where(l => l.SellerUserId != currentUserId).ToList();
+                    _logger.LogInformation("Filtered out seller's own listings for user {UserId}", currentUserId);
+                }
+
                 // Filters
                 if (!string.IsNullOrWhiteSpace(category))
                 {
-                    listings = listings.Where(l => string.Equals(l.Category?.Trim(), category, StringComparison.OrdinalIgnoreCase)).ToList();
+                    listings = listings.Where(l => string.Equals(NormalizeCategoryName(l.Category), category, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
                 if (!string.IsNullOrWhiteSpace(q))
                 {
@@ -251,7 +267,10 @@ namespace IPTSYSTEM.Controllers
                     {
                         model.RawFirestore = doc;
                         if (doc.TryGetValue("full_name", out var fn) && fn is string s1 && !string.IsNullOrWhiteSpace(s1)) model.FullName = s1;
-                        if (doc.TryGetValue("email", out var em) && em is string s2 && !string.IsNullOrWhiteSpace(s2)) model.Email = s2;
+                        if (doc.TryGetValue("first_name", out var fname) && fname is string s2 && !string.IsNullOrWhiteSpace(s2)) model.FirstName = s2;
+                        if (doc.TryGetValue("last_name", out var lname) && lname is string s3 && !string.IsNullOrWhiteSpace(s3)) model.LastName = s3;
+                        if (doc.TryGetValue("middle_name", out var mname) && mname is string s4 && !string.IsNullOrWhiteSpace(s4)) model.MiddleName = s4;
+                        if (doc.TryGetValue("email", out var em) && em is string s5 && !string.IsNullOrWhiteSpace(s5)) model.Email = s5;
                     }
                 }
             }
@@ -286,6 +305,9 @@ namespace IPTSYSTEM.Controllers
                     {
                         username = request.Username,
                         full_name = request.FullName,
+                        first_name = request.FirstName,
+                        last_name = request.LastName,
+                        middle_name = request.MiddleName,
                         email,
                         phone_number = request.PhoneNumber,
                         additional_emails = request.AdditionalEmails,

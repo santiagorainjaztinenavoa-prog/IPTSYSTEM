@@ -415,6 +415,31 @@ select.form-control:focus option, select.form-control:active option {
     line-height: 1;
 }
 
+/* Invalid field styling */
+.form-control.is-invalid,
+select.is-invalid {
+    border-color: var(--primary-red) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.form-control.is-invalid:focus,
+select.is-invalid:focus {
+    border-color: var(--primary-red) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+}
+
+.form-check-input.is-invalid {
+    border-color: var(--primary-red) !important;
+}
+
+/* Validation error messages */
+.text-danger {
+    display: block;
+    font-size: 0.8rem;
+    margin-top: 0.35rem;
+    color: var(--primary-red);
+}
+
 /* Toast Notifications */
 .toast {
     border: none;

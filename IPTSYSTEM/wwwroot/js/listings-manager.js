@@ -3,6 +3,30 @@
 let listingModal;
 let toastNotification;
 
+// Map categories to Bootstrap Icon classes
+function categoryToIcon(category) {
+    if (!category || typeof category !== 'string') return 'bi-tag';
+    const c = category.trim().toLowerCase();
+    switch(c) {
+        case 'electronics': return 'bi-laptop';
+        case 'fashion': return 'bi-bag';
+        case 'home & living': return 'bi-house-door';
+        case 'books': return 'bi-book';
+        case 'sports': return 'bi-trophy';
+        case 'toys & games': return 'bi-controller';
+        case 'vehicles': return 'bi-truck';
+        case 'furniture': return 'bi-truck';
+        case 'beauty': return 'bi-stars';
+        default: return 'bi-tag';
+    }
+}
+
+function normalizeCategoryName(category) {
+    if (!category || typeof category !== 'string') return category;
+    if (category.trim().toLowerCase() === 'furniture') return 'Vehicles';
+    return category;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     // Initialize Bootstrap components
     const modalEl = document.getElementById('listingModal');
@@ -861,17 +885,21 @@ async function loadListingsFromFirebase() {
                     <!-- Price & Category -->
                     <div class="product-meta">
                         <span class="product-price">₱${parseFloat(product.price || 0).toFixed(2)}</span>
-                        <span class="product-category">${product.category || 'Uncategorized'}</span>
+                                <span class="product-category"><i class="bi ${categoryToIcon(product.category)} me-1"></i> ${normalizeCategoryName(product.category) || product.category || 'Uncategorized'}</span>
                     </div>
                     
                     <!-- Action Buttons -->
                     <div class="product-actions">
                         ${userType === 'seller' || userType === 'admin' ? `
-                            <button class="btn-action btn-edit-minimal" onclick="editListing('${product.id}')" title="Edit">
+                            <button class="btn-action btn-edit-minimal" onclick="editListing('${product.id}')" title="Edit listing">
                                 <i class="bi bi-pencil"></i>
-                                Edit
+                                <span>Edit</span>
                             </button>
-                            <button class="btn-action btn-delete-minimal" onclick="deleteListing('${product.id}', '${escapeHtml(product.title || 'Listing')}')" title="Delete">
+                            <button class="btn-action btn-soldout-minimal" onclick="markAsSoldOut('${product.id}', '${escapeHtml(product.title || 'Listing')}')" title="Mark item as sold">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Sold</span>
+                            </button>
+                            <button class="btn-action btn-delete-minimal" onclick="deleteListing('${product.id}', '${escapeHtml(product.title || 'Listing')}')" title="Delete listing">
                                 <i class="bi bi-trash"></i>
                             </button>
                         ` : `
@@ -903,6 +931,41 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Mark item as sold out
+async function markAsSoldOut(productId, title) {
+    if (!confirm(`Mark "${title}" as sold out? This will move it to your history.`)) {
+        return;
+    }
+    
+    try {
+        console.log('🔄 Marking product as sold:', productId);
+        
+        // Call Firebase function to update status
+        if (typeof window.firebaseMarkAsSold === 'function') {
+            const result = await window.firebaseMarkAsSold(productId);
+            
+            if (result.success) {
+                console.log('✅ Product marked as sold successfully');
+                showToast('Item marked as sold and moved to history', 'success');
+                
+                // Reload listings to reflect changes
+                setTimeout(() => {
+                    loadListingsFromFirebase();
+                }, 500);
+            } else {
+                console.error('❌ Failed to mark as sold:', result.message);
+                showToast('Failed to mark item as sold: ' + (result.message || 'Unknown error'), 'error');
+            }
+        } else {
+            console.error('❌ firebaseMarkAsSold function not available');
+            showToast('Sold out feature not available. Please refresh the page.', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Error marking as sold:', error);
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
 // Make functions globally accessible
 window.openListingModal = openListingModal;
 window.editListing = editListing;
@@ -910,3 +973,4 @@ window.saveListing = saveListing;
 window.deleteListing = deleteListing;
 window.removeImage = removeImage;
 window.loadListingsFromFirebase = loadListingsFromFirebase;
+window.markAsSoldOut = markAsSoldOut;

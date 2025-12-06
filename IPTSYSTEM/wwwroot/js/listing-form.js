@@ -2,6 +2,30 @@
 
 let currentEditingListingId = null;
 
+// Map categories to Bootstrap Icon classes
+function categoryToIcon(category) {
+    if (!category || typeof category !== 'string') return 'bi-tag';
+    const c = category.trim().toLowerCase();
+    switch(c) {
+        case 'electronics': return 'bi-laptop';
+        case 'fashion': return 'bi-bag';
+        case 'home & living': return 'bi-house-door';
+        case 'books': return 'bi-book';
+        case 'sports': return 'bi-trophy';
+        case 'toys & games': return 'bi-controller';
+        case 'vehicles': return 'bi-truck';
+        case 'furniture': return 'bi-truck';
+        case 'beauty': return 'bi-stars';
+        default: return 'bi-tag';
+    }
+}
+
+function normalizeCategoryName(category) {
+    if (!category || typeof category !== 'string') return category;
+    if (category.trim().toLowerCase() === 'furniture') return 'Vehicles';
+    return category;
+}
+
 function openListingModal(listingId = null) {
     currentEditingListingId = listingId;
     const modal = document.getElementById('listingModal');
@@ -230,7 +254,7 @@ function createListingCard(listing) {
                 <!-- Price & Category -->
                 <div class="price-category">
                     <span class="product-price">₱${listing.price.toFixed(2)}</span>
-                    <span class="product-category">${escapeHtml(listing.category)}</span>
+                    <span class="product-category"><i class="bi ${categoryToIcon(listing.category)} me-1"></i> ${escapeHtml(normalizeCategoryName(listing.category) || listing.category || 'Uncategorized')}</span>
                 </div>
                 
                 <!-- Seller Info -->
@@ -243,6 +267,9 @@ function createListingCard(listing) {
             <div class="product-actions">
                 <button class="btn-edit" onclick="openListingModal('${listing.product_id}')">
                     <i class="bi bi-pencil"></i> Edit
+                </button>
+                <button class="btn-soldout" onclick="markAsSoldOut('${listing.product_id}', '${escapeHtml(listing.title)}')" title="Mark as sold">
+                    <i class="bi bi-check-circle"></i> Sold Out
                 </button>
                 <button class="btn-delete" onclick="deleteListing('${listing.product_id}')">
                     <i class="bi bi-trash"></i>

@@ -198,6 +198,7 @@
 
 /* Product Actions */
 .btn-edit,
+.btn-soldout,
 .btn-delete {
     border: none;
     padding: 8px 16px;
@@ -218,6 +219,16 @@
 
 .btn-edit:hover {
     background: #0284c7;
+    transform: translateY(-2px);
+}
+
+.btn-soldout {
+    background: #16a34a;
+    color: white;
+}
+
+.btn-soldout:hover {
+    background: #15803d;
     transform: translateY(-2px);
 }
 
