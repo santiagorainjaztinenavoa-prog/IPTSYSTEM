@@ -5,7 +5,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, orderBy, limit } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
 
 const firebaseConfig = { apiKey: "AIzaSyBNWCNxC0d-YAem0Za51epjfl_WXcyDZSE", authDomain: "carousell-c3b3f.firebaseapp.com", projectId: "carousell-c3b3f", storageBucket: "carousell-c3b3f.firebasestorage.app", messagingSenderId: "33772869337", appId: "1:33772869337:web:f1f86a5cc8f71d0c1050c8", measurementId: "G-YR7F7YER8V" };
@@ -228,63 +228,149 @@ window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh =
         return { success: false, message: err?.message || String(err), products: [] };
     }
 };
-window.firebaseFetchAllProducts = async function(forceRefresh = false) {
+window.firebaseFetchAllProducts = async function(forceRefresh = false, limitCount = null) {
     try {
-        // Always fetch live data (ignore cache)
-        dataCache.allProducts = { data: null, timestamp: 0 };
-        
-        console.log('🔄 Fetching all active products from Firestore');
-        const col = collection(db, 'tbl_listing');
-        const snaps = await getDocs(col);
-        console.log('Found', snaps.size, 'total products');
-        
-        const products = [];
-        
-        for (const docSnap of snaps.docs) {
-            const data = docSnap.data();
-            if (data.title && typeof data.title === 'string' && data.title.trim() !== '') {
-                // Filter out sold items from browse
-                if (data.status === 'sold') {
-                    continue;
-                }
-                
-                const productData = { id: docSnap.id, ...data };
-                
-                // Always fetch seller info live if user_id exists
-                if (data.user_id) {
-                    try {
-                        const userDocRef = doc(db, 'users', data.user_id);
-                        const userSnap = await getDoc(userDocRef);
-                        if (userSnap.exists()) {
-                            const userData = userSnap.data();
-                            const fullName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'Unknown Seller';
-                            const username = userData.username || userData.email?.split('@')[0] || '';
-                            productData.seller_name = fullName;
-                            productData.seller_username = username;
-                        } else {
-                            productData.seller_name = productData.seller_name || 'Unknown Seller';
-                        }
-                    } catch (userErr) {
-                        console.debug('Could not fetch seller info for product', docSnap.id);
-                        productData.seller_name = productData.seller_name || 'Unknown Seller';
-                    }
-                } else {
-                    productData.seller_name = productData.seller_name || 'Unknown Seller';
-                }
-                
-                products.push(productData);
+        // Check cache first if not forcing refresh
+        if (!forceRefresh) {
+            const cached = dataCache.allProducts?.data;
+            const cacheAge = Date.now() - (dataCache.allProducts?.timestamp || 0);
+            if (cached && cacheAge < 30000) { // 30 second cache
+                console.log('✅ Using cached products (', cached.length, 'items)');
+                return { success: true, products: cached, count: cached.length, cached: true };
             }
         }
+        
+        console.log('🔄 Fetching products from Firestore', limitCount ? `(limit: ${limitCount})` : '');
+        const col = collection(db, 'tbl_listing');
+        
+        // Simple query without orderBy to avoid missing field issues
+        const snaps = await getDocs(col);
+        console.log('📦 Found', snaps.size, 'total documents');
+        
+        // Collect unique user IDs and filter out sold items
+        const userIds = new Set();
+        const productsRaw = [];
+        
+        snaps.forEach(docSnap => {
+            const data = docSnap.data();
+            // Filter out sold items and empty titles
+            if (data.title && typeof data.title === 'string' && data.title.trim() !== '' && data.status !== 'sold') {
+                productsRaw.push({ id: docSnap.id, ...data });
+                if (data.user_id) userIds.add(data.user_id);
+            }
+        });
+        
+        // Sort by date (newest first) and apply limit if specified
+        productsRaw.sort((a, b) => {
+            const dateA = a.created_at?.seconds || a.date_created?.seconds || 0;
+            const dateB = b.created_at?.seconds || b.date_created?.seconds || 0;
+            return dateB - dateA;
+        });
+        
+        const productsFiltered = limitCount ? productsRaw.slice(0, limitCount) : productsRaw;
+        console.log('📦 After filtering:', productsFiltered.length, 'active products');
+        
+        // Batch fetch all unique sellers at once (much faster!)
+        const userCache = {};
+        if (userIds.size > 0) {
+            console.log('👥 Fetching', userIds.size, 'unique sellers...');
+            const userPromises = Array.from(userIds).map(async (userId) => {
+                try {
+                    const userRef = doc(db, 'users', userId);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        userCache[userId] = {
+                            fullName: `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'Unknown Seller',
+                            username: userData.username || userData.email?.split('@')[0] || ''
+                        };
+                    }
+                } catch (err) {
+                    console.debug('Could not fetch user:', userId);
+                }
+            });
+            await Promise.all(userPromises);
+        }
+        
+        // Map seller info to products
+        const products = productsFiltered.map(product => {
+            const sellerInfo = userCache[product.user_id];
+            return {
+                ...product,
+                seller_name: sellerInfo?.fullName || product.seller_name || 'Unknown Seller',
+                seller_username: sellerInfo?.username || product.seller_username || ''
+            };
+        });
         
         // Cache the results
         setCache(dataCache.allProducts, null, products, false);
         
+        console.log('✅ Products loaded successfully');
         return { success: true, products, count: products.length };
     } catch (err) {
-        console.error('firebaseFetchAllProducts error', err);
+        console.error('❌ firebaseFetchAllProducts error', err);
         return { success: false, message: err?.message || String(err), products: [] };
     }
 };
+
+// Fetch products for a specific user (optimized for Profile page)
+window.firebaseFetchUserProducts = async function(userId, includeSold = false) {
+    try {
+        console.log('🔄 Fetching products for user:', userId, 'includeSold:', includeSold);
+        const col = collection(db, 'tbl_listing');
+        
+        // Query only for this user's products - no orderBy to avoid missing field issues
+        const q = query(col, where('user_id', '==', userId));
+        
+        const snaps = await getDocs(q);
+        console.log('📦 Found', snaps.size, 'total products for user');
+        
+        const products = [];
+        snaps.forEach(docSnap => {
+            const data = docSnap.data();
+            // Filter out sold items client-side if not included
+            const shouldInclude = data.title && typeof data.title === 'string' && data.title.trim() !== '' && (includeSold || data.status !== 'sold');
+            if (shouldInclude) {
+                products.push({ id: docSnap.id, ...data });
+            }
+        });
+        
+        // Sort by date (newest first)
+        products.sort((a, b) => {
+            const dateA = a.created_at?.seconds || a.date_created?.seconds || 0;
+            const dateB = b.created_at?.seconds || b.date_created?.seconds || 0;
+            return dateB - dateA;
+        });
+        
+        console.log('📦 After filtering:', products.length, 'products');
+        
+        // Fetch user info for seller name
+        if (products.length > 0) {
+            try {
+                const userRef = doc(db, 'users', userId);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const fullName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'Unknown Seller';
+                    const username = userData.username || userData.email?.split('@')[0] || '';
+                    products.forEach(p => {
+                        p.seller_name = fullName;
+                        p.seller_username = username;
+                    });
+                }
+            } catch (err) {
+                console.debug('Could not fetch user info');
+            }
+        }
+        
+        console.log('✅ User products loaded successfully');
+        return { success: true, products, count: products.length };
+    } catch (err) {
+        console.error('❌ firebaseFetchUserProducts error', err);
+        return { success: false, message: err?.message || String(err), products: [] };
+    }
+};
+
 window.firebaseFetchProductById = async function(productId) { try { console.log('Fetching product:', productId); const docRef = doc(db, 'tbl_listing', productId); const snap = await getDoc(docRef); if (!snap.exists()) { console.warn('Product not found:', productId); return { success: false, message: 'Product not found' }; } const product = { id: snap.id, ...snap.data() }; console.log('Product found:', product); return { success: true, product }; } catch (err) { console.error('firebaseFetchProductById error', err); return { success: false, message: err?.message || String(err) }; } };
 
 // ========== MESSAGING FUNCTIONS ==========

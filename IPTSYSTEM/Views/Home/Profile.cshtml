@@ -681,44 +681,28 @@
 
         // Wait for Firebase to be ready
         let retries = 0;
-        while (typeof window.firebaseFetchAllProducts !== 'function' && retries < 30) {
+        while (typeof window.firebaseFetchUserProducts !== 'function' && retries < 30) {
             await new Promise(r => setTimeout(r, 100));
             retries++;
         }
         console.log('🔄 [PROFILE] Firebase ready after', retries, 'retries');
 
-        if (typeof window.firebaseFetchAllProducts === 'function') {
+        if (typeof window.firebaseFetchUserProducts === 'function') {
             try {
-                console.log('🔄 [PROFILE] Calling firebaseFetchAllProducts(true)...');
-                const result = await window.firebaseFetchAllProducts(true);
-                console.log('🟢 [PROFILE] firebaseFetchAllProducts result:', result);
+                console.log('🔄 [PROFILE] Calling firebaseFetchUserProducts for userId:', userId);
+                // Use optimized function to fetch only this user's products (excludes sold items)
+                const result = await window.firebaseFetchUserProducts(userId, false);
+                console.log('🟢 [PROFILE] firebaseFetchUserProducts result:', result);
                 
                 if (result.success && result.products) {
-                    console.log('🟢 [PROFILE] SUCCESS: Got', result.products.length, 'total products');
+                    console.log('🟢 [PROFILE] SUCCESS: Got', result.products.length, 'products for current user');
                     
-                    // Print detailed info for each product
-                    result.products.forEach((p, idx) => {
-                        console.log(`  [${idx}] Title: ${p.title} | user_id: "${p.user_id}" | seller_name: "${p.seller_name}" | id: ${p.id}`);
-                    });
-                    
-                    // Filter for ONLY the current logged-in user's items and exclude sold items
-                    console.log('🟡 [PROFILE] Filtering for current userId ONLY:', userId);
-                    const filtered = result.products.filter(p => {
-                        const matchUser = p.user_id === userId;
-                        const notSold = p.status !== 'sold';
-                        if (matchUser) {
-                            console.log(`    ✓ Match found: "${p.title}" - user_id: "${p.user_id}", Not Sold: ${notSold}`);
-                        }
-                        return matchUser && notSold;
-                    });
-                    console.log('🟡 [PROFILE] Filtered result:', filtered.length, 'products belong to current user (excluding sold items)');
-                    
-                    if (filtered.length > 0) {
-                        console.log('✅ [PROFILE] Displaying', filtered.length, 'listings');
-                        displayListings(filtered, container);
+                    if (result.products.length > 0) {
+                        console.log('✅ [PROFILE] Displaying', result.products.length, 'listings');
+                        displayListings(result.products, container);
                         return;
                     } else {
-                        console.log('⚠️ [PROFILE] No products matched filter');
+                        console.log('⚠️ [PROFILE] No products found for user');
                     }
                 } else {
                     console.log('❌ [PROFILE] result.success:', result.success, '| products:', result.products);
@@ -727,7 +711,7 @@
                 console.error('❌ [PROFILE] Firebase fetch error:', err);
             }
         } else {
-            console.error('❌ [PROFILE] firebaseFetchAllProducts not available');
+            console.error('❌ [PROFILE] firebaseFetchUserProducts not available');
         }
 
         // If Firebase didn't load, show empty state
