@@ -140,14 +140,10 @@
             
             if (typeof window.firebaseFetchAllProducts === 'function') {
                 try {
-                    const result = await window.firebaseFetchAllProducts(true);
+                    // Only fetch 4 items for performance
+                    const result = await window.firebaseFetchAllProducts(false, 4);
                     if (result.success && result.products && result.products.length > 0) {
-                        // Get latest 4, sorted by newest first
-                        const latest = result.products
-                            .sort((a, b) => new Date(b.date_created || 0) - new Date(a.date_created || 0))
-                            .slice(0, 4);
-                        
-                        displayLatestItems(latest);
+                        displayLatestItems(result.products);
                     }
                 } catch (err) {
                     console.error('Failed to load items from Firestore:', err);

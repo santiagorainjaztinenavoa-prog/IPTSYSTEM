@@ -185,6 +185,19 @@
             });
         }
 
+        // Update saved badge counter
+        function updateSavedBadgeCount(change) {
+            const badge = document.querySelector('.saved-icon .icon-badge');
+            if (badge) {
+                const currentCount = parseInt(sessionStorage.getItem('savedProductsCount') || '0');
+                const newCount = Math.max(0, currentCount + change);
+                sessionStorage.setItem('savedProductsCount', newCount.toString());
+                sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
+                badge.textContent = newCount > 99 ? '99+' : newCount;
+                badge.style.display = newCount > 0 ? 'flex' : 'none';
+            }
+        }
+
         // Toggle save/unsave product
         async function toggleSaveProduct(productId) {
             if (!currentUserId) {
@@ -206,6 +219,8 @@
                         if (result.success) {
                             savedProductIds.delete(productId);
                             console.log('❌ Product unsaved');
+                            // Update badge counter
+                            updateSavedBadgeCount(-1);
                         }
                     }
                 } else {
@@ -224,6 +239,8 @@
                         if (result.success) {
                             savedProductIds.add(productId);
                             console.log('❤️ Product saved');
+                            // Update badge counter
+                            updateSavedBadgeCount(1);
                         }
                     }
                 }
@@ -265,11 +282,18 @@
                 // Load saved items
                 await loadUserSavedItems();
                 
-                // Fetch products from Firestore
+                // Fetch products from Firestore with timeout
                 if (typeof window.firebaseFetchAllProducts === 'function') {
                     console.log('📦 Fetching products from Firestore...');
-                    const res = await window.firebaseFetchAllProducts();
+                    
+                    // Add timeout to prevent infinite loading
+                    const fetchPromise = window.firebaseFetchAllProducts();
+                    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, message: 'Timeout' }), 10000));
+                    
+                    const res = await Promise.race([fetchPromise, timeoutPromise]);
+                    
                     if (res && res.success && res.products) {
+                        console.log('✅ Received', res.products.length, 'products from Firebase');
                         // Filter out seller's own items if user is a seller
                         if (currentUserType.toLowerCase() === 'seller' && currentUserId) {
                             allProducts = res.products.filter(p => {
@@ -286,7 +310,7 @@
                         // Check if productId parameter exists and open modal
                         checkForProductIdParam();
                     } else {
-                        console.warn('⚠️ No products returned from Firestore');
+                        console.warn('⚠️ No products returned from Firestore:', res);
                         displayProducts([]);
                     }
                 } else {
