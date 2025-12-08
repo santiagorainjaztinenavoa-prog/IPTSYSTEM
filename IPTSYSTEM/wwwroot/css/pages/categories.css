@@ -82,6 +82,27 @@ background: linear-gradient(135deg, #000000 0%, #374151 100%);
     margin: 0;
 }
 
+.btn-add-new {
+    padding: 14px 32px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: white;
+    background: linear-gradient(135deg, #ff7e85 0%, #ff6b72 100%);
+    border: none;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 6px 18px rgba(255, 126, 133, 0.25);
+    margin-left: 24px;
+}
+
+.btn-add-new:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 8px 24px rgba(255, 126, 133, 0.35);
+    background: linear-gradient(135deg, #ff6b72 0%, #ff7e85 100%);
+}
+
 /* Responsive */
 @media (max-width: 991px) {
     .page-title {

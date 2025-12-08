@@ -2,20 +2,34 @@
     ViewData["Title"] = "Categories - Browse by Collection";
     var counts = ViewBag.CategoryCounts as System.Collections.Generic.Dictionary<string, int> ?? new System.Collections.Generic.Dictionary<string, int>();
     int CountFor(string key) => counts.TryGetValue(key, out var v) ? v : 0;
+
+    var userType = Context.Session.GetString("UserType") ?? "buyer";
 }
 
 @section Styles {
     <link rel="stylesheet" href="~/css/pages/categories.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/pages/mylistings.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/listing-form.css" asp-append-version="true" />
 }
 
+
+
 <!-- Categories Page -->
-<section class="categories-page">
+<section class="categories-page" data-user-type="@userType">
     <div class="container py-5">
         <!-- Page Header -->
     <div class="text-center mb-5">
             <h1 class="page-title mb-3">Browse Categories</h1>
     <p class="page-subtitle text-muted">Find exactly what you're looking for</p>
         </div>
+
+        @if (userType == "admin")
+        {
+            <button class="btn-add-new" id="addNewListingBtn" onclick="openCategoryModal()" style="margin: 12px 0;">
+                <i class="bi bi-plus-circle me-2"></i>
+                Add New Category
+            </button>
+        }
 
         <!-- Categories Grid -->
         <div class="row g-4 justify-content-center">
@@ -110,9 +124,37 @@
     </div>
 </section>
 
+<!-- Modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="categoryForm">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Category</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="Name" class="form-label">Category Name</label>
+                        <input type="text" class="form-control" id="category_name" name="Name" required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success">Create</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
 @section Scripts {
     <script src="~/js/firebase-client.js" type="module"></script>
     <script>
+        
+        
+        
         // Populate counts using client-side Firestore if server counts are zero
         (function waitForFirebase(){
             if (typeof window.firebaseFetchProductsByCategory !== 'function') {
@@ -141,6 +183,7 @@
             }
 
             refreshCounts();
+        
         })();
     </script>
 }

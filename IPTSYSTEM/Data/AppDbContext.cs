@@ -9,5 +9,10 @@ namespace IPTSYSTEM.Data
 
         public DbSet<Message> Messages => Set<Message>();
         public DbSet<Conversation> Conversations => Set<Conversation>();
+
+        // for adding categories
+        public DbSet<CategoriesViewModel> Categories { get; set; }
     }
+
+
 }

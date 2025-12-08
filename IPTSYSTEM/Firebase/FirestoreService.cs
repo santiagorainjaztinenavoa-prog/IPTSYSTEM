@@ -1,13 +1,14 @@
 using Google.Cloud.Firestore;
-using Microsoft.Extensions.Logging;
+using IPTSYSTEM.Models;
 using Microsoft.Extensions.Configuration;
-using System.Net.Http;
-using System.Text.Json;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using IPTSYSTEM.Models;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace IPTSYSTEM.Firebase
 {
@@ -17,6 +18,7 @@ namespace IPTSYSTEM.Firebase
     {
         private readonly ILogger<FirestoreService> _logger;
         private readonly FirestoreDb? _db;
+        private readonly HttpClient _httpClient;
         public bool IsInitialized { get; }
 
         public FirestoreService(ILogger<FirestoreService> logger, IConfiguration config)
@@ -34,6 +36,8 @@ namespace IPTSYSTEM.Firebase
                 IsInitialized = false;
                 _logger.LogWarning(ex, "Firestore initialization failed. Mirroring/seeding disabled.");
             }
+
+           
         }
 
         public async Task MirrorUserAsync(string uid, object userDoc)
@@ -521,6 +525,30 @@ namespace IPTSYSTEM.Firebase
             {
                 _logger.LogError(ex, "Failed to create or get conversation");
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Adds a category to Firebase Realtime Database.
+        /// </summary>
+        public async Task<bool> AddCategoryAsync(object category)
+        {
+            try
+            {
+                if (category == null) throw new ArgumentNullException(nameof(category));
+
+                string json = JsonSerializer.Serialize(category);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                // Firebase Realtime DB requires .json at the end
+                var response = await _httpClient.PostAsync($"https://recommerce.firebase.io.com/categories.json", content);
+
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[FirebaseService] Error adding category: {ex.Message}");
+                return false;
             }
         }
     }

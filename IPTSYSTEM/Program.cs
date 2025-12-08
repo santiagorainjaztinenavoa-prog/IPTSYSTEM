@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using IPTSYSTEM.Firebase;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 
 var builder = WebApplication.CreateBuilder(args);
 
