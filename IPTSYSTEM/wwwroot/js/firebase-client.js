@@ -1094,7 +1094,7 @@ window.firebaseGetSavedProducts = async function(userId, forceRefresh = false) {
         console.log('✅ Found', savedProducts.length, 'saved products for user:', userId);
         return { success: true, products: savedProducts, count: savedProducts.length };
     } catch (err) {
-        console.error('❌ firebaseGetSavedProducts error:', err);
+        console.error('❌ firebaseGetSavedProducts error', err);
         return { success: false, products: [], message: err?.message || String(err) };
     }
 };
@@ -1125,7 +1125,7 @@ window.firebaseGetSavedProductIds = async function(userId, forceRefresh = false)
         console.log('✅ Found', savedIds.length, 'saved product IDs for user:', userId);
         return { success: true, savedIds };
     } catch (err) {
-        console.error('❌ firebaseGetSavedProductIds error:', err);
+        console.error('❌ firebaseGetSavedProductIds error', err);
         return { success: false, savedIds: [] };
     }
 };
@@ -1153,10 +1153,10 @@ window.firebaseFetchSavedProducts = window.firebaseGetSavedProducts;
 
 // ========== USER REVIEWS FUNCTIONS ==========
 
-// Add a review for a seller (only buyers can add reviews)
+// Add a review for a seller (buyers and sellers can add reviews) with optional multiple images and video
 window.firebaseAddReview = async function(reviewData) {
     try {
-        const { sellerId, sellerName, buyerId, buyerName, buyerUsername, rating, comment } = reviewData;
+        const { sellerId, sellerName, buyerId, buyerName, buyerUsername, rating, comment, image, images, video } = reviewData;
         
         if (!sellerId || !buyerId || !rating) {
             throw new Error('Missing required fields: sellerId, buyerId, rating');
@@ -1170,6 +1170,10 @@ window.firebaseAddReview = async function(reviewData) {
             buyer_username: buyerUsername || '',
             rating: parseInt(rating),
             comment: comment || '',
+            // media
+            image: image || '',              // backward compatibility
+            images: Array.isArray(images) ? images : [],
+            video: video || '',
             created_at: serverTimestamp(),
             updated_at: serverTimestamp()
         };
@@ -1213,7 +1217,7 @@ window.firebaseGetSellerReviews = async function(sellerId) {
         console.log('✅ Found', reviews.length, 'reviews for seller:', sellerId);
         return { success: true, reviews, count: reviews.length };
     } catch (err) {
-        console.error('❌ firebaseGetSellerReviews error:', err);
+        console.error('❌ firebaseGetSellerReviews error', err);
         return { success: false, reviews: [], message: err?.message || String(err) };
     }
 };

@@ -129,7 +129,7 @@
                                     <i class="bi bi-currency-dollar text-green-400 text-2xl"></i>
                                 </div>
                             </div>
-                            <p class="text-3xl font-bold text-white">?@((Model.Stats.TotalRevenue / 1000).ToString("N1"))k</p>
+                            <p class="text-3xl font-bold text-white">@((Model.Stats.TotalRevenue).ToString("C", new System.Globalization.CultureInfo("en-PH")))</p>
                             <p class="text-xs text-green-400 mt-2 flex items-center gap-1">
                                 <i class="bi bi-arrow-up"></i> +23.1% from last month
                             </p>
@@ -208,7 +208,7 @@
                                         {
                                             <tr class="border-b border-gray-800 hover:bg-gray-800 transition">
                                                 <td class="py-3 px-2 font-medium text-white">@listing.Title</td>
-                                                <td class="py-3 px-2 text-gray-300">₱@listing.Price.ToString("N0")</td>
+                                                <td class="py-3 px-2 text-gray-300">@listing.Price.ToString("C", new System.Globalization.CultureInfo("en-PH"))</td>
                                                 <td class="py-3 px-2 text-gray-300">
                                                     <span class="flex items-center gap-1">
                                                         <i class="bi bi-eye"></i> @listing.Views

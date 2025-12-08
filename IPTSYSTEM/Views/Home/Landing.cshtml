@@ -1,6 +1,7 @@
 ﻿@model List<IPTSYSTEM.Models.Listing>
 @{
     ViewData["Title"] = "Recommerce - Your Trusted Marketplace";
+    var isLoggedIn = Context.Session.GetString("Username") != null;
 }
 
 @section Styles {
@@ -11,47 +12,41 @@
     <!-- Yellow Shopping Background -->
     <div class="hero-yellow-bg"></div>
 
- <!-- Shopping Items Decoration -->
+    <!-- Shopping Items Decoration -->
     <div class="shopping-items-decor">
         <div class="shopping-item item-cart"></div>
         <div class="shopping-item item-bag"></div>
-  <div class="shopping-item item-card"></div>
+        <div class="shopping-item item-card"></div>
         <div class="shopping-item item-glasses"></div>
-      <div class="shopping-item item-watch"></div>
- </div>
+        <div class="shopping-item item-watch"></div>
+    </div>
     
     <div class="container position-relative hero-content-yellow">
         <div class="row align-items-center">
-      <div class="col-lg-7">
-       <!-- Main Heading -->
-   <h1 class="hero-main-heading-yellow mb-4">
-      Your One-Stop Shop for<br>
-           <span class="highlight-yellow">Pre-Loved Treasures</span>
-  </h1>
-  
+            <div class="col-lg-7">
+                <!-- Main Heading -->
+                <h1 class="hero-main-heading-yellow mb-4">
+                    Your One-Stop Shop for<br>
+                    <span class="highlight-yellow">Pre-Loved Treasures</span>
+                </h1>
+                
                 <!-- Description -->
-             <p class="hero-description-yellow mb-4">
-  Shop smarter, sell faster. Join thousands of buyers and sellers in our trusted community marketplace. Find amazing deals on quality items or turn your unused belongings into cash today.
+                <p class="hero-description-yellow mb-4">
+                    Shop smarter, sell faster. Join thousands of buyers and sellers in our trusted community marketplace. Find amazing deals on quality items or turn your unused belongings into cash today.
                 </p>
-           
- <!-- Action Buttons -->
-       <div class="hero-buttons d-flex gap-3">
-  <a href="/Home/Categories" class="btn btn-browse-yellow">
-  Browse Categories
-         <i class="bi bi-arrow-right ms-2"></i>
- </a>
-            @{
-                var isLoggedIn = Context.Session.GetString("Username") != null;
-            }
-            @if (isLoggedIn)
-            {
-                <a href="/Home/Profile" class="btn btn-start-selling-yellow">Start Selling</a>
-            }
-            else
-            {
-                <a href="/Home/Login" class="btn btn-start-selling-yellow" onclick="return requireLogin(event)">Start Selling</a>
-            }
-    </div>
+                
+                <!-- Action Buttons -->
+                <div class="hero-buttons d-flex gap-3">
+                    <a href="/Home/Categories" class="btn btn-browse-yellow">
+                        Browse Categories
+                        <i class="bi bi-arrow-right ms-2"></i>
+                    </a>
+                    @if(isLoggedIn){
+                        <a href="/Home/Profile" class="btn btn-start-selling-yellow">Start Selling</a>
+                    } else {
+                        <a href="/Home/Login" class="btn btn-start-selling-yellow" onclick="return requireLogin(event)">Start Selling</a>
+                    }
+                </div>
             </div>
         </div>
     </div>
@@ -95,18 +90,18 @@
                     var conditionClass = condition.ToLowerInvariant().Replace(" ", "-");
                     var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop" : item.ImageUrl;
                     <div class="col-12 col-sm-6 col-lg-3" data-created="@item.CreatedDate.Ticks" data-price="@item.Price">
-                        <div class="item-card">
+                        <div class="item-card" onclick="viewOnBrowse('@item.Id')" style="cursor:pointer;">
                             <div class="item-image-wrapper">
                                 <img src="@imageUrl" alt="@item.Title" class="item-image">
                                 <span class="item-badge badge-@conditionClass">@condition</span>
-                                <button class="btn-wishlist"><i class="bi bi-heart"></i></button>
+                                <button class="btn-wishlist" id="home-heart-@item.Id" onclick="event.stopPropagation(); toggleSaveFromHome('@item.Id')" title="Save item"><i class="bi bi-heart"></i></button>
                             </div>
                             <div class="item-details">
                                 <h3 class="item-title">@item.Title</h3>
                                 <p class="item-description">@{ var desc = item.Description ?? ""; }@(desc.Length > 80 ? (desc.Substring(0,80) + "...") : desc)</p>
                                 <div class="item-footer">
-                                    <span class="item-price">₱@item.Price.ToString("0.00")</span>
-                                    <div class="item-rating"><i class="bi bi-star-fill text-success"></i><span class="rating-value">5</span></div>
+                                    <span class="item-price">@item.Price.ToString("C", new System.Globalization.CultureInfo("en-PH"))</span>
+                                    <!-- Rating removed -->
                                 </div>
                             </div>
                         </div>
@@ -120,11 +115,20 @@
 @section Scripts {
     <script src="~/js/firebase-client.js?v=2.0" type="module"></script>
     <script>
+        const homeUserId = '@(Context.Session.GetString("UserId") ?? "")';
+        let homeSavedIds = new Set();
+        
         function requireLogin(e) {
             // Show a friendly prompt and allow navigation to Login
             alert('Please login first to start selling.');
             // No need to prevent default since href already points to /Home/Login
             return true;
+        }
+        
+        // Navigate to Browse with productId to show full details modal
+        function viewOnBrowse(productId){
+            if (!productId) return;
+            window.location.href = '/Home/Browse?productId=' + encodeURIComponent(productId);
         }
         
         // Load latest 4 items from Firestore
@@ -144,10 +148,118 @@
                     const result = await window.firebaseFetchAllProducts(false, 4);
                     if (result.success && result.products && result.products.length > 0) {
                         displayLatestItems(result.products);
+                        updateHomeHearts();
                     }
                 } catch (err) {
                     console.error('Failed to load items from Firestore:', err);
                 }
+            }
+        }
+        
+        // Load saved ids for current user to reflect heart state
+        async function loadHomeSavedIds() {
+            if (!homeUserId) return;
+            try {
+                // Wait for Firebase
+                let retries = 0;
+                while (typeof window.firebaseGetSavedProductIds !== 'function' && retries < 30) {
+                    await new Promise(r => setTimeout(r, 100));
+                    retries++;
+                }
+                if (typeof window.firebaseGetSavedProductIds === 'function') {
+                    const res = await window.firebaseGetSavedProductIds(homeUserId);
+                    if (res.success) {
+                        homeSavedIds = new Set(res.savedIds || []);
+                        updateHomeHearts();
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not load saved ids for home:', e);
+            }
+        }
+        
+        function updateHomeHearts() {
+            // Toggle visual state for heart buttons
+            const grid = document.getElementById('latestItemsGrid');
+            if (!grid) return;
+            const buttons = grid.querySelectorAll('.btn-wishlist');
+            buttons.forEach(btn => {
+                const idAttr = btn.id || '';
+                const id = idAttr.replace('home-heart-', '');
+                if (!id) return;
+                const icon = btn.querySelector('i');
+                const isSaved = homeSavedIds.has(id);
+                if (isSaved) {
+                    btn.classList.add('saved');
+                    if (icon) { icon.classList.remove('bi-heart'); icon.classList.add('bi-heart-fill'); }
+                } else {
+                    btn.classList.remove('saved');
+                    if (icon) { icon.classList.remove('bi-heart-fill'); icon.classList.add('bi-heart'); }
+                }
+            });
+        }
+        
+        async function toggleSaveFromHome(productId) {
+            if (!homeUserId) {
+                alert('Please login to save items');
+                window.location.href = '/Home/Login';
+                return;
+            }
+            // Find product data in DOM (fallback minimal fields)
+            const card = document.getElementById('home-heart-' + productId)?.closest('.item-card');
+            const title = card ? (card.querySelector('.item-title')?.textContent || '') : '';
+            const priceText = card ? (card.querySelector('.item-price')?.textContent || '₱0.00') : '₱0.00';
+            const price = (() => { try { return Number(priceText.replace(/[^0-9.]/g, '')); } catch { return 0; } })();
+            const imageUrl = card ? (card.querySelector('.item-image')?.getAttribute('src') || '') : '';
+            const conditionBadge = card ? (card.querySelector('.item-badge')?.textContent || 'New') : 'New';
+            const category = ''; // not present on Home cards
+            const sellerName = ''; const sellerUsername = ''; const sellerId = '';
+            
+            try {
+                const isSaved = homeSavedIds.has(productId);
+                if (isSaved) {
+                    if (typeof window.firebaseUnsaveProduct === 'function') {
+                        const result = await window.firebaseUnsaveProduct(homeUserId, productId);
+                        if (result.success) {
+                            homeSavedIds.delete(productId);
+                            updateHomeSavedBadgeCount(-1);
+                        }
+                    }
+                } else {
+                    if (typeof window.firebaseSaveProduct === 'function') {
+                        const result = await window.firebaseSaveProduct(homeUserId, productId, {
+                            title: title,
+                            price: price,
+                            imageUrl: imageUrl,
+                            category: category,
+                            condition: conditionBadge,
+                            sellerName: sellerName,
+                            sellerUsername: sellerUsername,
+                            sellerId: sellerId
+                        });
+                        if (result.success) {
+                            homeSavedIds.add(productId);
+                            updateHomeSavedBadgeCount(1);
+                        }
+                    }
+                }
+                updateHomeHearts();
+            } catch (error) {
+                console.error('Error toggling save from Home:', error);
+                alert('Error saving item. Please try again.');
+            }
+        }
+        
+        // Update saved badge in header using same storage convention
+        function updateHomeSavedBadgeCount(change) {
+            const badge = document.querySelector('.saved-icon .icon-badge');
+            if (badge) {
+                const currentCount = parseInt(sessionStorage.getItem('savedProductsCount') || '0');
+                const newCount = Math.max(0, currentCount + change);
+                sessionStorage.setItem('savedProductsCount', newCount.toString());
+                sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
+                badge.textContent = newCount > 99 ? '99+' : newCount;
+                badge.style.display = newCount > 0 ? 'flex' : 'none';
             }
         }
         
@@ -169,21 +281,21 @@
             }
             
             const html = products.map(item => `
-                <div class="col-12 col-sm-6 col-lg-3" data-created="${new Date(item.date_created || 0).getTime()}" data-price="${item.price || 0}">
-                    <div class="item-card">
+                <div class="col-12 col-sm-6 col-lg-3" data-created="${(item.date_created?.seconds || 0) * 1000}" data-price="${item.price || 0}">
+                    <div class="item-card" onclick="viewOnBrowse('${item.id}')" style="cursor:pointer;">
                         <div class="item-image-wrapper">
                             <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
                                  alt="${item.title}" class="item-image"
                                  onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
                             <span class="item-badge badge-${(item.condition || 'new').toLowerCase().replace(' ', '-')}">${item.condition || 'New'}</span>
-                            <button class="btn-wishlist"><i class="bi bi-heart"></i></button>
+                            <button class="btn-wishlist" id="home-heart-${item.id}" onclick="event.stopPropagation(); toggleSaveFromHome('${item.id}')" title="Save item"><i class="bi bi-heart"></i></button>
                         </div>
                         <div class="item-details">
                             <h3 class="item-title">${item.title}</h3>
                             <p class="item-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
                             <div class="item-footer">
-                                <span class="item-price">₱${parseFloat(item.price || 0).toFixed(2)}</span>
-                                <div class="item-rating"><i class="bi bi-star-fill text-success"></i><span class="rating-value">5</span></div>
+                                <span class="item-price">${window.formatCurrency(item.price || 0)}</span>
+                                <!-- Rating removed -->
                             </div>
                         </div>
                     </div>
@@ -199,8 +311,6 @@
             const sortBy = document.getElementById('sortFilter').value;
             const grid = document.getElementById('latestItemsGrid');
             const cards = Array.from(grid.children).filter(el => el.classList.contains('col-12'));
-            
-            console.log('Sorting by:', sortBy);
             
             cards.sort((a, b) => {
                 if (sortBy === 'price-low') {
@@ -219,10 +329,12 @@
             });
             
             cards.forEach(card => grid.appendChild(card));
-            console.log('Sorted', cards.length, 'items');
         }
         
-        // Load items on page load
-        document.addEventListener('DOMContentLoaded', loadLatestItems);
+        // Load items and saved ids on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadLatestItems();
+            await loadHomeSavedIds();
+        });
     </script>
 }

@@ -21,6 +21,13 @@
     <link rel="stylesheet" href="~/css/pages/login.css" asp-append-version="true" />
 </head>
 <body>
+    <!-- Single Back Button -->
+    <button type="button" class="btn btn-light shadow-sm rounded-circle" onclick="handleBack()"
+            aria-label="Go back"
+            style="position: fixed; top: 20px; left: 20px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; z-index: 1100;">
+        <i class="bi bi-arrow-left"></i>
+    </button>
+
     <div class="login-container">
         <div class="login-card">
             <!-- Logo and Welcome Message -->
@@ -107,5 +114,17 @@
     <!-- Firebase client (module) - ensure same client config as registration -->
     <script type="module" src="~/js/firebase-client.js" asp-append-version="true"></script>
     <script src="~/js/login-controller.js" asp-append-version="true"></script>
+
+    <script>
+        function handleBack() {
+            try {
+                if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
+                    history.back();
+                    return;
+                }
+            } catch {}
+            window.location.href = '/Home/Landing';
+        }
+    </script>
 </body>
 </html>

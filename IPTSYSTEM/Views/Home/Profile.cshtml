@@ -81,8 +81,28 @@
             transform: translateY(-1px);
             transition: all 0.2s ease;
         }
+        /* Review media gallery styles */
+        .review-gallery { display:flex; flex-wrap:wrap; gap:8px; }
+        .review-thumb { width:96px; height:96px; border-radius:8px; background:#f3f4f6; overflow:hidden; display:flex; align-items:center; justify-content:center; position:relative; }
+        .review-thumb img { max-width:100%; max-height:100%; object-fit:cover; }
+        .video-preview { max-width:320px; border-radius:8px; background:#f3f4f6; }
+
+        /* Lightbox styles */
+        .review-lightbox-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; z-index: 1056; }
+        .review-lightbox { max-width: 90vw; max-height: 85vh; border-radius: 12px; overflow:hidden; box-shadow: 0 20px 60px rgba(0,0,0,.4); background:#000; position:relative; }
+        .review-lightbox img, .review-lightbox video { max-width: 90vw; max-height: 85vh; display:block; }
+        .lightbox-close { position:absolute; top:8px; right:8px; background: rgba(255,255,255,.15); border:none; color:#fff; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+        .lightbox-close:hover { background: rgba(255,255,255,.3); }
     </style>
 }
+
+<!-- Lightbox for review media -->
+<div id="reviewLightboxBackdrop" class="review-lightbox-backdrop">
+    <div class="review-lightbox" id="reviewLightbox">
+        <button class="lightbox-close" id="lightboxCloseBtn" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        <!-- content injected dynamically -->
+    </div>
+</div>
 
 <section class="profile-page py-4" 
          data-user-name="@username"
@@ -207,8 +227,7 @@
         <h6 class="mb-3">Account details</h6>
         <ul class="list-unstyled d-flex flex-column gap-2">
             <li class="d-flex align-items-center gap-2"><i class="bi bi-calendar"></i> <span>Joined @joinedText</span></li>
-            <li class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> <span>0 Followers  �  0 Following</span></li>
-            <li class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> <span>@(Model.City ?? "Unknown City")</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> <span id="profileLocation">@(Model.City ?? "Unknown City")</span></li>
         </ul>
       </div>
     </div>
@@ -257,7 +276,7 @@
             <div class="modal-body" style="padding: 20px 24px 24px;">
                 <h5 class="mb-2" style="font-weight: 700; color: #1a1a1a;">Delete Listing?</h5>
                 <p class="text-muted mb-0" style="font-size: 0.95rem;">
-                    Are you sure you want to delete <span id="deleteItemTitle" style="font-weight: 600; color: #dc2626;"></span>? This action cannot be undone.
+                    Are you sure you want to delete <span id="deleteItemTitle" style="font-weight: 600, color: #dc2626;"></span>? This action cannot be undone.
                 </p>
             </div>
             <div class="modal-footer border-0" style="padding: 0 24px 24px; gap: 12px;">
@@ -330,7 +349,7 @@
                     <div class="row g-3">
                         <!-- Price -->
                         <div class="col-md-6">
-                            <label for="price" class="form-label">Price (?) *</label>
+                            <label for="price" class="form-label">Price (₱) *</label>
                             <input type="number" class="form-control minimal-input" name="price" id="price" placeholder="0.00" step="0.01" min="0" required>
                         </div>
 
@@ -398,6 +417,28 @@
     let pendingSoldOutItem = null;
     let pendingDeleteItem = null;
     
+    // Update profile details modal with username and address from Firebase
+    async function updateProfileDetailsFromFirebase(){
+        const section = document.querySelector('.profile-page');
+        const currentUserId = section.getAttribute('data-user-id') || '';
+        const currentUsername = section.getAttribute('data-user-name') || '';
+        const titleEl = document.querySelector('#profileDetailsModal .modal-title');
+        const locEl = document.getElementById('profileLocation');
+        if (titleEl){ titleEl.textContent = 'About ' + (currentUsername || currentUserId); }
+        try{
+            let retries = 0; while (typeof window.firebaseGetUserProfile !== 'function' && retries < 30){ await new Promise(r=>setTimeout(r,100)); retries++; }
+            if (typeof window.firebaseGetUserProfile === 'function'){
+                const res = await window.firebaseGetUserProfile(currentUserId);
+                if (res?.success && res.profile){
+                    const uname = res.profile.username || res.profile.user_name || currentUsername || currentUserId;
+                    if (titleEl){ titleEl.textContent = 'About ' + uname; }
+                    const address = res.profile.address || res.profile.location || res.profile.city;
+                    if (locEl && address){ locEl.textContent = address; }
+                }
+            }
+        }catch(e){ console.warn('updateProfileDetailsFromFirebase failed', e); }
+    }
+
     // Tab switching functionality
     function switchTab(tabName) {
         // Update tab buttons
@@ -533,6 +574,16 @@
             }
         }
         
+        // Build media gallery (images + optional single legacy image + optional video)
+        let galleryHtml = '';
+        if (review.images && Array.isArray(review.images) && review.images.length > 0) {
+            const thumbs = review.images.map(u => `<div class=\"review-thumb\"><img src=\"${u}\" alt=\"Review image\" onerror=\"this.style.display='none'\" /></div>`).join('');
+            galleryHtml = `<div class=\"review-gallery mt-2\">${thumbs}</div>`;
+        } else if (review.image) {
+            galleryHtml = `<div class=\"mt-2\"><img src=\"${review.image}\" alt=\"Review image\" style=\"max-width:100%; border-radius:8px;\" onerror=\"this.style.display='none'\" /></div>`;
+        }
+        const videoHtml = review.video ? `<div class=\"mt-2\"><video controls style=\"max-width:100%; border-radius:8px;\" src=\"${review.video}\" onerror=\"this.style.display='none'\"></video></div>` : '';
+        
         card.innerHTML = `
             <div class="review-header">
                 <div class="review-user-info">
@@ -550,6 +601,8 @@
             <div class="review-comment">
                 ${review.comment || '<em>No comment</em>'}
             </div>
+            ${galleryHtml}
+            ${videoHtml}
         `;
         
         return card;
@@ -603,7 +656,7 @@
                                         <h3 class="product-title">${item.title || 'Untitled'}</h3>
                                         <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
                                         <div class="product-meta">
-                                            <span class="product-price">₱${parseFloat(item.price || 0).toFixed(2)}</span>
+                                            <span class="product-price">${window.formatCurrency(item.price || 0)}</span>
                                             <span class="product-category">${item.category || 'Uncategorized'}</span>
                                         </div>
                                         <small class="text-muted">Sold: ${item.sold_date ? new Date(item.sold_date.seconds * 1000).toLocaleDateString() : 'Recently'}</small>
@@ -645,6 +698,7 @@
                 e.preventDefault();
                 const modal = new bootstrap.Modal(document.getElementById('profileDetailsModal'));
                 modal.show();
+                updateProfileDetailsFromFirebase();
             });
         }
     });
@@ -751,7 +805,7 @@
                     <h3 class="product-title">${title}</h3>
                     <p class="product-description">${description}</p>
                     <div class="product-meta">
-                        <span class="product-price">₱${parseFloat(price).toFixed(2)}</span>
+                        <span class="product-price">${window.formatCurrency(parseFloat(price))}</span>
                         <span class="product-category">${category}</span>
                     </div>
                     <div class="product-actions">
@@ -830,7 +884,7 @@
             navigator.share({
                 title: 'My Profile',
                 url: url
-            }).catch(err => console.log('Error sharing:', err));
+            }).catch(err => log('Error sharing:', err));
         } else {
             navigator.clipboard.writeText(url).then(() => {
                 alert('Profile link copied to clipboard!');
@@ -1015,18 +1069,18 @@
                     <h3 class="product-title">${item.title || 'Untitled'}</h3>
                     <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
                     <div class="product-meta">
-                        <span class="product-price">\u20b1${parseFloat(item.price || 0).toFixed(2)}</span>
+                        <span class="product-price">${window.formatCurrency(item.price || 0)}</span>
                         <span class="product-category">${item.category || 'Uncategorized'}</span>
                     </div>
                     <div class="product-seller-info">
                         <span class="seller-name-small"><i class="bi bi-person"></i> ${item.sellerName || 'Unknown Seller'}</span>
                     </div>
                     <div class="product-actions">
-                        <button class="btn-action btn-view-minimal" onclick="viewProduct('${item.product_id || item.productId}')" style="background:#0ea5e9;color:#fff;">
+                        <button class="btn-action btn-view-minimal" onclick="viewProduct('${item.product_id || item.productId}')}" style="background:#0ea5e9;color:#fff;">
                             <i class="bi bi-eye"></i>
                             <span>View</span>
                         </button>
-                        <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${item.product_id || item.productId}')" style="background:#ef4444;color:#fff;">
+                        <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${item.product_id || item.productId}')}" style="background:#ef4444;color:#fff;">
                             <i class="bi bi-heart-fill"></i>
                             <span>Unsave</span>
                         </button>
@@ -1165,18 +1219,18 @@
                     <h3 class="product-title">${item.title || 'Untitled'}</h3>
                     <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
                     <div class="product-meta">
-                        <span class="product-price">\u20b1${parseFloat(item.price || 0).toFixed(2)}</span>
+                        <span class="product-price">${window.formatCurrency(item.price || 0)}</span>
                         <span class="product-category">${item.category || 'Uncategorized'}</span>
                     </div>
                     <div class="product-seller-info">
                         <span class="seller-name-small"><i class="bi bi-person"></i> ${item.sellerName || 'Unknown Seller'}</span>
                     </div>
                     <div class="product-actions">
-                        <button class="btn-action btn-view-minimal" onclick="viewProduct('${item.product_id || item.productId}')" style="background:#0ea5e9;color:#fff;">
+                        <button class="btn-action btn-view-minimal" onclick="viewProduct('${item.product_id || item.productId}')}" style="background:#0ea5e9;color:#fff;">
                             <i class="bi bi-eye"></i>
                             <span>View</span>
                         </button>
-                        <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${item.product_id || item.productId}')" style="background:#ef4444;color:#fff;">
+                        <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${item.product_id || item.productId}')}" style="background:#ef4444;color:#fff;">
                             <i class="bi bi-heart-fill"></i>
                             <span>Unsave</span>
                         </button>
@@ -1191,13 +1245,64 @@
         container.appendChild(grid);
     }
     
-    // Load listings immediately
-    console.log('📄 Profile page loaded, readyState:', document.readyState);
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', waitForFirebaseFunctions);
-    } else {
-        waitForFirebaseFunctions();
+    // Review media viewer
+    function openReviewMediaViewer(type, src) {
+        const backdrop = document.getElementById('reviewLightboxBackdrop');
+        const box = document.getElementById('reviewLightbox');
+        if (!backdrop || !box) return;
+        // clear previous content except close button
+        Array.from(box.children).forEach(ch => { if (ch.id !== 'lightboxCloseBtn') ch.remove(); });
+        let el;
+        if (type === 'image') {
+            el = document.createElement('img');
+            el.src = src;
+            el.alt = 'Review image';
+            el.onerror = () => { el.style.display = 'none'; };
+        } else if (type === 'video') {
+            el = document.createElement('video');
+            el.src = src;
+            el.controls = true;
+            el.autoplay = true;
+            el.onerror = () => { el.style.display = 'none'; };
+        }
+        if (el) box.appendChild(el);
+        backdrop.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
     }
+    function closeReviewMediaViewer() {
+        const backdrop = document.getElementById('reviewLightboxBackdrop');
+        const box = document.getElementById('reviewLightbox');
+        if (!backdrop || !box) return;
+        backdrop.style.display = 'none';
+        // stop video if present
+        const vid = box.querySelector('video'); if (vid) { vid.pause(); vid.src = ''; }
+        document.body.style.overflow = '';
+    }
+    window.openReviewMediaViewer = openReviewMediaViewer;
+    window.closeReviewMediaViewer = closeReviewMediaViewer;
+    document.getElementById('lightboxCloseBtn')?.addEventListener('click', closeReviewMediaViewer);
+    document.getElementById('reviewLightboxBackdrop')?.addEventListener('click', (e)=>{ if (e.target.id === 'reviewLightboxBackdrop') closeReviewMediaViewer(); });
+
+    // Enhance review cards to open viewer on click
+    function enableReviewMediaClicks(root) {
+        const container = root || document;
+        container.querySelectorAll('.review-gallery .review-thumb img').forEach(img => {
+            img.style.cursor = 'zoom-in';
+            img.addEventListener('click', () => openReviewMediaViewer('image', img.src));
+        });
+        container.querySelectorAll('.reviews-container video, .review-card video').forEach(video => {
+            video.style.cursor = 'pointer';
+            video.addEventListener('click', () => openReviewMediaViewer('video', video.currentSrc || video.src));
+        });
+    }
+    // Call after reviews load
+    const origDisplaySellerReviews = window.displaySellerReviews;
+    window.displaySellerReviews = function(reviews){
+        if (origDisplaySellerReviews) origDisplaySellerReviews(reviews);
+        enableReviewMediaClicks(document.getElementById('reviewsContainer'));
+    };
+    // Also enable on DOM ready in case of pre-rendered
+    document.addEventListener('DOMContentLoaded', () => enableReviewMediaClicks());
 </script>
 <script src="~/js/listings-manager.js?v=@DateTime.Now.Ticks"></script>
 <script src="~/js/listings-enhanced.js?v=@DateTime.Now.Ticks"></script>
@@ -1228,5 +1333,6 @@
     console.log('✅ Modal overrides installed successfully!');
 </script>
 }
+
 
 

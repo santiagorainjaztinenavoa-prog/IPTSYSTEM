@@ -512,3 +512,33 @@ width: 50%;
  justify-content: center;
     }
 }
+
+/* Remove underline from profile details link */
+.profile-username-link {
+    text-decoration: none !important;
+}
+.profile-username-link:hover, .profile-username-link:focus {
+    text-decoration: none !important;
+}
+
+/* Subtle animation for add-group buttons (Email/Phone) */
+.add-group-btn { transition: color .2s ease, transform .2s ease; }
+.add-group-btn .add-icon { transition: transform .2s ease, filter .2s ease; transform-origin: center; display:inline-block; }
+
+/* Hover: slight lift and icon wiggle */
+.add-group-btn:hover { transform: translateY(-1px); }
+.add-group-btn:hover .add-icon { transform: scale(1.08) rotate(10deg); filter: drop-shadow(0 1px 2px rgba(13,110,253,.25)); }
+
+/* Active (on click): tiny press effect */
+.add-group-btn:active { transform: translateY(0); }
+.add-group-btn:active .add-icon { transform: scale(0.95) rotate(0deg); }
+
+/* Optional attention pulse when button gets focus via keyboard */
+.add-group-btn:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
+.add-group-btn:focus-visible .add-icon { animation: addIconPulse .6s ease; }
+
+@keyframes addIconPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}

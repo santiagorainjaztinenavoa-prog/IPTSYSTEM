@@ -160,6 +160,8 @@ async function loadUserConversations() {
             if (result.success) {
                 allConversations = result.conversations || [];
                 displayConversationList(allConversations);
+                // Update navbar badge accurately using fetched conversations
+                updateUnreadBadgeAccurate(allConversations);
                 
                 // If there's an initial conversation ID from URL, load it
                 if (initialConversationId) {
@@ -896,3 +898,30 @@ window.addEventListener('beforeunload', function() {
         window.firebaseStopMessageListener(currentUserId);
     }
 });
+
+function updateUnreadBadgeAccurate(conversations) {
+    try {
+        let unread = 0;
+        const userId = typeof currentUserId !== 'undefined' ? currentUserId : null;
+        if (!userId) return;
+        if (Array.isArray(conversations)) {
+            for (const conv of conversations) {
+                const readField = `lastReadBy_${userId}`;
+                const lastReadTime = conv[readField]?.seconds || 0;
+                const lastMessageTime = conv.lastMessageTime?.seconds || 0;
+                const isUnread = conv.lastMessageSenderId && conv.lastMessageSenderId !== userId && lastMessageTime > lastReadTime;
+                if (isUnread) unread++;
+            }
+        }
+        const badge = document.querySelector('.messages-badge');
+        if (badge) {
+            if (unread > 0) {
+                badge.textContent = unread > 99 ? '99+' : unread.toString();
+                badge.style.display = 'inline-block';
+            } else {
+                badge.textContent = '0';
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) { console.warn('Badge update error', e); }
+}
