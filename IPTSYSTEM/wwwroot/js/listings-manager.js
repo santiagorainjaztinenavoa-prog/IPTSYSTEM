@@ -884,7 +884,7 @@ async function loadListingsFromFirebase() {
                     
                     <!-- Price & Category -->
                     <div class="product-meta">
-                        <span class="product-price">₱${parseFloat(product.price || 0).toFixed(2)}</span>
+                        <span class="product-price">${window.formatCurrency(product.price || 0)}</span>
                                 <span class="product-category"><i class="bi ${categoryToIcon(product.category)} me-1"></i> ${normalizeCategoryName(product.category) || product.category || 'Uncategorized'}</span>
                     </div>
                     
@@ -907,70 +907,5 @@ async function loadListingsFromFirebase() {
                                 <i class="bi bi-bag-check"></i>
                                 Buy
                             </button>
-                            <button class="btn-action btn-message-minimal animate__animated animate__pulse" onclick="messageSeller('${product.id}')" title="Message Seller" style="background:#2563eb;color:#fff;font-weight:600;">
-                                <i class="bi bi-chat-dots"></i>
-                                Message Seller
-                            </button>
                         `}
-                    </div>
-                </div>
-            </div>
-        `).join('');
-        
-        container.innerHTML = html;
-        console.log('✅ Successfully rendered', products.length, 'listings');
-        
-    } catch (error) {
-        console.error('❌ Error loading listings from Firebase:', error);
-    }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Mark item as sold out
-async function markAsSoldOut(productId, title) {
-    if (!confirm(`Mark "${title}" as sold out? This will move it to your history.`)) {
-        return;
-    }
-    
-    try {
-        console.log('🔄 Marking product as sold:', productId);
-        
-        // Call Firebase function to update status
-        if (typeof window.firebaseMarkAsSold === 'function') {
-            const result = await window.firebaseMarkAsSold(productId);
-            
-            if (result.success) {
-                console.log('✅ Product marked as sold successfully');
-                showToast('Item marked as sold and moved to history', 'success');
-                
-                // Reload listings to reflect changes
-                setTimeout(() => {
-                    loadListingsFromFirebase();
-                }, 500);
-            } else {
-                console.error('❌ Failed to mark as sold:', result.message);
-                showToast('Failed to mark item as sold: ' + (result.message || 'Unknown error'), 'error');
-            }
-        } else {
-            console.error('❌ firebaseMarkAsSold function not available');
-            showToast('Sold out feature not available. Please refresh the page.', 'error');
-        }
-    } catch (error) {
-        console.error('❌ Error marking as sold:', error);
-        showToast('Error: ' + error.message, 'error');
-    }
-}
-
-// Make functions globally accessible
-window.openListingModal = openListingModal;
-window.editListing = editListing;
-window.saveListing = saveListing;
-window.deleteListing = deleteListing;
-window.removeImage = removeImage;
-window.loadListingsFromFirebase = loadListingsFromFirebase;
-window.markAsSoldOut = markAsSoldOut;
+                `}

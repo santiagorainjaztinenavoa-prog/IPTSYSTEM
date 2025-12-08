@@ -495,7 +495,7 @@
                     <h3 class="listing-title">${title || 'Untitled'}</h3>
                     <p class="listing-description">${(description || 'No description available').substring(0, 80)}${(description || '').length > 80 ? '...' : ''}</p>
                     <p class="listing-category">${category || 'Uncategorized'}</p>
-                    <p class="listing-price">₱${parseFloat(price || 0).toFixed(2)}</p>
+                    <p class="listing-price">${window.formatCurrency(price || 0)}</p>
                 </div>
                 <div class="listing-buttons">
                     <button class="btn-message" onclick="handleCardMessage('${id}')">Message</button>
@@ -512,8 +512,8 @@
             if (!product) return;
 
             const condition = product.condition ?? product.Condition ?? 'New';
-            const sellerName = product.full_name ?? product.SellerFullName ?? 'Unknown Seller';
-            const sellerUsername = product.username ?? product.SellerUsername ?? '';
+            const sellerName = product.full_name ?? product.SellerFullName ?? product.seller_name ?? product.username ?? product.SellerUsername ?? 'Unknown Seller';
+            const sellerUsername = product.username ?? product.SellerUsername ?? product.user_email ?? '';
             const sellerInitial = sellerName ? sellerName.charAt(0).toUpperCase() : 'U';
             const imageUrl = product.imageUrl ?? product.image_url ?? product.ImageUrl ?? 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
             const conditionClass = condition.toLowerCase().replace(/\s+/g, '-');
@@ -521,7 +521,7 @@
             document.getElementById('productTitle').textContent = product.title ?? product.Title ?? 'Product';
             document.getElementById('detailProductTitle').textContent = product.title ?? product.Title ?? 'Product';
             document.getElementById('detailProductCategory').textContent = product.category ?? product.Category ?? 'Uncategorized';
-            document.getElementById('detailProductPrice').textContent = `₱${parseFloat(product.price ?? product.Price ?? 0).toFixed(2)}`;
+            document.getElementById('detailProductPrice').textContent = window.formatCurrency(product.price ?? product.Price ?? 0);
             document.getElementById('detailProductDescription').textContent = product.description ?? product.Description ?? 'No description available';
             document.getElementById('detailProductImage').src = imageUrl;
             document.getElementById('detailConditionBadge').textContent = condition;

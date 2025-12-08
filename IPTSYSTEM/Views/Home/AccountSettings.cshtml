@@ -9,10 +9,14 @@
 @section Styles {
 <style>
     .settings-layout { display:flex; align-items:flex-start; gap:2.5rem; justify-content:flex-start; }
-    .settings-nav { width:180px; padding-top:4px; }
-    .settings-nav a { display:block; padding:6px 0; margin:0 0 14px; text-decoration:none; font-size:.95rem; font-weight:600; color:#444; border-left:3px solid transparent; transition:.15s; }
-    .settings-nav a:hover { color:#0a58ca; }
-    .settings-nav a.active { color:#0d6efd; border-left-color:#0d6efd; }
+    .settings-nav { display:flex; flex-direction:column; gap:.25rem; padding:8px 0; }
+    .settings-nav a { display:block; position:relative; padding:12px 16px 12px 20px; border-radius:8px; color:#374151; font-weight:600; cursor:pointer; text-decoration:none; transition:background .2s ease, color .2s ease, transform .18s ease; }
+    .settings-nav a::before { content:""; position:absolute; left:0; top:10px; bottom:10px; width:3px; border-radius:3px; background:transparent; transition:background .2s ease, height .2s ease; }
+    .settings-nav a:hover { background:#f3f4f6; color:#0d6efd; transform:translateX(2px); }
+    .settings-nav a:hover::before { background:#cfe2ff; }
+    .settings-nav a.active { background:#eef3ff; color:#0d6efd; }
+    .settings-nav a.active::before { background:#0d6efd; }
+    .settings-nav a:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
 
     .settings-content { flex:1 1 auto; display:flex; flex-direction:column; align-items:center; }
     .panel-section { width:100%; max-width:620px; background:#fff; border:1px solid #e4e7eb; border-radius:8px; padding:34px 40px 42px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
@@ -27,8 +31,10 @@
     #profilePhotoRow { display:flex; align-items:flex-start; gap:2rem; margin-bottom:2rem; }
     #profileAvatar { width:160px; height:160px; border-radius:50%; background:#6f49c6; color:#fff; font-size:64px; font-weight:600; display:flex; align-items:center; justify-content:center; user-select:none; background-size:cover; background-position:center; }
 
-    .add-group-btn { background:none; border:0; color:#0d6efd; font-weight:600; display:flex; align-items:center; gap:.45rem; cursor:pointer; padding:0; margin:0 0 .5rem; }
-    .add-group-btn:hover { text-decoration:underline; }
+    .add-group-btn { background:none; border:0; color:#0d6efd; font-weight:600; display:flex; align-items:center; gap:.45rem; cursor:pointer; padding:0; margin:0 0 .5rem; text-decoration:none; }
+    /* Remove underline on hover */
+    .add-group-btn:hover { /* text-decoration:underline; */ text-decoration:none; }
+    .add-icon { width:18px; height:18px; display:inline-block; }
     .contact-extra { border:1px solid #d0d7de; border-radius:6px; padding:12px 14px 10px; margin-bottom:14px; background:#fafbfc; }
     .contact-extra h6 { font-size:.70rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin:0 0 6px; color:#555; }
     .remove-contact { background:none; border:0; color:#dc3545; font-size:.7rem; float:right; cursor:pointer; }
@@ -88,7 +94,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <button type="button" id="addEmailBtn" class="add-group-btn"><span class="me-1">&#x2795;</span> Email</button>
+                        <button type="button" id="addEmailBtn" class="add-group-btn"><img src="/images/plus.svg" class="add-icon" alt="+" onerror="this.style.display='none';"><span>Email</span></button>
                         <div id="extraEmailsContainer"></div>
                     </div>
 
@@ -97,7 +103,7 @@
                         <div class="d-flex align-items-center"><span id="PhoneMasked"></span></div>
                     </div>
                     <div class="mb-3">
-                        <button type="button" id="addPhoneBtn" class="add-group-btn"><span class="me-1">&#x2795;</span> Phone</button>
+                        <button type="button" id="addPhoneBtn" class="add-group-btn"><img src="/images/plus.svg" class="add-icon" alt="+" onerror="this.style.display='none';"><span>Phone</span></button>
                         <div id="extraPhonesContainer"></div>
                     </div>
 

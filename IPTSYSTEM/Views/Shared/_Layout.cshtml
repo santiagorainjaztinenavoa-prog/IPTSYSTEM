@@ -9,7 +9,7 @@
     <!-- Google Fonts - Inter for modern typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family:Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -36,6 +36,23 @@
             if (!category || typeof category !== 'string') return category;
             if (category.trim().toLowerCase() === 'furniture') return 'Vehicles';
             return category;
+        };
+
+        // Global currency formatter for Philippine Peso
+        window.formatCurrency = function(value, options) {
+            const num = Number(value);
+            const safe = Number.isFinite(num) ? num : 0;
+            try {
+                return new Intl.NumberFormat(options?.locale || 'en-PH', {
+                    style: 'currency',
+                    currency: options?.currency || 'PHP',
+                    minimumFractionDigits: options?.minimumFractionDigits ?? 2,
+                    maximumFractionDigits: options?.maximumFractionDigits ?? 2
+                }).format(safe);
+            } catch (e) {
+                // Fallback if Intl not available
+                return '₱' + safe.toFixed(options?.maximumFractionDigits ?? 2);
+            }
         };
     </script>
     <link rel="stylesheet" href="~/IPTSYSTEM.styles.css" asp-append-version="true" />
@@ -78,16 +95,6 @@
                                 <span>Browse</span>
                             </a>
                         </li>
-
-                        @if (Context.Session.GetString("Username") != null)
-                        {
-                        <li class="nav-item">
-                            <a class="nav-link modern-nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Messages" ? "active" : "")" asp-area="" asp-controller="Home" asp-action="Messages" style="position: relative;">
-                                <span>Messages</span>
-                                <span class="messages-badge" style="display: none; position: absolute; top: 0; right: -8px; background: #ef4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center;">0</span>
-                            </a>
-                        </li>
-                        }
                     </ul>
 
                     <!-- Right Side - Icons only (search removed) -->
@@ -112,6 +119,14 @@
                                         <span class="icon-badge" style="display: none;">0</span>
                                     </a>
                                 }
+                                
+                                @* Messages icon button placed beside heart *@
+                                <a class="action-icon messages-icon" href="@Url.Action("Messages","Home")" title="Messages" style="position:relative; display:inline-flex; align-items:center;">
+                                    <img src="/images/messages.png" alt="Messages" style="width:24px;height:24px;object-fit:contain;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" />
+                                    <i class="bi bi-chat-dots" style="display:none; font-size:1.2rem;"></i>
+                                    <span class="messages-badge" style="display:none; position:absolute; top:-6px; right:-6px; background:#ef4444; color:#fff; font-size:10px; padding:2px 6px; border-radius:10px; min-width:18px; text-align:center;">0</span>
+                                </a>
+                                
                                 <!-- Logged In User with avatar and role -->
                                     var fullName = Context.Session.GetString("FullName") ?? string.Empty;
                                     var username = Context.Session.GetString("Username") ?? string.Empty;
@@ -197,26 +212,30 @@
             const globalUserId = '@Context.Session.GetString("UserId")';
             // Track initialization to prevent duplicate calls
             window._globalFeaturesInitialized = false;
+            // Per-user cache keys for saved count
+            const SAVED_COUNT_KEY = `savedProductsCount_${globalUserId}`;
+            const SAVED_TS_KEY = `savedProductsCountTimestamp_${globalUserId}`;
         </script>
         <script type="module" src="~/js/firebase-client.js"></script>
         <script>
             // Wait for Firebase to be ready and load avatar - OPTIMIZED with sessionStorage caching
             async function initGlobalFeatures() {
-                // Prevent duplicate initialization
                 if (window._globalFeaturesInitialized) return;
                 window._globalFeaturesInitialized = true;
                 
                 const navbarAvatar = document.getElementById('navbarAvatar');
                 
-                // First, check if we have a cached profile picture URL (use this immediately)
-                const cachedPhotoUrl = sessionStorage.getItem('userPhotoUrl');
-                const cacheTimestamp = parseInt(sessionStorage.getItem('userPhotoUrlTimestamp') || '0');
-                const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-                const cacheValid = cachedPhotoUrl && (Date.now() - cacheTimestamp < CACHE_TTL);
+                // Avatar per-user cache (from previous change)
+                const photoKey = `userPhotoUrl_${globalUserId}`;
+                const tsKey = `userPhotoUrlTimestamp_${globalUserId}`;
+                const cachedPhotoUrl = sessionStorage.getItem(photoKey);
+                const cacheTimestamp = parseInt(sessionStorage.getItem(tsKey) || '0');
+                const AVATAR_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+                const avatarCacheValid = cachedPhotoUrl && (Date.now() - cacheTimestamp < AVATAR_CACHE_TTL);
                 
-                if (cacheValid && navbarAvatar) {
+                if (avatarCacheValid && navbarAvatar) {
                     applyAvatarImage(navbarAvatar, cachedPhotoUrl);
-                    console.log('✅ Using cached avatar (no Firebase read)');
+                    console.log('✅ Using cached avatar (per-user, no Firebase read)');
                 }
                 
                 // Wait for Firebase functions to be available
@@ -227,39 +246,67 @@
                 }
                 
                 // Only fetch from Firebase if cache is invalid/expired
-                if (!cacheValid && navbarAvatar && globalUserId && typeof window.firebaseGetUserProfile === 'function') {
+                if (!avatarCacheValid && navbarAvatar && globalUserId && typeof window.firebaseGetUserProfile === 'function') {
                     try {
                         const result = await window.firebaseGetUserProfile(globalUserId);
                         if (result.success && result.profile && result.profile.photo_url) {
                             const photoUrl = result.profile.photo_url;
                             applyAvatarImage(navbarAvatar, photoUrl);
-                            // Cache the photo URL with timestamp
-                            sessionStorage.setItem('userPhotoUrl', photoUrl);
-                            sessionStorage.setItem('userPhotoUrlTimestamp', Date.now().toString());
-                            console.log('✅ Avatar loaded from Firebase and cached');
+                            // Cache per-user photo URL with timestamp
+                            sessionStorage.setItem(photoKey, photoUrl);
+                            sessionStorage.setItem(tsKey, Date.now().toString());
+                            console.log('✅ Avatar loaded from Firebase and cached per-user');
                         }
-                    } catch (err) {
-                        console.warn('Could not load navbar avatar:', err);
+                    } catch (e) {
+                        console.warn('Could not load navbar avatar:', e);
                     }
                 }
                 
                 // Setup message notifications (uses real-time listener - efficient)
                 if (typeof window.firebaseListenForNewMessages === 'function') {
-                    window.firebaseListenForNewMessages(globalUserId, function(notification) {
-                        const badge = document.querySelector('.messages-badge');
-                        if (badge) {
-                            const current = parseInt(badge.textContent) || 0;
-                            badge.textContent = current + 1;
-                            badge.style.display = 'inline-block';
-                        }
+                    const recomputeUnread = async () => {
+                        try {
+                            let unread = 0;
+                            if (typeof window.firebaseGetUserConversations === 'function') {
+                                const convRes = await window.firebaseGetUserConversations(globalUserId);
+                                if (convRes?.success && Array.isArray(convRes.conversations)) {
+                                    const convs = convRes.conversations;
+                                    for (const conv of convs) {
+                                        const readField = `lastReadBy_${globalUserId}`;
+                                        const lastReadTime = conv[readField]?.seconds || 0;
+                                        const lastMessageTime = conv.lastMessageTime?.seconds || 0;
+                                        const isUnread = conv.lastMessageSenderId && conv.lastMessageSenderId !== globalUserId && lastMessageTime > lastReadTime;
+                                        if (isUnread) unread++;
+                                    }
+                                }
+                            } else if (typeof window.firebaseGetUnreadConversationsCount === 'function') {
+                                const cRes = await window.firebaseGetUnreadConversationsCount(globalUserId);
+                                if (cRes?.success) unread = cRes.count || 0;
+                            }
+                            const badge = document.querySelector('.messages-badge');
+                            if (badge) {
+                                if (unread > 0) {
+                                    badge.textContent = unread > 99 ? '99+' : unread.toString();
+                                    badge.style.display = 'inline-block';
+                                } else {
+                                    badge.textContent = '0';
+                                    badge.style.display = 'none';
+                                }
+                            }
+                        } catch (e) { console.warn('Unread recompute failed', e); }
+                    };
+
+                    setTimeout(recomputeUnread, 500);
+
+                    window.firebaseListenForNewMessages(globalUserId, async function(notification) {
+                        await recomputeUnread();
                     });
                 }
-                
-                // Load saved products count (with cache - won't make extra reads)
+
+                // Saved badge initial
                 updateGlobalSavedBadge();
             }
             
-            // Helper function to apply avatar image
             function applyAvatarImage(element, photoUrl) {
                 if (!element || !photoUrl) return;
                 element.style.backgroundImage = 'url("' + photoUrl + '")';
@@ -268,7 +315,6 @@
                 element.innerHTML = '';
             }
             
-            // Run when DOM is ready (only once)
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', initGlobalFeatures, { once: true });
             } else {
@@ -530,6 +576,12 @@ async function openSavedProductsModal() {
         const result = await window.firebaseGetSavedProducts(userId);
         loadingEl.style.display = 'none';
         
+        const count = (result.success && Array.isArray(result.products)) ? result.products.length : 0;
+        // Update per-user cache and badge from definitive modal data
+        sessionStorage.setItem(`savedProductsCount_${userId}`, count.toString());
+        sessionStorage.setItem(`savedProductsCountTimestamp_${userId}`, Date.now().toString());
+        const badge = document.querySelector('.saved-icon .icon-badge'); if (badge){ badge.textContent = count > 99 ? '99+' : count.toString(); badge.style.display = count > 0 ? 'flex' : 'none'; }
+        
         if (!result.success || !result.products || result.products.length === 0) {
             emptyEl.style.display = 'block';
             return;
@@ -553,7 +605,7 @@ function createSavedProductCard(product) {
     // Handle both field naming conventions (snake_case from Firestore and camelCase)
     const imageUrl = product.imageUrl || product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
     const title = product.title || 'Product';
-    const price = parseFloat(product.price || 0).toFixed(2);
+    const priceText = window.formatCurrency(product.price || 0);
     const sellerName = product.sellerName || product.seller_name || 'Unknown Seller';
     const productId = product.productId || product.product_id || product.id;
     const category = product.category || '';
@@ -570,7 +622,7 @@ function createSavedProductCard(product) {
             </div>
             <div class="saved-product-info">
                 <h6 class="saved-product-title" title="${title}">${title}</h6>
-                <p class="saved-product-price">₱${price}</p>
+                <p class="saved-product-price">${priceText}</p>
                 ${category ? `<p class="saved-product-category"><i class="bi ${window.categoryToIcon(category)} me-1"></i>${window.normalizeCategoryName ? window.normalizeCategoryName(category) : category}</p>` : ''}
                 <p class="saved-product-seller"><i class="bi bi-person me-1"></i>${sellerName}</p>
                 <div class="saved-product-actions">
@@ -596,19 +648,15 @@ async function removeSavedProduct(productId) {
                 setTimeout(() => card.remove(), 200);
             }
             
-            // Update cached count in sessionStorage (decrement by 1)
-            const cachedCount = parseInt(sessionStorage.getItem('savedProductsCount') || '0');
-            if (cachedCount > 0) {
-                sessionStorage.setItem('savedProductsCount', (cachedCount - 1).toString());
-                sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
-            }
+            const cachedCount = parseInt(sessionStorage.getItem(`savedProductsCount_${userId}`) || '0');
+            const newCount = Math.max(0, cachedCount - 1);
+            sessionStorage.setItem(`savedProductsCount_${userId}`, newCount.toString());
+            sessionStorage.setItem(`savedProductsCountTimestamp_${userId}`, Date.now().toString());
             
             // Update badge immediately from local state (no Firebase read)
             const badge = document.querySelector('.saved-icon .icon-badge');
             if (badge) {
-                const newCount = Math.max(0, cachedCount - 1);
-                sessionStorage.setItem('savedProductsCount', newCount.toString());
-                badge.textContent = newCount > 99 ? '99+' : newCount;
+                badge.textContent = newCount > 99 ? '99+' : newCount.toString();
                 badge.style.display = newCount > 0 ? 'flex' : 'none';
             }
             
@@ -642,8 +690,8 @@ async function updateGlobalSavedBadge() {
     if (!userId) return;
     
     // Check sessionStorage cache first to reduce Firebase reads
-    const cachedCount = sessionStorage.getItem('savedProductsCount');
-    const cacheTimestamp = parseInt(sessionStorage.getItem('savedProductsCountTimestamp') || '0');
+    const cachedCount = sessionStorage.getItem(`savedProductsCount_${userId}`);
+    const cacheTimestamp = parseInt(sessionStorage.getItem(`savedProductsCountTimestamp_${userId}`) || '0');
     const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
     
     const badge = document.querySelector('.saved-icon .icon-badge');
@@ -652,7 +700,7 @@ async function updateGlobalSavedBadge() {
     if (cachedCount !== null && (Date.now() - cacheTimestamp < CACHE_TTL)) {
         if (badge) {
             const count = parseInt(cachedCount) || 0;
-            badge.textContent = count > 99 ? '99+' : count;
+            badge.textContent = count > 99 ? '99+' : count.toString();
             badge.style.display = count > 0 ? 'flex' : 'none';
         }
         console.log('📦 Using cached saved count:', cachedCount);
@@ -668,11 +716,11 @@ async function updateGlobalSavedBadge() {
             const count = result.savedIds ? result.savedIds.length : 0;
             
             // Cache the count
-            sessionStorage.setItem('savedProductsCount', count.toString());
-            sessionStorage.setItem('savedProductsCountTimestamp', Date.now().toString());
+            sessionStorage.setItem(`savedProductsCount_${userId}`, count.toString());
+            sessionStorage.setItem(`savedProductsCountTimestamp_${userId}`, Date.now().toString());
             
             if (badge) {
-                badge.textContent = count > 99 ? '99+' : count;
+                badge.textContent = count > 99 ? '99+' : count.toString();
                 badge.style.display = count > 0 ? 'flex' : 'none';
             }
         }
