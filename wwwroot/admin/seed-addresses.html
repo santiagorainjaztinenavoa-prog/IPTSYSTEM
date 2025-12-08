@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seed PH Addresses to Firestore</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; }
+    #log { max-height: 60vh; overflow:auto; font-size:12px; }
+    .spinner { width:16px; height:16px; border:3px solid #ccc; border-top-color:#0d6efd; border-radius:50%; animation: spin 0.8s linear infinite; display:inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .small-btns button { margin-right:.5rem; }
+  </style>
+</head>
+<body class="p-4">
+  <div class="container">
+    <h1 class="h4 mb-3">Seed Firestore: PH Regions / Provinces / Cities / Barangays</h1>
+    <p class="text-muted">Sign in with a Firebase user allowed to write OR temporarily relax Firestore rules. Large barangay dataset can take several minutes.</p>
+
+    <div class="mb-3 small-btns">
+      <button id="seedAllBtn" class="btn btn-primary">Seed ALL</button>
+      <button id="seedRegionsBtn" class="btn btn-outline-secondary">Seed Regions Only</button>
+      <button id="seedProvBtn" class="btn btn-outline-secondary">Seed Provinces Only</button>
+      <button id="seedCitiesBtn" class="btn btn-outline-secondary">Seed Cities Only</button>
+      <button id="seedBrgyBtn" class="btn btn-outline-secondary">Seed Barangays Only</button>
+      <button id="abortBtn" class="btn btn-outline-danger" disabled>Abort</button>
+      <span id="status" class="ms-3"></span>
+    </div>
+    <div class="mb-2">
+      <small id="progress" class="text-muted"></small>
+    </div>
+    <pre id="log" class="bg-light border p-3"></pre>
+  </div>
+
+  <script type="module">
+    let abortRequested = false;
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const progressEl = document.getElementById('progress');
+    const seedAllBtn = document.getElementById('seedAllBtn');
+    const abortBtn = document.getElementById('abortBtn');
+
+    function log(...args) {
+      const line = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+      logEl.textContent += line + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(...args);
+    }
+    function setStatus(text, spinner=false) {
+      statusEl.innerHTML = spinner ? `<span class="spinner"></span> ${text}` : text;
+    }
+    function updateProgress(section, done, total) {
+      progressEl.textContent = `${section}: ${done}/${total}`;
+    }
+
+    // Import Firebase app (with safety)
+    let app, db;
+    try {
+      const mod = await import('/js/firebase-client.js');
+      app = mod.default;
+      const { getFirestore } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js');
+      db = getFirestore(app);
+      log('Firebase client loaded');
+    } catch (e) { log('Failed to load firebase-client.js:', e.message); setStatus('Load failed'); throw e; }
+
+    // Firestore helpers
+    const fw = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js');
+    const { collection, doc, writeBatch } = fw;
+
+    async function permissionPreCheck() {
+      try {
+        const testBatch = writeBatch(db);
+        testBatch.set(doc(collection(db,'__seed_test'), 'perm_check'), { ts: Date.now() });
+        await testBatch.commit();
+        log('Permission check OK (test write succeeded)');
+        return true;
+      } catch (e) {
+        log('Permission denied. Adjust Firestore rules or authenticate. Error:', e.message);
+        setStatus('Permission denied');
+        return false;
+      }
+    }
+
+    async function fetchJson(url, label) {
+      log('Fetching', label, '→', url);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`${label} fetch failed: ${resp.status}`);
+      const data = await resp.json();
+      log(`${label} fetched: ${data.length} records`);
+      return data;
+    }
+
+    async function batchSet(colName, items) {
+      const chunk = 400; // safe <500
+      let total = 0;
+      for (let i = 0; i < items.length; i += chunk) {
+        if (abortRequested) { log('Aborted during', colName); return total; }
+        const batch = writeBatch(db);
+        const slice = items.slice(i, i + chunk);
+        slice.forEach(it => {
+          const ref = doc(collection(db, colName), String(it.id));
+          batch.set(ref, it.data, { merge: true });
+        });
+        await batch.commit();
+        total += slice.length;
+        updateProgress(colName, total, items.length);
+        log(`Committed ${slice.length} to ${colName} (total: ${total}/${items.length})`);
+      }
+      return total;
+    }
+
+    async function seedSections(opts) {
+      abortRequested = false;
+      abortBtn.disabled = false;
+      setStatus('Seeding...', true);
+      log('Starting seed with options:', opts);
+
+      if (!(await permissionPreCheck())) return;
+
+      // Fetch datasets only for requested sections
+      const needRegions = opts.regions || opts.all;
+      const needProvinces = opts.provinces || opts.all;
+      const needCities = opts.cities || opts.all;
+      const needBarangays = opts.barangays || opts.all;
+
+      let regions = [], provinces = [], cities = [], barangays = [];
+      try {
+        if (needRegions) regions = await fetchJson('https://psgc.gitlab.io/api/regions/', 'regions');
+        if (needProvinces) provinces = await fetchJson('https://psgc.gitlab.io/api/provinces/', 'provinces');
+        if (needCities) cities = await fetchJson('https://psgc.gitlab.io/api/cities-municipalities/', 'cities');
+        if (needBarangays) barangays = await fetchJson('https://psgc.gitlab.io/api/barangays/', 'barangays');
+      } catch (e) {
+        log('Fetch error:', e.message); setStatus('Fetch failed'); abortBtn.disabled = true; return;
+      }
+
+      try {
+        if (needRegions) { log('Seeding regions...'); await batchSet('ph_regions', regions.map(r => ({ id: r.code, data: { code: r.code, name: r.regionName } }))); }
+        if (needProvinces) { log('Seeding provinces...'); await batchSet('ph_provinces', provinces.map(p => ({ id: p.code, data: { code: p.code, name: p.name, regionCode: p.regionCode } }))); }
+        if (needCities) { log('Seeding cities...'); await batchSet('ph_cities', cities.map(c => ({ id: c.code, data: { code: c.code, name: c.name, regionCode: c.regionCode, provinceCode: c.provinceCode } }))); }
+        if (needBarangays) { log('Seeding barangays (may take several minutes)...'); await batchSet('ph_barangays', barangays.map(b => ({ id: b.code, data: { code: b.code, name: b.name, cityCode: b.cityCode || b.municipalityCode } }))); }
+        if (!abortRequested) { setStatus('Done'); log('All requested sections done. Restore secure Firestore rules.'); }
+        else { setStatus('Aborted'); }
+      } catch (e) {
+        log('Write error:', e.message); setStatus('Write failed');
+      } finally {
+        abortBtn.disabled = true;
+      }
+    }
+
+    // Button wiring
+    seedAllBtn.addEventListener('click', () => seedSections({ all: true }));
+    document.getElementById('seedRegionsBtn').addEventListener('click', () => seedSections({ regions: true }));
+    document.getElementById('seedProvBtn').addEventListener('click', () => seedSections({ provinces: true }));
+    document.getElementById('seedCitiesBtn').addEventListener('click', () => seedSections({ cities: true }));
+    document.getElementById('seedBrgyBtn').addEventListener('click', () => seedSections({ barangays: true }));
+    abortBtn.addEventListener('click', () => { abortRequested = true; abortBtn.disabled = true; setStatus('Abort requested...'); log('Abort requested by user'); });
+  </script>
+</body>
+</html>

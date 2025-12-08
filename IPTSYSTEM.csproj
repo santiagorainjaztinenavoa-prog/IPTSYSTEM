@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="tools\seed\" />
+    <Folder Include="wwwroot\images\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FirebaseAdmin" Version="2.4.0" />
+    <PackageReference Include="Google.Cloud.Firestore" Version="3.13.0" />
+    <!-- EF Core providers -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
