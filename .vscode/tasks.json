@@ -1,24 +1,38 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Run (dotnet watch)",
-      "type": "shell",
-      "command": "dotnet",
-      "args": [
-        "watch",
-        "--project",
-        "${workspaceFolder}/IPTSYSTEM/IPTSYSTEM.csproj",
-        "run",
-        "--urls",
-        "http://localhost:5050"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
-      },
-      "isBackground": true,
-      "problemMatcher": []
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run (dotnet watch)",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"watch",
+				"--project",
+				"${workspaceFolder}/IPTSYSTEM/IPTSYSTEM.csproj",
+				"run",
+				"--urls",
+				"http://localhost:5050"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			},
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run (dotnet watch)",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"watch",
+				"--project",
+				"${workspaceFolder}/IPTSYSTEM/IPTSYSTEM.csproj",
+				"run",
+				"--urls",
+				"http://localhost:5050"
+			],
+			"isBackground": true
+		}
+	]
 }
