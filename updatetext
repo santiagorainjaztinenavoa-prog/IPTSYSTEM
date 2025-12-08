@@ -1,0 +1,11 @@
+/// updates so far
+
+>> Categories page
+--added "add new category" button (not working so far, i have only added the category modal inside the scripts of the categories.cshtml)
+
++ Added CategoriesViewModel.cs in Models
+>> Configured category model for addition of category with category_name and category_id
+
++ Added CategoriesController.cs for the sole of adding new categories in categories pages
+
++ Added AdminController for allowing admins in modifying and deleting seller and buyer accounts
