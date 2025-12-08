@@ -928,5 +928,13 @@ namespace IPTSYSTEM.Controllers
                 return View("BrowseSeller", new List<Listing>());
             }
         }
+
+        public IActionResult AdminDashboard()
+        {
+            var model = new AdminDashboardViewModel();
+            return View(model);
+        }
+
+
     }
 }
