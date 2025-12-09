@@ -1,0 +1,228 @@
+﻿@model List<IPTSYSTEM.Models.Listing>
+@{
+    ViewData["Title"] = "Recommerce - Your Trusted Marketplace";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/home.css" asp-append-version="true" />
+}
+
+<section class="hero-yellow text-dark position-relative overflow-hidden">
+    <!-- Yellow Shopping Background -->
+    <div class="hero-yellow-bg"></div>
+
+ <!-- Shopping Items Decoration -->
+    <div class="shopping-items-decor">
+        <div class="shopping-item item-cart"></div>
+        <div class="shopping-item item-bag"></div>
+  <div class="shopping-item item-card"></div>
+        <div class="shopping-item item-glasses"></div>
+      <div class="shopping-item item-watch"></div>
+ </div>
+    
+    <div class="container position-relative hero-content-yellow">
+        <div class="row align-items-center">
+      <div class="col-lg-7">
+       <!-- Main Heading -->
+   <h1 class="hero-main-heading-yellow mb-4">
+      Your One-Stop Shop for<br>
+           <span class="highlight-yellow">Pre-Loved Treasures</span>
+  </h1>
+  
+                <!-- Description -->
+             <p class="hero-description-yellow mb-4">
+  Shop smarter, sell faster. Join thousands of buyers and sellers in our trusted community marketplace. Find amazing deals on quality items or turn your unused belongings into cash today.
+                </p>
+           
+ <!-- Action Buttons -->
+       <div class="hero-buttons d-flex gap-3">
+  <a href="/Home/Categories" class="btn btn-browse-yellow">
+  Browse Categories
+         <i class="bi bi-arrow-right ms-2"></i>
+ </a>
+            @{
+                var isLoggedIn = Context.Session.GetString("Username") != null;
+            }
+            @if (isLoggedIn)
+            {
+                <a href="/Home/Profile" class="btn btn-start-selling-yellow">Start Selling</a>
+            }
+            else
+            {
+                <a href="/Home/Login" class="btn btn-start-selling-yellow" onclick="return requireLogin(event)">Start Selling</a>
+            }
+    </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Latest Items Section -->
+<section class="latest-items-section py-5">
+    <div class="container">
+        <!-- Section Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="section-title mb-0">Latest Items</h2>
+            
+            <!-- Sort Filter (matches Browse page style) -->
+            <div class="filter-container">
+                <select id="sortFilter" class="filter-select" onchange="applySorting()" style="padding: 0.5rem 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background-color: white; cursor: pointer;">
+                    <option value="newest" selected>Newest First</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Items Grid -->
+        <div class="row g-4" id="latestItemsGrid">
+            @if (Model == null || !Model.Any())
+            {
+                <div class="col-12">
+                    <div class="empty-state text-center p-5 border rounded-3">
+                        <i class="bi bi-inbox"></i>
+                        <h3 class="mt-2">No items yet</h3>
+                        <p>Be the first to list an item.</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                var latestFour = Model.OrderByDescending(x => x.CreatedDate).Take(4).ToList();
+                foreach (var item in latestFour)
+                {
+                    var condition = string.IsNullOrWhiteSpace(item.Condition) ? "New" : item.Condition;
+                    var conditionClass = condition.ToLowerInvariant().Replace(" ", "-");
+                    var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop" : item.ImageUrl;
+                    <div class="col-12 col-sm-6 col-lg-3" data-created="@item.CreatedDate.Ticks" data-price="@item.Price">
+                        <div class="item-card">
+                            <div class="item-image-wrapper">
+                                <img src="@imageUrl" alt="@item.Title" class="item-image">
+                                <span class="item-badge badge-@conditionClass">@condition</span>
+                                <button class="btn-wishlist"><i class="bi bi-heart"></i></button>
+                            </div>
+                            <div class="item-details">
+                                <h3 class="item-title">@item.Title</h3>
+                                <p class="item-description">@{ var desc = item.Description ?? ""; }@(desc.Length > 80 ? (desc.Substring(0,80) + "...") : desc)</p>
+                                <div class="item-footer">
+                                    <span class="item-price">₱@item.Price.ToString("0.00")</span>
+                                    <div class="item-rating"><i class="bi bi-star-fill text-success"></i><span class="rating-value">5</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <script src="~/js/firebase-client.js?v=2.0" type="module"></script>
+    <script>
+        function requireLogin(e) {
+            // Show a friendly prompt and allow navigation to Login
+            alert('Please login first to start selling.');
+            // No need to prevent default since href already points to /Home/Login
+            return true;
+        }
+        
+        // Load latest 4 items from Firestore
+        async function loadLatestItems() {
+            console.log('Loading latest items from Firestore...');
+            
+            // Wait for Firebase to be ready
+            let retries = 0;
+            while (typeof window.firebaseFetchAllProducts !== 'function' && retries < 30) {
+                await new Promise(r => setTimeout(r, 100));
+                retries++;
+            }
+            
+            if (typeof window.firebaseFetchAllProducts === 'function') {
+                try {
+                    // Only fetch 4 items for performance
+                    const result = await window.firebaseFetchAllProducts(false, 4);
+                    if (result.success && result.products && result.products.length > 0) {
+                        displayLatestItems(result.products);
+                    }
+                } catch (err) {
+                    console.error('Failed to load items from Firestore:', err);
+                }
+            }
+        }
+        
+        function displayLatestItems(products) {
+            const grid = document.getElementById('latestItemsGrid');
+            if (!grid) return;
+            
+            if (!products || products.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-12">
+                        <div class="empty-state text-center p-5 border rounded-3">
+                            <i class="bi bi-inbox"></i>
+                            <h3 class="mt-2">No items yet</h3>
+                            <p>Be the first to list an item.</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const html = products.map(item => `
+                <div class="col-12 col-sm-6 col-lg-3" data-created="${new Date(item.date_created || 0).getTime()}" data-price="${item.price || 0}">
+                    <div class="item-card">
+                        <div class="item-image-wrapper">
+                            <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
+                                 alt="${item.title}" class="item-image"
+                                 onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                            <span class="item-badge badge-${(item.condition || 'new').toLowerCase().replace(' ', '-')}">${item.condition || 'New'}</span>
+                            <button class="btn-wishlist"><i class="bi bi-heart"></i></button>
+                        </div>
+                        <div class="item-details">
+                            <h3 class="item-title">${item.title}</h3>
+                            <p class="item-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
+                            <div class="item-footer">
+                                <span class="item-price">₱${parseFloat(item.price || 0).toFixed(2)}</span>
+                                <div class="item-rating"><i class="bi bi-star-fill text-success"></i><span class="rating-value">5</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            grid.innerHTML = html;
+            applySorting();
+        }
+        
+        // Sort items on the Landing page
+        function applySorting() {
+            const sortBy = document.getElementById('sortFilter').value;
+            const grid = document.getElementById('latestItemsGrid');
+            const cards = Array.from(grid.children).filter(el => el.classList.contains('col-12'));
+            
+            console.log('Sorting by:', sortBy);
+            
+            cards.sort((a, b) => {
+                if (sortBy === 'price-low') {
+                    const priceA = parseFloat(a.dataset.price || 0);
+                    const priceB = parseFloat(b.dataset.price || 0);
+                    return priceA - priceB;
+                } else if (sortBy === 'price-high') {
+                    const priceA = parseFloat(a.dataset.price || 0);
+                    const priceB = parseFloat(b.dataset.price || 0);
+                    return priceB - priceA;
+                } else {
+                    const dateA = parseInt(a.dataset.created || 0);
+                    const dateB = parseInt(b.dataset.created || 0);
+                    return dateB - dateA;
+                }
+            });
+            
+            cards.forEach(card => grid.appendChild(card));
+            console.log('Sorted', cards.length, 'items');
+        }
+        
+        // Load items on page load
+        document.addEventListener('DOMContentLoaded', loadLatestItems);
+    </script>
+}
