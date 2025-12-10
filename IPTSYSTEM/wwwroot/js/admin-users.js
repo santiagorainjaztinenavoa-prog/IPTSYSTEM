@@ -260,3 +260,79 @@ if (document.readyState === 'loading') {
 } else {
     initializeUsersTable();
 }
+
+// =========================
+// VIEW USER MODAL
+// =========================
+function openViewUserModal(user) {
+    // Fill modal fields
+    document.getElementById("viewUserName").innerText = user.first_name + " " + user.last_name;
+    document.getElementById("viewUserEmail").innerText = user.email;
+    document.getElementById("viewUserType").innerText = user.account_type;
+    document.getElementById("viewUserJoined").innerText = formatDate(user.date_created);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById("viewUserModal"));
+    modal.show();
+}
+
+
+
+// =========================
+// EDIT USER MODAL
+// =========================
+function openEditUserModal(user) {
+    document.getElementById("editUserId").value = user.id;
+    document.getElementById("editUserName").value = user.first_name + " " + user.last_name;
+    document.getElementById("editUserType").value = user.account_type;
+
+    const modal = new bootstrap.Modal(document.getElementById("editUserModal"));
+    modal.show();
+}
+
+
+
+// =========================
+// DELETE USER MODAL
+// =========================
+function openDeleteUserModal(user) {
+    document.getElementById("deleteUserId").value = user.id;
+
+    const modal = new bootstrap.Modal(document.getElementById("deleteUserModal"));
+    modal.show();
+}
+
+
+
+// =========================
+// SAVE EDITED USER (API CALL)
+// =========================
+document.getElementById("saveUserChangesBtn").addEventListener("click", async () => {
+    const id = document.getElementById("editUserId").value;
+    const name = document.getElementById("editUserName").value;
+    const type = document.getElementById("editUserType").value;
+
+    // EXAMPLE API call — replace with your endpoint
+    await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, account_type: type })
+    });
+
+    location.reload();
+});
+
+
+
+// =========================
+// CONFIRM DELETE USER
+// =========================
+document.getElementById("confirmDeleteUserBtn").addEventListener("click", async () => {
+    const id = document.getElementById("deleteUserId").value;
+
+    await fetch(`/api/users/${id}`, {
+        method: "DELETE"
+    });
+
+    location.reload();
+});

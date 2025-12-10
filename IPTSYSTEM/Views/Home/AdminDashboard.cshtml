@@ -220,7 +220,7 @@
                                                 <td class="py-3 px-2 text-gray-300">₱@listing.Price.ToString("N0")</td>
 
                                                 <td class="py-3 px-2 text-gray-300">
-                                                    <span class="flex items-center gap-1" onclick="viewUserModal">
+                                                    <span class="flex items-center gap-1" onclick="viewUserModal" (${JSON.stringify(user)})>
                                                         <i class="bi bi-eye"></i> @listing.Views
                                                     </span>
                                                 </td>
@@ -237,13 +237,13 @@
 
                                                         <!-- Modify Button -->
                                                         <span class="modifyListingBtn px-3 py-1 bg-gray-800 hover:bg-gray-700 text-yellow-400 rounded-lg cursor-pointer transition"
-                                                              data-listing-id="@listing.Id" onclick="editUserModal">
+                                                              data-listing-id="@listing.Id" onclick="editUserModal" (${JSON.stringify(user)})>
                                                             <i class="bi bi-pencil-square"></i>
                                                         </span>
 
                                                         <!-- Delete Button -->
                                                         <span class="deleteListingBtn px-3 py-1 bg-gray-800 hover:bg-gray-700 text-red-400 rounded-lg cursor-pointer transition"
-                                                              data-listing-id="@listing.Id" onclick="deleteUserModal">
+                                                              data-listing-id="@listing.Id" onclick="deleteUserModal" (${JSON.stringify(user)})>
                                                             <i class="bi bi-trash"></i>
                                                         </span>
 
