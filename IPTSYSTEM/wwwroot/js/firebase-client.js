@@ -1287,4 +1287,205 @@ window.firebaseUpdateReview = async function(reviewId, buyerId, updates) {
     }
 };
 
+// ========== SELLER REPORTS / ANALYTICS ==========
+// Fetch all sold items with details for reports and analytics
+window.firebaseGetSellerReports = async function(sellerId) {
+    try {
+        if (!sellerId) {
+            throw new Error('Seller ID is required');
+        }
+
+        console.log('📊 Fetching reports for seller:', sellerId);
+
+        // Query the reports collection - fetch by seller_id only (avoid composite index requirement)
+        const reportsCol = collection(db, 'reports');
+        const q = query(reportsCol, where('seller_id', '==', sellerId));
+        const snapshot = await getDocs(q);
+
+        const reports = [];
+        snapshot.forEach(doc => {
+            reports.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort by sold_date descending in JavaScript (avoid index requirement)
+        reports.sort((a, b) => {
+            const dateA = a.sold_date?.seconds || 0;
+            const dateB = b.sold_date?.seconds || 0;
+            return dateB - dateA;
+        });
+
+        console.log('✅ Found', reports.length, 'reports for seller:', sellerId);
+
+        return { success: true, reports, count: reports.length };
+    } catch (err) {
+        console.error('❌ firebaseGetSellerReports error:', err);
+        return { success: false, reports: [], message: err?.message || String(err) };
+    }
+};
+
+// Fetch and aggregate sold items for analytics
+window.firebaseGetSalesAnalytics = async function(sellerId) {
+    try {
+        if (!sellerId) {
+            throw new Error('Seller ID is required');
+        }
+
+        console.log('📈 Generating sales analytics for seller:', sellerId);
+
+        // Get all SOLD items from tbl_listing (History) instead of reports collection
+        // This pulls from the actual sold items in the system
+        const listingsCol = collection(db, 'tbl_listing');
+        const q = query(listingsCol, where('user_id', '==', sellerId), where('status', '==', 'sold'));
+        const snapshot = await getDocs(q);
+        
+        const soldItems = [];
+        snapshot.forEach(doc => {
+            soldItems.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        
+        console.log('📊 Found', soldItems.length, 'sold items for seller:', sellerId);
+        
+        if (soldItems.length === 0) {
+            return { 
+                success: true, 
+                analytics: {
+                    totalSales: 0,
+                    totalRevenue: 0,
+                    totalQuantity: 0,
+                    itemsSold: {},
+                    byCategory: {},
+                    byDate: {},
+                    dailySales: {},
+                    rawItems: [] // Include raw items for detailed table
+                }
+            };
+        }
+        
+        const reports = soldItems;
+        
+        // Initialize analytics data
+        const analytics = {
+            totalSales: 0,
+            totalRevenue: 0,
+            totalQuantity: 0,
+            itemsSold: {},
+            byCategory: {},
+            byDate: {},
+            dailySales: {},
+            rawItems: [] // Store raw items with dates for detailed report
+        };
+
+        // Process each sold item from tbl_listing
+        reports.forEach(report => {
+            // Parse the date first
+            let dateStr = null;
+            let dateObj = null;
+            
+            // Try multiple date fields
+            const dateField = report.sold_date || report.date_sold || report.updated_at || report.created_at;
+            if (dateField) {
+                try {
+                    if (dateField.seconds) {
+                        // Firestore timestamp
+                        dateObj = new Date(dateField.seconds * 1000);
+                    } else if (typeof dateField === 'string') {
+                        // Date string
+                        dateObj = new Date(dateField);
+                    } else if (dateField instanceof Date) {
+                        dateObj = dateField;
+                    }
+                    if (dateObj && !isNaN(dateObj.getTime())) {
+                        dateStr = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+                    }
+                } catch (e) {
+                    console.warn('Could not parse date:', dateField);
+                }
+            }
+            
+            // Basic totals - use tbl_listing field names
+            analytics.totalSales++;
+            const price = parseFloat(report.price) || parseFloat(report.Price) || 0;
+            analytics.totalRevenue += price;
+            analytics.totalQuantity += 1; // Each sold item counts as 1 unit
+
+            // Store raw item for detailed table
+            const itemName = report.title || report.Title || 'Unknown';
+            const category = report.category || report.Category || 'Uncategorized';
+            
+            analytics.rawItems.push({
+                id: report.id,
+                title: itemName,
+                category: category,
+                quantity: 1,
+                price: price,
+                total: price,
+                date: dateStr,
+                dateObj: dateObj
+            });
+
+            // Items purchased
+            if (!analytics.itemsSold[itemName]) {
+                analytics.itemsSold[itemName] = {
+                    quantity: 0,
+                    revenue: 0,
+                    category: category
+                };
+            }
+            analytics.itemsSold[itemName].quantity += 1;
+            analytics.itemsSold[itemName].revenue += price;
+
+            // By category
+            if (!analytics.byCategory[category]) {
+                analytics.byCategory[category] = {
+                    count: 0,
+                    revenue: 0,
+                    quantity: 0
+                };
+            }
+            analytics.byCategory[category].count++;
+            analytics.byCategory[category].revenue += price;
+            analytics.byCategory[category].quantity += 1;
+
+            // By date
+            const dateKey = dateStr || 'Unknown';
+            if (!analytics.byDate[dateKey]) {
+                analytics.byDate[dateKey] = {
+                    count: 0,
+                    revenue: 0,
+                    quantity: 0
+                };
+            }
+            analytics.byDate[dateKey].count++;
+            analytics.byDate[dateKey].revenue += price;
+            analytics.byDate[dateKey].quantity += 1;
+
+            // Daily sales (alternative format)
+            if (!analytics.dailySales[dateKey]) {
+                analytics.dailySales[dateKey] = 0;
+            }
+            analytics.dailySales[dateKey] += price;
+        });
+
+        // Sort rawItems by date descending (newest first)
+        analytics.rawItems.sort((a, b) => {
+            if (!a.dateObj && !b.dateObj) return 0;
+            if (!a.dateObj) return 1;
+            if (!b.dateObj) return -1;
+            return b.dateObj - a.dateObj;
+        });
+
+        console.log('✅ Analytics generated:', analytics);
+        return { success: true, analytics };
+    } catch (err) {
+        console.error('❌ firebaseGetSalesAnalytics error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
 export default app;

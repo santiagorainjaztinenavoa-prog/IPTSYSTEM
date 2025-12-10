@@ -928,5 +928,45 @@ namespace IPTSYSTEM.Controllers
                 return View("BrowseSeller", new List<Listing>());
             }
         }
+
+        // Admin Dashboard
+        [HttpGet]
+        public IActionResult AdminDashboard(string? menu = "overview")
+        {
+            // Check if user is admin
+            var isAdmin = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
+            if (!isAdmin)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var viewModel = new AdminDashboardViewModel
+            {
+                ActiveMenu = menu ?? "overview",
+                Stats = new AdminDashboardViewModel.DashboardStats
+                {
+                    TotalUsers = _registeredUsers.Count,
+                    TotalListings = _listings.Count(l => l.IsActive),
+                    TotalRevenue = _listings.Where(l => l.IsActive).Sum(l => l.Price),
+                    ActiveTransactions = _listings.Count(l => l.IsActive)
+                },
+                RecentUsers = _registeredUsers.Take(10).Select(u => new AdminDashboardViewModel.UserInfo
+                {
+                    Name = u.FullName,
+                    Email = u.Email,
+                    Status = "active",
+                    JoinDate = DateTime.Now.AddDays(-5).ToString("MM/dd/yyyy")
+                }).ToList(),
+                RecentListings = _listings.Where(l => l.IsActive).OrderByDescending(l => l.CreatedDate).Take(10).Select(l => new AdminDashboardViewModel.ListingInfo
+                {
+                    Title = l.Title,
+                    Price = l.Price,
+                    Views = 0,
+                    Status = "active"
+                }).ToList()
+            };
+
+            return View(viewModel);
+        }
     }
 }
