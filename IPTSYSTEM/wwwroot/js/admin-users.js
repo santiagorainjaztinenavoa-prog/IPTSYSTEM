@@ -106,10 +106,12 @@ function renderTable() {
             '<td class="py-4 px-4 text-gray-300">' + userEmail + '</td>' +
             '<td class="py-4 px-4">' + accountTypeBadge + '</td>' +
             '<td class="py-4 px-4 text-gray-400 text-sm">' + joinedDate + '</td>' +
-            '<td class="py-4 px-4 text-center"><button class="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded transition" title="View user details"><i class="bi bi-eye"></i></button></td>';
-        
+            '<td class="py-4 px-4 text-center"><button class="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded transition" title="View user details"><i class="bi bi-eye"></i></button><button class="editUserBtn px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs font-medium transition" data - id="${user.id}" ><i class="bi bi-pencil-square"></i></button > <button class="deleteUserBtn px-3 py-1.5 rounded-lg bg-red-900 hover:bg-red-800 text-red-300 text-xs font-medium transition" - id="${user.id}" ><i class="bi bi-trash"></i></button > ${user.status === "active" ? `< button class="deactivateUserBtn px-3 py-1.5 rounded-lg bg-yellow-900 hover:bg-yellow-800 text-yellow-300 text-xs font-medium transition" - id="${user.id}" ><i class="bi bi-slash-circle"></i></button >` : ""} ${user.status === "inactive" ? `< button class="reactivateUserBtn px-3 py-1.5 rounded-lg bg-green-900 hover:bg-green-800 text-green-300 text-xs font-medium transition"data - id="${user.id}" ><i class="bi bi-check-circle"></i></button >` : ""}</td>';
+
         usersTableBody.appendChild(row);
+        
     });
+
 
     // Update pagination info
     paginationInfo.textContent = filteredUsers.length;
@@ -228,3 +230,81 @@ if (document.readyState === 'loading') {
 } else {
     initializeUsersTable();
 }
+
+// Edit User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".editUserBtn")) {
+        const userId = e.target.closest(".editUserBtn").dataset.id;
+        openEditUserModal(userId);
+    }
+});
+
+// Delete User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".deleteUserBtn")) {
+        const userId = e.target.closest(".deleteUserBtn").dataset.id;
+        deleteUserAccount(userId);
+    }
+});
+
+// Deactivate User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".deactivateUserBtn")) {
+        const userId = e.target.closest(".deactivateUserBtn").dataset.id;
+        deactivateUser(userId);
+    }
+});
+
+// Reactivate User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".reactivateUserBtn")) {
+        const userId = e.target.closest(".reactivateUserBtn").dataset.id;
+        reactivateUser(userId);
+    }
+});
+
+function renderUserRow(user) {
+    return `
+    <tr class="border-b border-gray-800 hover:bg-gray-800 transition">
+        <td class="py-4 px-4 font-medium text-white">${user.name}</td>
+        <td class="py-4 px-4 text-gray-300">${user.email}</td>
+        <td class="py-4 px-4 text-gray-300">${user.accountType}</td>
+        <td class="py-4 px-4 text-gray-300">${user.createdAt}</td>
+
+        <td class="py-4 px-4 text-center">
+            <div class="flex items-center justify-center gap-2">
+
+                <!-- EDIT -->
+                <button class="editUserBtn px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs font-medium transition"
+                        data-id="${user.id}">
+                    <i class="bi bi-pencil-square"></i>
+                </button>
+
+                <!-- DELETE -->
+                <button class="deleteUserBtn px-3 py-1.5 rounded-lg bg-red-900 hover:bg-red-800 text-red-300 text-xs font-medium transition"
+                        data-id="${user.id}">
+                    <i class="bi bi-trash"></i>
+                </button>
+
+                <!-- DEACTIVATE -->
+                ${user.status === "active" ? `
+                    <button class="deactivateUserBtn px-3 py-1.5 rounded-lg bg-yellow-900 hover:bg-yellow-800 text-yellow-300 text-xs font-medium transition"
+                            data-id="${user.id}">
+                        <i class="bi bi-slash-circle"></i>
+                    </button>
+                ` : ""}
+
+                <!-- REACTIVATE -->
+                ${user.status === "inactive" ? `
+                    <button class="reactivateUserBtn px-3 py-1.5 rounded-lg bg-green-900 hover:bg-green-800 text-green-300 text-xs font-medium transition"
+                            data-id="${user.id}">
+                        <i class="bi bi-check-circle"></i>
+                    </button>
+                ` : ""}
+
+            </div>
+        </td>
+    </tr>`;
+}
+
+
