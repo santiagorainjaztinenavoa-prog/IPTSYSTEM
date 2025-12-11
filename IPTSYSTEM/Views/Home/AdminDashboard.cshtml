@@ -1360,6 +1360,66 @@
         }
     </script>
 
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-gray-900 rounded-xl border border-gray-700 w-full max-w-lg mx-4 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-white">Edit User</h3>
+                <button id="closeEditUserModalBtn" class="text-gray-400 hover:text-white">
+                    <i class="bi bi-x-lg text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="editUserForm">
+                <input type="hidden" id="editUserId">
+                
+                <div class="space-y-4">
+                    <!-- Email (Read-only) -->
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-2">Email Address</label>
+                        <input type="text" id="editUserEmail" class="w-full bg-gray-800 text-gray-400 rounded-lg border border-gray-700 p-3 cursor-not-allowed" readonly>
+                    </div>
+
+                    <!-- Names -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-400 text-sm mb-2">First Name</label>
+                            <input type="text" id="editUserFirstName" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-blue-500 focus:outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 text-sm mb-2">Last Name</label>
+                            <input type="text" id="editUserLastName" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-blue-500 focus:outline-none" required>
+                        </div>
+                    </div>
+
+                    <!-- Account Type -->
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-2">Account Type</label>
+                        <select id="editUserType" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-blue-500 focus:outline-none">
+                            <option value="Buyer">Buyer</option>
+                            <option value="Seller">Seller</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button type="button" id="cancelEditUserBtn" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase Client -->
+    <script type="module" src="/js/firebase-client.js"></script>
+    
+    <!-- Admin Overview Statistics -->
+    <script type="module" src="/js/admin-overview.js"></script>
+    
     <!-- Admin Users Management Module -->
     <script type="module" src="/js/admin-users.js"></script>
 </body>

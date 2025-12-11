@@ -37,14 +37,16 @@
                 
                 <!-- Action Buttons -->
                 <div class="hero-buttons d-flex gap-3">
-                    <a href="/Home/Categories" class="btn btn-browse-yellow">
+                    <a href="/Home/Categories" class="btn btn-start-selling-yellow">
                         Browse Categories
                         <i class="bi bi-arrow-right ms-2"></i>
                     </a>
-                    @if(isLoggedIn){
-                        <a href="/Home/Profile" class="btn btn-start-selling-yellow">Start Selling</a>
-                    } else {
-                        <a href="/Home/Login" class="btn btn-start-selling-yellow" onclick="return requireLogin(event)">Start Selling</a>
+                    @{
+                        var accountType = Context.Session.GetString("UserType");
+                        var isSeller = accountType != null && accountType.Equals("Seller", StringComparison.OrdinalIgnoreCase);
+                    }
+                    @if(isSeller && isLoggedIn){
+                        <a href="/Home/Profile" class="btn btn-browse-yellow">Start Selling</a>
                     }
                 </div>
             </div>
@@ -57,7 +59,7 @@
     <div class="container">
         <!-- Section Header -->
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="section-title mb-0">Latest Items</h2>
+            <h2 class="section-title mb-0">Recent Items</h2>
             
             <!-- Sort Filter (matches Browse page style) -->
             <div class="filter-container">

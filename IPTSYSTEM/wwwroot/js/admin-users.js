@@ -148,6 +148,7 @@ function applyFilters() {
 }
 
 // Fetch users from Firebase
+// Fetch users from Firebase
 async function fetchUsers() {
     try {
         if (loadingState) loadingState.classList.remove('hidden');
@@ -155,11 +156,8 @@ async function fetchUsers() {
         if (usersTableContainer) usersTableContainer.classList.add('hidden');
         if (emptyState) emptyState.classList.add('hidden');
 
-        // Check if user is authenticated
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-            console.warn('⚠️ No Firebase user authenticated. Attempting to load users anyway...');
-        }
+        // Wait a moment for auth state to settle after operations
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         const usersCollection = collection(db, 'users');
         const snapshot = await getDocs(usersCollection);
@@ -186,7 +184,14 @@ async function fetchUsers() {
         console.error('❌ Error fetching users:', err);
         if (loadingState) loadingState.classList.add('hidden');
         if (errorState) errorState.classList.remove('hidden');
-        if (errorMessage) errorMessage.textContent = err.message || 'Failed to load users from Firebase';
+
+        let msg = 'Failed to load users.';
+        if (err.code === 'permission-denied') {
+            msg = 'Permission denied. Please ensure your Firestore Rules are updated (see walkthrough).';
+        } else {
+            msg = err.message || String(err);
+        }
+        if (errorMessage) errorMessage.textContent = msg;
     }
 }
 
@@ -268,6 +273,64 @@ document.addEventListener("click", (e) => {
 
 // ---- Implementations for Edit / Delete / Deactivate / Reactivate ----
 
+
+// Modal Elements
+const editUserModal = document.getElementById('editUserModal');
+const editUserForm = document.getElementById('editUserForm');
+const closeEditUserModalBtn = document.getElementById('closeEditUserModalBtn');
+const cancelEditUserBtn = document.getElementById('cancelEditUserBtn');
+
+// Initialize Modal Listeners
+function setupEditUserModal() {
+    if (!editUserModal) return;
+
+    const closeModal = () => editUserModal.classList.add('hidden');
+
+    closeEditUserModalBtn?.addEventListener('click', closeModal);
+    cancelEditUserBtn?.addEventListener('click', closeModal);
+
+    editUserForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId = document.getElementById('editUserId').value;
+        const firstName = document.getElementById('editUserFirstName').value;
+        const lastName = document.getElementById('editUserLastName').value;
+        const accountType = document.getElementById('editUserType').value;
+
+        try {
+            // Using the new firebaseUpdateUser function from firebase-client.js
+            const result = await window.firebaseUpdateUser(userId, {
+                first_name: firstName,
+                last_name: lastName,
+                account_type: accountType
+            });
+
+            if (result.success) {
+                notify('User updated successfully');
+                closeModal();
+
+                // Update local cache and UI
+                const idx = allUsers.findIndex(u => u.id === userId);
+                if (idx !== -1) {
+                    allUsers[idx].first_name = firstName;
+                    allUsers[idx].last_name = lastName;
+                    allUsers[idx].account_type = accountType;
+                    // Also update legacy fields if present
+                    if (allUsers[idx].accountType) allUsers[idx].accountType = accountType;
+                }
+                applyFilters();
+            } else {
+                notify('Failed to update user: ' + result.message);
+            }
+        } catch (err) {
+            console.error('Error updating user:', err);
+            notify('Error updating user');
+        }
+    });
+}
+
+// Call setup
+setupEditUserModal();
+
 async function openEditUserModal(userId) {
     const user = allUsers.find(u => u.id === userId);
     if (!user) {
@@ -275,29 +338,29 @@ async function openEditUserModal(userId) {
         return;
     }
 
-    // Simple prompt-based editor (replace with a proper modal in the future)
-    const currentFullName = ((user.first_name || '') + (user.last_name ? (' ' + user.last_name) : '')).trim();
-    const newFullName = prompt('Edit full name for ' + (user.email || userId), currentFullName);
-    if (newFullName === null) return; // cancelled
+    // Populate form
+    document.getElementById('editUserId').value = user.id;
+    document.getElementById('editUserEmail').value = user.email || '';
+    document.getElementById('editUserFirstName').value = user.first_name || '';
+    document.getElementById('editUserLastName').value = user.last_name || '';
 
-    const parts = newFullName.trim().split(/\s+/);
-    const first = parts.shift() || '';
-    const last = parts.join(' ') || '';
+    // Handle Account Type (normalize case)
+    const typeSelect = document.getElementById('editUserType');
+    const currentType = (user.account_type || user.accountType || 'Buyer').toLowerCase();
 
-    try {
-        const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, { first_name: first, last_name: last });
-        notify('User updated');
-        // Update local cache and re-render
-        const idx = allUsers.findIndex(u => u.id === userId);
-        if (idx !== -1) {
-            allUsers[idx].first_name = first;
-            allUsers[idx].last_name = last;
+    // Select the correct option
+    for (let i = 0; i < typeSelect.options.length; i++) {
+        if (typeSelect.options[i].value.toLowerCase() === currentType) {
+            typeSelect.selectedIndex = i;
+            break;
         }
-        applyFilters();
-    } catch (err) {
-        console.error('Error updating user:', err);
-        notify('Failed to update user: ' + (err.message || err));
+    }
+
+    // Show Modal
+    if (editUserModal) {
+        editUserModal.classList.remove('hidden');
+    } else {
+        console.error('Edit User Modal element not found!');
     }
 }
 
@@ -323,16 +386,18 @@ async function deactivateUser(userId) {
     if (!confirmed) return;
 
     try {
+        // Using existing Update doc logic but ensuring strict boolean 'false'
         const userRef = doc(db, 'users', userId);
         await updateDoc(userRef, {
             isEnabled: false,
             status: 'inactive',
             disabled_at: new Date()
         });
+
         notify('User disabled successfully');
         const idx = allUsers.findIndex(u => u.id === userId);
         if (idx !== -1) {
-            allUsers[idx].isEnabled = false;
+            allUsers[idx].isEnabled = false; // Directly set false
             allUsers[idx].status = 'inactive';
         }
         applyFilters();

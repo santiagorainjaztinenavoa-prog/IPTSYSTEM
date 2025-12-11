@@ -47,13 +47,13 @@ class RegisterController {
                 ]
             },
             citiesByProvince: {
-                'CAV': [ { code: 'IMUS', name: 'Imus', provinceCode: 'CAV', regionCode: 'REG4A' } ],
-                'LAG': [ { code: 'SCLR', name: 'Santa Clara (Sample)', provinceCode: 'LAG', regionCode: 'REG4A' } ]
+                'CAV': [{ code: 'IMUS', name: 'Imus', provinceCode: 'CAV', regionCode: 'REG4A' }],
+                'LAG': [{ code: 'SCLR', name: 'Santa Clara (Sample)', provinceCode: 'LAG', regionCode: 'REG4A' }]
             },
             barangaysByCity: {
-                'MNL': [ { code: 'BRGY1', name: 'Barangay 1' }, { code: 'BRGY2', name: 'Barangay 2' } ],
-                'QZN': [ { code: 'BRGYQ1', name: 'Commonwealth' } ],
-                'IMUS': [ { code: 'IMUS1', name: 'Tanzang Luma' } ]
+                'MNL': [{ code: 'BRGY1', name: 'Barangay 1' }, { code: 'BRGY2', name: 'Barangay 2' }],
+                'QZN': [{ code: 'BRGYQ1', name: 'Commonwealth' }],
+                'IMUS': [{ code: 'IMUS1', name: 'Tanzang Luma' }]
             }
         };
         this.initializeEventListeners();
@@ -112,10 +112,10 @@ class RegisterController {
             regions = this.fallbackGeo.regions;
         }
         this.regionSelect.innerHTML = '<option value="">Region</option>';
-        regions.sort((a,b)=> (a.name||'').localeCompare(b.name||''))
-            .forEach(r=>{
-                const opt=document.createElement('option');
-                opt.value=r.code; opt.textContent=r.name||r.code; opt.dataset.name=r.name||''; this.regionSelect.appendChild(opt);
+        regions.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+            .forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.code; opt.textContent = r.name || r.code; opt.dataset.name = r.name || ''; this.regionSelect.appendChild(opt);
             });
     }
 
@@ -134,12 +134,12 @@ class RegisterController {
         // Try Firestore provinces
         let provinces = [];
         try { if (this.geo?.loadProvincesByRegion) provinces = await this.geo.loadProvincesByRegion(code); } catch { /* ignore */ }
-        if ((!provinces || provinces.length===0) && this.fallbackGeo.provincesByRegion[code]) {
+        if ((!provinces || provinces.length === 0) && this.fallbackGeo.provincesByRegion[code]) {
             provinces = this.fallbackGeo.provincesByRegion[code];
         }
-        if (provinces && provinces.length>0) {
+        if (provinces && provinces.length > 0) {
             this.provinceSelect.disabled = false;
-            provinces.sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{ const opt=document.createElement('option'); opt.value=p.code; opt.textContent=p.name; opt.dataset.name=p.name; this.provinceSelect.appendChild(opt); });
+            provinces.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => { const opt = document.createElement('option'); opt.value = p.code; opt.textContent = p.name; opt.dataset.name = p.name; this.provinceSelect.appendChild(opt); });
         } else {
             // No provinces (e.g. NCR) -> load cities by region
             await this.loadCitiesByRegion(code);
@@ -149,12 +149,12 @@ class RegisterController {
     async loadCitiesByRegion(regionCode) {
         let cities = [];
         try { if (this.geo?.loadCitiesByRegion) cities = await this.geo.loadCitiesByRegion(regionCode); } catch { }
-        if ((!cities || cities.length===0) && this.fallbackGeo.citiesByRegion[regionCode]) {
+        if ((!cities || cities.length === 0) && this.fallbackGeo.citiesByRegion[regionCode]) {
             cities = this.fallbackGeo.citiesByRegion[regionCode];
         }
         this.citySelect.innerHTML = '<option value="">City / Municipality</option>';
         this.citySelect.disabled = false;
-        (cities||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{ const opt=document.createElement('option'); opt.value=c.code; opt.textContent=c.name; opt.dataset.name=c.name; this.citySelect.appendChild(opt); });
+        (cities || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(c => { const opt = document.createElement('option'); opt.value = c.code; opt.textContent = c.name; opt.dataset.name = c.name; this.citySelect.appendChild(opt); });
     }
 
     async onProvinceChange() {
@@ -166,9 +166,9 @@ class RegisterController {
         this.citySelect.disabled = true; this.barangaySelect.disabled = true; this.updateAddressDisplay(); if (!provinceCode) return;
         let cities = [];
         try { if (this.geo?.loadCitiesByProvince) cities = await this.geo.loadCitiesByProvince(provinceCode); } catch { }
-        if ((!cities || cities.length===0) && this.fallbackGeo.citiesByProvince[provinceCode]) cities = this.fallbackGeo.citiesByProvince[provinceCode];
+        if ((!cities || cities.length === 0) && this.fallbackGeo.citiesByProvince[provinceCode]) cities = this.fallbackGeo.citiesByProvince[provinceCode];
         this.citySelect.disabled = false;
-        (cities||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{ const opt=document.createElement('option'); opt.value=c.code; opt.textContent=c.name; opt.dataset.name=c.name; this.citySelect.appendChild(opt); });
+        (cities || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(c => { const opt = document.createElement('option'); opt.value = c.code; opt.textContent = c.name; opt.dataset.name = c.name; this.citySelect.appendChild(opt); });
     }
 
     async onCityChange() {
@@ -178,9 +178,9 @@ class RegisterController {
         this.barangaySelect.disabled = true; this.updateAddressDisplay(); if (!cityCode) return;
         let brgys = [];
         try { if (this.geo?.loadBarangaysByCity) brgys = await this.geo.loadBarangaysByCity(cityCode); } catch { }
-        if ((!brgys || brgys.length===0) && this.fallbackGeo.barangaysByCity[cityCode]) brgys = this.fallbackGeo.barangaysByCity[cityCode];
+        if ((!brgys || brgys.length === 0) && this.fallbackGeo.barangaysByCity[cityCode]) brgys = this.fallbackGeo.barangaysByCity[cityCode];
         this.barangaySelect.disabled = false;
-        (brgys||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(b=>{ const opt=document.createElement('option'); opt.value=b.code; opt.textContent=b.name; opt.dataset.name=b.name; this.barangaySelect.appendChild(opt); });
+        (brgys || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(b => { const opt = document.createElement('option'); opt.value = b.code; opt.textContent = b.name; opt.dataset.name = b.name; this.barangaySelect.appendChild(opt); });
     }
 
     updateAddressDisplay() {
@@ -243,78 +243,33 @@ class RegisterController {
         this.setLoadingState(true);
 
         try {
-            // Prefer client-side Firebase registration if available
-            if (typeof window.firebaseRegister === 'function') {
-                const result = await window.firebaseRegister(
-                    firstName,
-                    lastName,
-                    data.email,
-                    data.password,
-                    data.username,
-                    accountType,
-                    phoneNumber,
-                    region,
-                    province,
-                    city,
-                    barangay,
-                    postalCode,
-                    streetAddress,
-                    composedAddress
-                );
+            // Use Firebase Authentication registration
+            if (typeof window.firebaseRegisterUser === 'function') {
+                const userData = {
+                    email: data.email,
+                    password: data.password,
+                    username: data.username,
+                    firstName: firstName,
+                    lastName: lastName,
+                    phoneNumber: phoneNumber,
+                    accountType: accountType,
+                    region: region,
+                    province: province,
+                    city: city,
+                    barangay: barangay,
+                    postalCode: postalCode,
+                    streetAddress: streetAddress,
+                    address: composedAddress
+                };
+
+                const result = await window.firebaseRegisterUser(userData);
 
                 if (result && result.success) {
-                    // Also notify server fallback so server can track registered users for demo login
-                    try {
-                        await fetch('/Home/Register', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'RequestVerificationToken': formData.get('__RequestVerificationToken')
-                            },
-                            body: JSON.stringify({
-                                AccountType: accountType,
-                                FullName: data.fullName,
-                                Email: data.email,
-                                Username: data.username,
-                                Password: data.password,
-                                ConfirmPassword: data.confirmPassword,
-                                AgreeToTerms: data.agreeToTerms,
-                                PhoneNumber: phoneNumber,
-                                Region: region,
-                                Province: province,
-                                City: city,
-                                Barangay: barangay,
-                                PostalCode: postalCode,
-                                StreetAddress: streetAddress,
-                                Address: composedAddress
-                            })
-                        });
-                    } catch (ex) {
-                        console.warn('Server fallback registration failed (non-blocking):', ex);
-                    }
-
-                    this.showToast('Success!', 'Account created successfully! Redirecting to login...', 'success');
-                    setTimeout(() => window.location.href = '/Home/Login', 1400);
+                    this.showToast('Success!', result.message || 'Account created! Please check your email to verify your account.', 'success');
+                    setTimeout(() => window.location.href = '/Home/Login', 2500);
                 } else {
-                    const code = result?.code ? result.code : null;
                     const message = result?.message || 'Unknown error';
-
-                    // Helpful guidance for common Firebase errors
-                    if (code === 'auth/operation-not-allowed') {
-                        // Try to get projectId from the loaded config for a direct console link
-                        const pid = (window.__firebaseConfig && window.__firebaseConfig.projectId) ? window.__firebaseConfig.projectId : null;
-                        const consoleLink = pid ? `https://console.firebase.google.com/project/${pid}/authentication/providers` : 'https://console.firebase.google.com/project/_/authentication/providers';
-                        this.showToast('Registration Failed: Email/Password sign-in disabled', 'Email/Password sign-in is not enabled for this Firebase project. Open the Firebase Console Authentication -> Sign-in method and enable Email/Password. See console for a link.', 'error');
-                        console.error('Firebase auth error (operation-not-allowed). To fix: enable Email/Password provider in Firebase Console:', consoleLink);
-                    } else if (code === 'auth/email-already-in-use') {
-                        this.showToast('Registration Failed', 'That email is already in use. Try logging in or use a different email.', 'error');
-                    } else if (code === 'auth/weak-password') {
-                        this.showToast('Registration Failed', 'Password is too weak. Use at least 6 characters.', 'error');
-                    } else {
-                        const display = code ? '[' + code + '] ' + message : message;
-                        this.showToast('Registration Failed: ' + display, 'error');
-                    }
-
+                    this.showToast('Registration Failed', message, 'error');
                     console.warn('Registration error response', result);
                     this.setLoadingState(false);
                 }
@@ -366,16 +321,16 @@ class RegisterController {
     validateForm(data) {
         // Clear all previous validation errors
         this.clearValidationErrors();
-        
+
         let isValid = true;
-        
+
         // Account type validation
         const accountTypeSelect = document.getElementById('AccountType');
         if (!data.accountType || data.accountType.trim().length === 0) {
             this.showFieldError(accountTypeSelect, 'Please select an account type');
             if (isValid) { this.showToast('Validation Error', 'Please select an account type', 'warning'); isValid = false; }
         }
-        
+
         // Full name validation
         const firstName = document.getElementById('FirstName');
         const lastName = document.getElementById('LastName');
@@ -429,13 +384,13 @@ class RegisterController {
         const addressValidation = document.getElementById('addressValidation');
         const postalCodeInput = document.getElementById('PostalCode');
         const streetAddressInput = document.getElementById('StreetAddress');
-        
+
         if (!data.postalCode || data.postalCode.trim().length === 0) {
             this.showFieldError(postalCodeInput, 'Postal code is required');
             if (addressValidation) addressValidation.textContent = 'Postal code is required';
             if (isValid) { this.showToast('Validation Error', 'Postal code is required', 'warning'); isValid = false; }
         }
-        
+
         if (!data.streetAddress || data.streetAddress.trim().length === 0) {
             this.showFieldError(streetAddressInput, 'Street address is required');
             if (addressValidation && !addressValidation.textContent) addressValidation.textContent = 'Street address is required';
@@ -464,7 +419,7 @@ class RegisterController {
 
         return isValid;
     }
-    
+
     // Clear all validation error styling
     clearValidationErrors() {
         // Remove is-invalid class from all inputs
@@ -476,13 +431,13 @@ class RegisterController {
         if (locationValidation) locationValidation.textContent = '';
         if (addressValidation) addressValidation.textContent = '';
     }
-    
+
     // Show field error with red border
     showFieldError(input, message) {
         if (!input) return;
         input.classList.add('is-invalid');
     }
-    
+
     // Highlight field with red border
     highlightField(input, shouldHighlight) {
         if (!input) return;
@@ -516,7 +471,7 @@ class RegisterController {
         if (type === 'password') {
             const isPassword = this.passwordInput.type === 'password';
             this.passwordInput.type = isPassword ? 'text' : 'password';
-            
+
             if (isPassword) {
                 this.passwordIcon.classList.remove('bi-eye');
                 this.passwordIcon.classList.add('bi-eye-slash');
@@ -527,7 +482,7 @@ class RegisterController {
         } else if (type === 'confirm') {
             const isPassword = this.confirmPasswordInput.type === 'password';
             this.confirmPasswordInput.type = isPassword ? 'text' : 'password';
-            
+
             if (isPassword) {
                 this.confirmPasswordIcon.classList.remove('bi-eye');
                 this.confirmPasswordIcon.classList.add('bi-eye-slash');
@@ -541,7 +496,7 @@ class RegisterController {
     // Handle Google registration
     async handleGoogleRegister() {
         this.showToast('Google Sign Up', 'Redirecting to Google authentication...', 'info');
-        
+
         setTimeout(() => {
             console.log('Google registration initiated');
             this.showToast('Demo Mode', 'Google sign up would redirect in production', 'warning');
@@ -551,7 +506,7 @@ class RegisterController {
     // Handle Facebook registration
     async handleFacebookRegister() {
         this.showToast('Facebook Sign Up', 'Redirecting to Facebook authentication...', 'info');
-        
+
         setTimeout(() => {
             console.log('Facebook registration initiated');
             this.showToast('Demo Mode', 'Facebook sign up would redirect in production', 'warning');

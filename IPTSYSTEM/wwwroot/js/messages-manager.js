@@ -519,9 +519,56 @@ function displayMessages(messages) {
         messageBubble.className = 'message-bubble';
         messageBubble.style.position = 'relative';
 
+        // Check if this is a product inquiry message
+        if (message.messageType === 'product_inquiry' && message.productData) {
+            // Render product card
+            const productCard = document.createElement('div');
+            productCard.className = 'product-inquiry-card';
+            productCard.style.cssText = 'background: #f3f4f6; border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; gap: 12px; cursor: pointer;';
+
+            const productImg = document.createElement('img');
+            productImg.src = message.productData.imageUrl || 'https://via.placeholder.com/80';
+            productImg.alt = message.productData.title;
+            productImg.style.cssText = 'width: 80px; height: 80px; object-fit: cover; border-radius: 6px; flex-shrink: 0;';
+            productImg.onerror = () => productImg.src = 'https://via.placeholder.com/80';
+
+            const productInfo = document.createElement('div');
+            productInfo.style.cssText = 'flex: 1; min-width: 0;';
+
+            const productTitle = document.createElement('div');
+            productTitle.textContent = message.productData.title;
+            productTitle.style.cssText = 'font-weight: 600; color: #111827; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+
+            const productPrice = document.createElement('div');
+            productPrice.textContent = window.formatCurrency ? window.formatCurrency(message.productData.price) : `₱${message.productData.price}`;
+            productPrice.style.cssText = 'color: #059669; font-weight: 600; margin-bottom: 4px;';
+
+            const productCondition = document.createElement('div');
+            productCondition.textContent = message.productData.condition || 'New';
+            productCondition.style.cssText = 'font-size: 12px; color: #6b7280; background: #e5e7eb; padding: 2px 8px; border-radius: 4px; display: inline-block;';
+
+            productInfo.appendChild(productTitle);
+            productInfo.appendChild(productPrice);
+            productInfo.appendChild(productCondition);
+
+            productCard.appendChild(productImg);
+            productCard.appendChild(productInfo);
+
+            // Make product card clickable
+            productCard.onclick = () => {
+                window.location.href = `/Home/Browse?productId=${message.productData.productId}`;
+            };
+
+            messageBubble.appendChild(productCard);
+        }
+
+        // Render message text with clickable links
         const messageText = document.createElement('p');
         messageText.className = 'message-text';
-        messageText.innerHTML = (message.text || '').replace(/\n/g, '<br>');
+
+        // Linkify URLs in message text
+        const textWithLinks = linkifyText(message.text || '');
+        messageText.innerHTML = textWithLinks.replace(/\n/g, '<br>');
 
         const messageTime = document.createElement('span');
         messageTime.className = 'message-time';
@@ -552,6 +599,18 @@ function displayMessages(messages) {
     });
 }
 
+// Helper function to make URLs clickable
+function linkifyText(text) {
+    if (!text) return '';
+
+    // URL regex pattern
+    const urlPattern = /(https?:\/\/[^\s]+)/g;
+
+    return text.replace(urlPattern, (url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: underline;">${url}</a>`;
+    });
+}
+
 // Send message
 async function sendMessage() {
     const messageInput = document.getElementById('messageInput');
@@ -562,6 +621,18 @@ async function sendMessage() {
     if (!currentUserId) {
         showToast('Please login to send messages', 'error');
         return;
+    }
+
+    // Check for blocking before sending
+    if (typeof window.firebaseCheckVerifyBlock === 'function') {
+        const isBuyer = currentConversation.buyerId === currentUserId;
+        const recipientId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+        const blockStatus = await window.firebaseCheckVerifyBlock(currentUserId, recipientId);
+        if (!blockStatus.allowed) {
+            showToast(blockStatus.reason || 'You cannot send messages to this user.', 'error');
+            return;
+        }
     }
 
     try {
@@ -720,19 +791,104 @@ function toggleChatOptions() {
 }
 
 // Chat options actions
-function blockUser() {
-    if (confirm('Are you sure you want to block this user?')) {
-        showToast('User blocked successfully', 'success');
-        toggleChatOptions();
+// Chat options actions
+async function blockUser() {
+    if (!currentConversation) return;
+
+    // Determine other user ID
+    const isBuyer = currentConversation.buyerId === currentUserId;
+    const otherId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+    if (confirm('Are you sure you want to block this user? They will no longer be able to message you.')) {
+        try {
+            const result = await window.firebaseBlockUser(currentUserId, otherId);
+            if (result.success) {
+                showToast('User blocked successfully', 'success');
+                toggleChatOptions();
+                // Optionally disable input
+                const input = document.getElementById('messageInput');
+                if (input) {
+                    input.disabled = true;
+                    input.placeholder = 'You have blocked this user.';
+                }
+            } else {
+                showToast('Failed to block user: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('Block error:', error);
+            showToast('An error occurred', 'error');
+        }
     }
 }
 
 function reportUser() {
-    if (confirm('Report this user for inappropriate behavior?')) {
-        showToast('User reported. Our team will review this.', 'success');
+    // Open modal
+    const modalEl = document.getElementById('reportUserModal');
+    if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
         toggleChatOptions();
+    } else {
+        showToast('Report modal not found', 'error');
     }
 }
+
+// Setup report form listener (runs once)
+document.addEventListener('DOMContentLoaded', function () {
+    const reportForm = document.getElementById('reportUserForm');
+    if (reportForm) {
+        reportForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            if (!currentConversation) return;
+            const isBuyer = currentConversation.buyerId === currentUserId;
+            const otherId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+            const reason = document.getElementById('reportReason').value;
+            const details = document.getElementById('reportDetails').value;
+            const btn = reportForm.querySelector('button[type="submit"]');
+
+            if (!reason || !details) {
+                showToast('Please fill in all fields', 'warning');
+                return;
+            }
+
+            // Disable button
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Submitting...';
+
+            try {
+                const result = await window.firebaseReportUser(
+                    currentUserId,
+                    currentUserName,
+                    otherId,
+                    reason,
+                    details
+                );
+
+                if (result.success) {
+                    showToast('Report submitted. Thank you for helping keep our community safe.', 'success');
+                    // Close modal
+                    const modalEl = document.getElementById('reportUserModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+
+                    // Reset form
+                    reportForm.reset();
+                } else {
+                    showToast('Failed to submit report: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Report error:', error);
+                showToast('An error occurred while reporting', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        });
+    }
+});
 
 // Delete a single message
 async function deleteMessage(messageId) {
