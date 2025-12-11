@@ -101,8 +101,15 @@ class LoginController {
                 } else {
                     const code = result?.code || null;
 
+                    // Detect suspended/inactive accounts (server or client returned)
+                    const serverMsg = (result && result.message) ? result.message.toString() : '';
+                    const isSuspended = code === 'inactive' || /temporarily disabled|suspend|suspended|non-compliance/i.test(serverMsg);
+
                     // More specific user-facing messages for common auth failures
-                    if (code === 'user-doc-not-found') {
+                    if (isSuspended) {
+                        // Show professional suspension title and server-provided details
+                        this.showToast('Account Suspended: Policy Non-Compliance', serverMsg || 'Access to your account has been temporarily disabled due to policy non-compliance. Contact support for assistance.', 'error');
+                    } else if (code === 'user-doc-not-found') {
                         this.showToast('Login Failed', 'Your account is missing a profile in our database. Please register first.', 'error');
                     } else if (code === 'auth/user-not-found' || code === 'auth/invalid-login-credentials') {
                         // Map Firebase's combined invalid-login-credentials or user-not-found into a friendly message
@@ -138,7 +145,13 @@ class LoginController {
                     this.showToast('Success!', result.message, 'success');
                     setTimeout(() => { window.location.href = result.redirectUrl || '/Home/Landing'; }, 1000);
                 } else {
-                    this.showToast('Login Failed', result.message, 'error');
+                    // If server indicates suspension, show the professional suspension title
+                    const srvMsg = (result && result.message) ? result.message.toString() : '';
+                    if (/temporarily disabled|suspend|suspended|non-compliance/i.test(srvMsg)) {
+                        this.showToast('Account Suspended: Policy Non-Compliance', srvMsg || 'Access to your account has been temporarily disabled due to policy non-compliance. Contact support for assistance.', 'error');
+                    } else {
+                        this.showToast('Login Failed', result.message, 'error');
+                    }
                     this.setLoadingState(false);
                 }
             }
