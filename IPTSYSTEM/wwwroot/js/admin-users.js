@@ -106,7 +106,8 @@ function renderTable() {
             email: user.email || 'N/A',
             accountType: user.account_type || user.accountType || 'buyer',
             createdAt: formatDate(user.date_created),
-            status: (user.status || 'inactive').toLowerCase()
+            status: (user.status || 'active').toLowerCase(),
+            isEnabled: user.isEnabled !== false // Default to true if not set
         };
 
         // Insert the rendered row HTML (renderUserRow returns a full <tr>...</tr>)
@@ -300,13 +301,13 @@ async function openEditUserModal(userId) {
 }
 
 async function deleteUserAccount(userId) {
-    const confirmed = confirm('Delete this user? This action cannot be undone.');
+    const confirmed = confirm('Delete this user from Firestore? The Firebase Auth account will remain but user will not be able to log in.');
     if (!confirmed) return;
 
     try {
         const userRef = doc(db, 'users', userId);
         await deleteDoc(userRef);
-        notify('User deleted');
+        notify('User deleted from Firestore. They will no longer be able to log in.');
         // Remove from local cache and re-render
         allUsers = allUsers.filter(u => u.id !== userId);
         applyFilters();
@@ -317,47 +318,67 @@ async function deleteUserAccount(userId) {
 }
 
 async function deactivateUser(userId) {
-    const confirmed = confirm('Deactivate this user?');
+    const confirmed = confirm('Disable this user? They will not be able to log in.');
     if (!confirmed) return;
 
     try {
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, { status: 'inactive' });
-        notify('User deactivated');
+        await updateDoc(userRef, { 
+            isEnabled: false,
+            status: 'inactive',
+            disabled_at: new Date()
+        });
+        notify('User disabled successfully');
         const idx = allUsers.findIndex(u => u.id === userId);
-        if (idx !== -1) allUsers[idx].status = 'inactive';
+        if (idx !== -1) {
+            allUsers[idx].isEnabled = false;
+            allUsers[idx].status = 'inactive';
+        }
         applyFilters();
     } catch (err) {
-        console.error('Error deactivating user:', err);
-        notify('Failed to deactivate user: ' + (err.message || err));
+        console.error('Error disabling user:', err);
+        notify('Failed to disable user: ' + (err.message || err));
     }
 }
 
 async function reactivateUser(userId) {
-    const confirmed = confirm('Reactivate this user?');
+    const confirmed = confirm('Enable this user? They will be able to log in again.');
     if (!confirmed) return;
 
     try {
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, { status: 'active' });
-        notify('User reactivated');
+        await updateDoc(userRef, { 
+            isEnabled: true,
+            status: 'active',
+            enabled_at: new Date()
+        });
+        notify('User enabled successfully');
         const idx = allUsers.findIndex(u => u.id === userId);
-        if (idx !== -1) allUsers[idx].status = 'active';
+        if (idx !== -1) {
+            allUsers[idx].isEnabled = true;
+            allUsers[idx].status = 'active';
+        }
         applyFilters();
     } catch (err) {
-        console.error('Error reactivating user:', err);
-        notify('Failed to reactivate user: ' + (err.message || err));
+        console.error('Error enabling user:', err);
+        notify('Failed to enable user: ' + (err.message || err));
     }
 }
 
 function renderUserRow(user) {
-    // user is expected to have: id, name, email, accountType, createdAt, status
+    // user is expected to have: id, name, email, accountType, createdAt, status, isEnabled
     const accountBadge = getAccountTypeBadge(user.accountType);
+    const isEnabled = user.isEnabled !== false;
+    const statusBadge = isEnabled 
+        ? '<span class="px-2 py-1 rounded-full text-xs font-medium bg-green-900 text-green-300">Active</span>'
+        : '<span class="px-2 py-1 rounded-full text-xs font-medium bg-red-900 text-red-300">Disabled</span>';
+    
     return `
     <tr class="border-b border-gray-700 hover:bg-gray-800 transition">
         <td class="py-4 px-4 font-medium text-white">${user.name}</td>
         <td class="py-4 px-4 text-gray-300">${user.email}</td>
         <td class="py-4 px-4">${accountBadge}</td>
+        <td class="py-4 px-4">${statusBadge}</td>
         <td class="py-4 px-4 text-gray-300">${user.createdAt}</td>
 
         <td class="py-4 px-4 text-center">
@@ -365,28 +386,28 @@ function renderUserRow(user) {
 
                 <!-- EDIT -->
                 <button class="editUserBtn px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs font-medium transition"
-                        data-id="${user.id}">
+                        data-id="${user.id}" title="Edit User">
                     <i class="bi bi-pencil-square"></i>
                 </button>
 
                 <!-- DELETE -->
                 <button class="deleteUserBtn px-3 py-1.5 rounded-lg bg-red-900 hover:bg-red-800 text-red-300 text-xs font-medium transition"
-                        data-id="${user.id}">
+                        data-id="${user.id}" title="Delete User">
                     <i class="bi bi-trash"></i>
                 </button>
 
-                <!-- DEACTIVATE -->
-                ${user.status === "active" ? `
+                <!-- DISABLE (show if enabled) -->
+                ${isEnabled ? `
                     <button class="deactivateUserBtn px-3 py-1.5 rounded-lg bg-yellow-900 hover:bg-yellow-800 text-yellow-300 text-xs font-medium transition"
-                            data-id="${user.id}">
+                            data-id="${user.id}" title="Disable User">
                         <i class="bi bi-slash-circle"></i>
                     </button>
                 ` : ""}
 
-                <!-- REACTIVATE -->
-                ${user.status === "inactive" ? `
+                <!-- ENABLE (show if disabled) -->
+                ${!isEnabled ? `
                     <button class="reactivateUserBtn px-3 py-1.5 rounded-lg bg-green-900 hover:bg-green-800 text-green-300 text-xs font-medium transition"
-                            data-id="${user.id}">
+                            data-id="${user.id}" title="Enable User">
                         <i class="bi bi-check-circle"></i>
                     </button>
                 ` : ""}

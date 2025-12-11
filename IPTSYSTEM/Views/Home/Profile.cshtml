@@ -1535,7 +1535,27 @@
             console.log('📊 Analytics result:', analyticsResult);
             
             if (!analyticsResult.success) {
-                throw new Error(analyticsResult.message || 'Failed to fetch analytics');
+                // Instead of throwing and hiding the entire reports pane,
+                // show a friendly message while keeping the pane visible.
+                console.warn('Analytics fetch returned not-success:', analyticsResult);
+                const tbody = document.getElementById('reportsTableBody');
+                if (tbody) {
+                    // Extract possible index URL for actionable advice
+                    const msg = analyticsResult.message || 'An error occurred';
+                    const urlMatch = msg.match(/https:\/\/console\.firebase\.google\.com\/[\S]+/i);
+                    const indexLink = urlMatch ? urlMatch[0] : null;
+                    tbody.innerHTML = `\n                        <tr>\n                            <td colspan="6" style="padding: 40px; text-align: center; color: #888;">\n                                <i class=\"bi bi-exclamation-circle\" style=\"font-size: 28px; display: block; margin-bottom: 12px; color: #ddd;\"></i>\n                                Failed to fetch analytics: ${msg}\n                                ${indexLink ? `<div style=\"margin-top:12px;\">\n                                    <a href=\"${indexLink}\" target=\"_blank\" style=\"color:#dc2626; text-decoration:underline;\">Create required Firestore index</a>\n                                </div>` : ''}\n                            </td>\n                        </tr>\n                    `;
+                }
+                // show empty state but keep container visible
+                if (container) {
+                    container.style.display = 'block';
+                    container.style.visibility = 'visible';
+                }
+                if (emptyState) {
+                    emptyState.style.display = 'block';
+                    emptyState.innerHTML = `\n+                        <i class=\"bi bi-exclamation-circle\" style=\"font-size: 28px; display: block; margin-bottom: 12px; color: #ddd;\"></i>\n+                        <h3>Error Loading Analytics</h3>\n+                        <p>${analyticsResult.message || 'An error occurred while loading analytics'}</p>\n+                    `;
+                }
+                return;
             }
 
             const analytics = analyticsResult.analytics;
@@ -1605,7 +1625,12 @@
             console.error('❌ Error loading reports:', error);
             const container = document.querySelector('#reportsContent .reports-container');
             const emptyState = document.getElementById('reportsEmptyState');
-            if (container) container.style.display = 'none';
+            // Keep container visible, show a non-blocking friendly error in the empty state
+            if (container) {
+                container.style.display = 'block';
+                container.style.visibility = 'visible';
+                container.style.opacity = '1';
+            }
             if (emptyState) {
                 emptyState.style.display = 'block';
                 emptyState.innerHTML = `

@@ -126,6 +126,7 @@
                                     <i class="bi bi-chat-dots" style="display:none; font-size:1.2rem;"></i>
                                     <span class="messages-badge" style="display:none; position:absolute; top:-6px; right:-6px; background:#ef4444; color:#fff; font-size:10px; padding:2px 6px; border-radius:10px; min-width:18px; text-align:center;">0</span>
                                 </a>
+                                <!-- Presentation Mode Toggle removed -->
                                 
                                 <!-- Logged In User with avatar and role -->
                                     var fullName = Context.Session.GetString("FullName") ?? string.Empty;
@@ -158,6 +159,11 @@
                                         <li>
                                             <a class="dropdown-item" asp-controller="Home" asp-action="AccountSettings">
                                                 <i class="bi bi-person-gear me-2"></i>Account Settings
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" asp-controller="Home" asp-action="AdminMessages">
+                                                <i class="bi bi-envelope-arrow-up me-2"></i>Contact Admin
                                             </a>
                                         </li>
                                         <li><hr class="dropdown-divider" /></li>
@@ -218,6 +224,7 @@
         </script>
         <script type="module" src="~/js/firebase-client.js"></script>
         <script>
+            // Presentation Mode toggle removed
             // Wait for Firebase to be ready and load avatar - OPTIMIZED with sessionStorage caching
             async function initGlobalFeatures() {
                 if (window._globalFeaturesInitialized) return;
