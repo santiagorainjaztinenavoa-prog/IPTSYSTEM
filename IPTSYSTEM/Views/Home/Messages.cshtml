@@ -91,6 +91,46 @@
 <button onclick="deleteChat()"><i class="bi bi-trash me-2"></i>Delete Chat</button>
 </div>
 
+<!-- Report User Modal -->
+<div class="modal fade" id="reportUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);">
+            <div class="modal-header border-0" style="padding: 1.5rem 1.5rem 0.5rem;">
+                <h5 class="modal-title fw-bold" style="color: #1a1a2e; font-size: 1.5rem;">Report User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <p class="text-muted mb-4">Please let us know your concern. This report will be sent directly to the administrators.</p>
+                
+                <form id="reportUserForm">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Reason for Report</label>
+                        <select class="form-select" id="reportReason" required style="border-radius: 12px; padding: 0.75rem;">
+                            <option value="" selected disabled>Select a reason...</option>
+                            <option value="scam">Suspicious / Scam Activity</option>
+                            <option value="harassment">Harassment / Abusive Language</option>
+                            <option value="inappropriate">Inappropriate Content</option>
+                            <option value="spam">Spamming</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Details</label>
+                        <textarea class="form-control" id="reportDetails" rows="4" placeholder="Please describe what happened..." required style="border-radius: 12px; padding: 0.75rem; resize: none;"></textarea>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-danger btn-lg" style="border-radius: 12px; font-weight: 600;">
+                            Submit Report
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Toast Notification -->
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11000">
     <div id="toastNotification" class="toast align-items-center border-0" role="alert">

@@ -5,7 +5,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, orderBy, limit } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, orderBy, limit, arrayUnion, getCountFromServer } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
 
 const firebaseConfig = { apiKey: "AIzaSyBHhIZv1_Ecryd3nw99S_osVwvdLT1Z9sA", authDomain: "recommerce2-c5f5c.firebaseapp.com", projectId: "recommerce2-c5f5c", storageBucket: "recommerce2-c5f5c.firebasestorage.app", messagingSenderId: "769830240332", appId: "1:769830240332:web:de0489490afe9a2242b4e9", measurementId: "G-2W1Y5M0REW" };
@@ -335,6 +335,17 @@ window.firebaseSignIn = async function (email, password) {
             };
         }
 
+        // EMAIL VERIFICATION CHECK: Require email verification before login
+        if (!userCred.user.emailVerified) {
+            console.warn('User email not verified:', uid);
+            try { await signOut(auth); } catch { }
+            return {
+                success: false,
+                code: 'email-not-verified',
+                message: 'Please verify your email before logging in. Check your inbox for the verification link.'
+            };
+        }
+
         console.log('✅ Login successful for user:', uid);
         return { success: true, uid, profile: profile };
     } catch (err) {
@@ -356,6 +367,112 @@ window.firebaseSendPasswordResetEmail = async function (email) {
     } catch (err) {
         console.error('❌ Password reset error:', err);
         return { success: false, message: err.message, code: err.code };
+    }
+};
+
+// Send Email Verification
+window.firebaseSendEmailVerification = async function () {
+    try {
+        console.log('📧 Sending email verification...');
+
+        if (!auth.currentUser) {
+            throw new Error('No user is currently signed in');
+        }
+
+        if (auth.currentUser.emailVerified) {
+            console.log('✅ Email already verified');
+            return { success: true, message: 'Email already verified' };
+        }
+
+        const { sendEmailVerification } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js');
+        await sendEmailVerification(auth.currentUser);
+
+        console.log('✅ Verification email sent');
+        return { success: true, message: 'Verification email sent. Please check your inbox.' };
+    } catch (err) {
+        console.error('❌ Email verification error:', err);
+        return { success: false, message: err.message, code: err.code };
+    }
+};
+
+// Register new user with Firebase Authentication
+window.firebaseRegisterUser = async function (userData) {
+    try {
+        console.log('📝 Registering new user:', userData.email);
+
+        // Validate required fields
+        if (!userData.email || !userData.password) {
+            throw new Error('Email and password are required');
+        }
+
+        // Create user in Firebase Authentication
+        const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+        const user = userCredential.user;
+        const uid = user.uid;
+
+        console.log('✅ Firebase Auth account created:', uid);
+
+        // Send email verification
+        try {
+            const { sendEmailVerification } = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js');
+            await sendEmailVerification(user);
+            console.log('✅ Verification email sent to:', userData.email);
+        } catch (emailError) {
+            console.warn('⚠️ Failed to send verification email:', emailError);
+            // Continue with registration even if email fails
+        }
+
+        // Create user profile in Firestore
+        const userProfile = {
+            email: userData.email,
+            username: userData.username || '',
+            first_name: userData.firstName || '',
+            last_name: userData.lastName || '',
+            phone_number: userData.phoneNumber || '',
+            account_type: userData.accountType || 'Buyer',
+            region: userData.region || '',
+            province: userData.province || '',
+            city: userData.city || '',
+            barangay: userData.barangay || '',
+            postal_code: userData.postalCode || '',
+            street_address: userData.streetAddress || '',
+            address: userData.address || '',
+            isEnabled: true,
+            date_created: serverTimestamp(),
+            updated_at: serverTimestamp()
+        };
+
+        const userDocRef = doc(db, 'users', uid);
+        await setDoc(userDocRef, userProfile);
+
+        console.log('✅ User profile created in Firestore');
+
+        // Sign out the user (they need to verify email first)
+        await signOut(auth);
+
+        return {
+            success: true,
+            uid: uid,
+            message: 'Registration successful! Please check your email to verify your account before logging in.'
+        };
+    } catch (err) {
+        console.error('❌ Registration error:', err);
+
+        // Handle specific Firebase errors
+        let message = err.message;
+        if (err.code === 'auth/email-already-in-use') {
+            message = 'This email is already registered. Please log in or use a different email.';
+        } else if (err.code === 'auth/weak-password') {
+            message = 'Password is too weak. Please use at least 6 characters.';
+        } else if (err.code === 'auth/invalid-email') {
+            message = 'Invalid email address format.';
+        }
+
+        return {
+            success: false,
+            code: err.code,
+            message: message
+        };
     }
 };
 
@@ -890,6 +1007,129 @@ window.firebaseSendMessage = async function (conversationId, senderId, senderNam
         console.error('❌ firebaseSendMessage error:', err);
         console.error('Code:', err.code);
         return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Send a product inquiry message (includes product details)
+window.firebaseSendProductInquiry = async function (conversationId, senderId, senderName, productData) {
+    try {
+        console.log('📦 Sending product inquiry:', { conversationId, productData });
+
+        if (!conversationId || !senderId || !productData) {
+            throw new Error('Missing required fields');
+        }
+
+        const messageData = {
+            senderId: senderId,
+            senderName: senderName || 'User',
+            text: `I'm interested in this item:`,
+            messageType: 'product_inquiry',
+            productData: {
+                productId: productData.productId || productData.id,
+                title: productData.title || 'Product',
+                price: productData.price || 0,
+                imageUrl: productData.imageUrl || productData.image_url || '',
+                condition: productData.condition || 'New'
+            },
+            timestamp: serverTimestamp()
+        };
+
+        const messagesCol = collection(db, 'conversations', conversationId, 'messages');
+        const newMsgRef = await addDoc(messagesCol, messageData);
+
+        // Update conversation's last message
+        const conversationRef = doc(db, 'conversations', conversationId);
+        await updateDoc(conversationRef, {
+            lastMessage: `📦 Product inquiry: ${productData.title}`,
+            lastMessageTime: serverTimestamp(),
+            lastMessageSenderId: senderId
+        });
+
+        console.log('✅ Product inquiry sent:', newMsgRef.id);
+        return { success: true, messageId: newMsgRef.id };
+    } catch (err) {
+        console.error('❌ firebaseSendProductInquiry error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Global helper: Message seller about a specific product
+window.messageSellerAboutProduct = async function (productData) {
+    try {
+        console.log('📦 Starting product inquiry:', productData);
+
+        const currentUserId = auth.currentUser?.uid;
+        if (!currentUserId) {
+            alert('Please log in to message sellers');
+            window.location.href = '/Home/Login';
+            return;
+        }
+
+        const sellerId = productData.sellerId || productData.user_id;
+        const sellerName = productData.sellerName || productData.seller_name || 'Seller';
+
+        if (!sellerId) {
+            alert('Seller information not available');
+            return;
+        }
+
+        if (currentUserId === sellerId) {
+            alert('You cannot message yourself');
+            return;
+        }
+
+        // Get current user name
+        let currentUserName = 'User';
+        try {
+            const userDoc = await getDoc(doc(db, 'users', currentUserId));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                currentUserName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User';
+            }
+        } catch (e) {
+            console.warn('Could not fetch user name:', e);
+        }
+
+        // Start or get conversation
+        const convResult = await window.firebaseStartConversation(
+            currentUserId,
+            currentUserName,
+            sellerId,
+            sellerName,
+            productData.id || productData.productId || 'product',
+            `Product inquiry: ${productData.title}`
+        );
+
+        if (!convResult.success || !convResult.conversation) {
+            alert('Failed to start conversation: ' + (convResult.message || 'Unknown error'));
+            return;
+        }
+
+        const conversationId = convResult.conversation.id;
+
+        // Send product inquiry message
+        const inquiryResult = await window.firebaseSendProductInquiry(
+            conversationId,
+            currentUserId,
+            currentUserName,
+            {
+                productId: productData.id || productData.productId,
+                title: productData.title,
+                price: productData.price,
+                imageUrl: productData.imageUrl || productData.image_url,
+                condition: productData.condition
+            }
+        );
+
+        if (inquiryResult.success) {
+            // Redirect to messages page
+            window.location.href = `/Home/Messages?conversationId=${conversationId}`;
+        } else {
+            alert('Failed to send product inquiry: ' + (inquiryResult.message || 'Unknown error'));
+        }
+    } catch (err) {
+        console.error('❌ messageSellerAboutProduct error:', err);
+        alert('An error occurred. Please try again.');
     }
 };
 
@@ -2525,6 +2765,368 @@ window.firebaseGetSalesAnalytics = async function (sellerId, startDate = null, e
         return { success: true, analytics };
     } catch (err) {
         console.error('❌ firebaseGetSalesAnalytics error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// ========== ADMIN MESSAGING & USER SAFETY FUNCTIONS ==========
+
+// Update user profile (Admin function)
+window.firebaseUpdateUser = async function (userId, updateData) {
+    try {
+        console.log('Updating user:', userId, updateData);
+        const userRef = doc(db, 'users', userId);
+
+        // Add updated_at timestamp
+        const dataToUpdate = {
+            ...updateData,
+            updated_at: serverTimestamp()
+        };
+
+        await updateDoc(userRef, dataToUpdate);
+        console.log('✅ User updated successfully');
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseUpdateUser error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Send a message to admin (or report a user)
+window.firebaseSendAdminMessage = async function (userId, userName, userEmail, subject, message) {
+    try {
+        if (!userId || !subject || !message) throw new Error('Missing required fields');
+
+        const msgData = {
+            user_id: userId,
+            user_name: userName || 'Anonymous',
+            user_email: userEmail || '',
+            subject: subject,
+            message: message,
+            status: 'pending', // pending, read, replied
+            created_at: serverTimestamp(),
+            replies: []
+        };
+
+        const docRef = await addDoc(collection(db, 'admin_messages'), msgData);
+        console.log('✅ Admin message sent:', docRef.id);
+        return { success: true, messageId: docRef.id };
+    } catch (err) {
+        console.error('❌ firebaseSendAdminMessage error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Get messages for a specific user
+// Get messages for a specific user
+window.firebaseGetUserAdminMessages = async function (userId) {
+    try {
+        console.log('Fetching admin messages for user:', userId);
+        let messages = [];
+
+        try {
+            // Try primary query with sort
+            const q = query(collection(db, 'admin_messages'), where('user_id', '==', userId), orderBy('created_at', 'desc'));
+            const snaps = await getDocs(q);
+            snaps.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
+        } catch (indexError) {
+            console.warn('Primary admin message query failed (likely missing index), falling back to client-side sort:', indexError);
+
+            // Fallback: Query without sort
+            const qFallback = query(collection(db, 'admin_messages'), where('user_id', '==', userId));
+            const snaps = await getDocs(qFallback);
+            snaps.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
+
+            // Sort in memory
+            messages.sort((a, b) => {
+                const timeA = a.created_at?.seconds || 0;
+                const timeB = b.created_at?.seconds || 0;
+                return timeB - timeA;
+            });
+        }
+
+        console.log(`Found ${messages.length} admin messages`);
+        return { success: true, messages };
+    } catch (err) {
+        console.error('❌ firebaseGetUserAdminMessages error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Get ALL admin messages (for Admin Dashboard)
+window.firebaseGetAllAdminMessages = async function () {
+    try {
+        const q = query(collection(db, 'admin_messages'), orderBy('created_at', 'desc'));
+        const snaps = await getDocs(q);
+        const messages = [];
+        snaps.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
+        return { success: true, messages };
+    } catch (err) {
+        console.error('❌ firebaseGetAllAdminMessages error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Reply to an admin message (by user)
+window.firebaseUserReplyAdminMessage = async function (messageId, userId, text) {
+    try {
+        const msgRef = doc(db, 'admin_messages', messageId);
+        const snap = await getDoc(msgRef);
+
+        if (!snap.exists()) throw new Error('Message not found');
+        if (snap.data().user_id !== userId) throw new Error('Unauthorized');
+
+        const reply = {
+            from: 'user',
+            text: text,
+            timestamp: Date.now() // Use client timestamp for array or serverTimestamp if complex
+        };
+
+        await updateDoc(msgRef, {
+            replies: arrayUnion(reply),
+            status: 'pending' // Re-open status if user replies?
+        });
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseUserReplyAdminMessage error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Reply to message (Admin side)
+window.firebaseAdminReplyMessage = async function (messageId, text) {
+    try {
+        const msgRef = doc(db, 'admin_messages', messageId);
+        const reply = {
+            from: 'admin',
+            text: text,
+            timestamp: Date.now()
+        };
+
+        await updateDoc(msgRef, {
+            replies: arrayUnion(reply),
+            status: 'replied'
+        });
+
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseAdminReplyMessage error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Mark admin message as read
+window.firebaseMarkAdminMessageRead = async function (messageId) {
+    try {
+        await updateDoc(doc(db, 'admin_messages', messageId), {
+            status: 'read'
+        });
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseMarkAdminMessageRead error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Get unread admin messages count
+window.firebaseGetUnreadAdminMessagesCount = async function () {
+    try {
+        const q = query(collection(db, 'admin_messages'), where('status', '==', 'pending'));
+        const snap = await getCountFromServer(q);
+        return { success: true, count: snap.data().count };
+    } catch (err) {
+        console.error('❌ firebaseGetUnreadAdminMessagesCount error:', err);
+        try {
+            const q = query(collection(db, 'admin_messages'), where('status', '==', 'pending'));
+            const snap = await getDocs(q);
+            return { success: true, count: snap.size };
+        } catch (e) {
+            return { success: false, message: err?.message };
+        }
+    }
+};
+
+// Block a user
+window.firebaseBlockUser = async function (blockerId, blockedId) {
+    try {
+        const blockId = `${blockerId}_${blockedId}`;
+        await setDoc(doc(db, 'user_blocks', blockId), {
+            blocker_id: blockerId,
+            blocked_id: blockedId,
+            created_at: serverTimestamp()
+        });
+        console.log('✅ User blocked:', blockedId);
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseBlockUser error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Check if a user is blocked (returns true if allowed to chat, false if blocked)
+window.firebaseCheckVerifyBlock = async function (senderId, recipientId) {
+    try {
+        // Check if I blocked them
+        const myBlock = await getDoc(doc(db, 'user_blocks', `${senderId}_${recipientId}`));
+        if (myBlock.exists()) return { allowed: false, reason: 'You blocked this user.' };
+
+        // Check if they blocked me
+        const theirBlock = await getDoc(doc(db, 'user_blocks', `${recipientId}_${senderId}`));
+        if (theirBlock.exists()) return { allowed: false, reason: 'You have been blocked by this user.' };
+
+        return { allowed: true };
+    } catch (err) {
+        console.warn('⚠️ Block check failed, assuming allowed:', err);
+        return { allowed: true };
+    }
+};
+
+// Delete a conversation (Hides it for the user)
+window.firebaseDeleteConversation = async function (conversationId) {
+    try {
+        // NOTE: Real deletion requires deleting subcollections which is hard client-side.
+        // For now, we delete the conversation document. Messages remain orphaned.
+        if (!conversationId) throw new Error('Conversation ID missing');
+
+        await deleteDoc(doc(db, 'conversations', conversationId));
+        console.log('✅ Conversation deleted:', conversationId);
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseDeleteConversation error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Wrapper for Reporting User specifically
+window.firebaseReportUser = async function (reporterId, reporterName, reportedId, reason, description) {
+    // We reuse the admin message system but with a specific subject prefix
+    const subject = `[REPORT] User ${reportedId} - ${reason}`;
+    const body = `Reported User ID: ${reportedId}\nReason: ${reason}\n\nDetails:\n${description}`;
+
+    // We might not have reporterEmail easily, pass empty or fetch it
+    return window.firebaseSendAdminMessage(reporterId, reporterName, '', subject, body);
+};
+
+// ========== USER REVIEWS FUNCTIONS ==========
+
+// Add a review for a seller
+window.firebaseAddReview = async function (payload) {
+    try {
+        console.log('Adding review:', payload);
+
+        if (!payload.sellerId || !payload.buyerId || !payload.rating || !payload.comment) {
+            throw new Error('Missing required fields: sellerId, buyerId, rating, comment');
+        }
+
+        const reviewData = {
+            seller_id: payload.sellerId,
+            seller_name: payload.sellerName || '',
+            buyer_id: payload.buyerId,
+            buyer_name: payload.buyerName || '',
+            buyer_username: payload.buyerUsername || '',
+            rating: parseInt(payload.rating),
+            comment: payload.comment,
+            images: payload.images || [],
+            video: payload.video || '',
+            created_at: serverTimestamp(),
+            updated_at: serverTimestamp()
+        };
+
+        const docRef = await addDoc(collection(db, 'user_reviews'), reviewData);
+        console.log('✅ Review added successfully:', docRef.id);
+        return { success: true, reviewId: docRef.id };
+    } catch (err) {
+        console.error('❌ firebaseAddReview error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
+};
+
+// Get all reviews for a specific seller
+window.firebaseGetSellerReviews = async function (sellerId) {
+    try {
+        console.log('Fetching reviews for seller:', sellerId);
+
+        if (!sellerId) {
+            throw new Error('Seller ID is required');
+        }
+
+        let reviews = [];
+
+        try {
+            // Try primary query with orderBy
+            const q = query(
+                collection(db, 'user_reviews'),
+                where('seller_id', '==', sellerId),
+                orderBy('created_at', 'desc')
+            );
+
+            const snapshot = await getDocs(q);
+            snapshot.forEach(doc => {
+                reviews.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+        } catch (indexError) {
+            console.warn('Primary review query failed (likely missing index), falling back to client-side sort:', indexError);
+
+            // Fallback: Query without orderBy
+            const qFallback = query(
+                collection(db, 'user_reviews'),
+                where('seller_id', '==', sellerId)
+            );
+
+            const snapshot = await getDocs(qFallback);
+            snapshot.forEach(doc => {
+                reviews.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+
+            // Sort in memory by created_at (newest first)
+            reviews.sort((a, b) => {
+                const timeA = a.created_at?.seconds || 0;
+                const timeB = b.created_at?.seconds || 0;
+                return timeB - timeA;
+            });
+        }
+
+        console.log(`✅ Found ${reviews.length} reviews for seller`);
+        return { success: true, reviews };
+    } catch (err) {
+        console.error('❌ firebaseGetSellerReviews error:', err);
+        return { success: false, message: err?.message || String(err), reviews: [] };
+    }
+};
+
+// Delete a review (only by the review author)
+window.firebaseDeleteReview = async function (reviewId, userId) {
+    try {
+        console.log('Deleting review:', reviewId);
+
+        if (!reviewId || !userId) {
+            throw new Error('Review ID and User ID are required');
+        }
+
+        // First check if the user owns this review
+        const reviewRef = doc(db, 'user_reviews', reviewId);
+        const reviewSnap = await getDoc(reviewRef);
+
+        if (!reviewSnap.exists()) {
+            throw new Error('Review not found');
+        }
+
+        const reviewData = reviewSnap.data();
+        if (reviewData.buyer_id !== userId) {
+            throw new Error('You can only delete your own reviews');
+        }
+
+        await deleteDoc(reviewRef);
+        console.log('✅ Review deleted successfully');
+        return { success: true };
+    } catch (err) {
+        console.error('❌ firebaseDeleteReview error:', err);
         return { success: false, message: err?.message || String(err) };
     }
 };

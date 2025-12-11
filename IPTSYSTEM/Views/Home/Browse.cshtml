@@ -587,23 +587,20 @@
                 return;
             }
             
-            // Use client-side Firebase to start conversation
-            if (typeof window.firebaseStartConversation === 'function') {
-                try {
-                    const result = await window.firebaseStartConversation(
-                        buyerId, buyerName, sellerId, sellerName, listingId, listingTitle
-                    );
-                    
-                    if (result.success && result.conversation) {
-                        // Redirect to messages page with conversation ID
-                        window.location.href = '/Home/Messages?conversationId=' + result.conversation.id;
-                    } else {
-                        alert('Failed to start conversation: ' + (result.message || 'Unknown error'));
-                    }
-                } catch (error) {
-                    console.error('Error starting conversation:', error);
-                    alert('Error starting conversation. Please try again.');
-                }
+            // Prepare product data for inquiry
+            const productData = {
+                id: product.id || product.Id,
+                title: product.title || product.Title || 'Item',
+                price: product.price || product.Price || 0,
+                imageUrl: product.imageUrl || product.image_url || product.ImageUrl || '',
+                condition: product.condition || product.Condition || 'New',
+                user_id: sellerId,
+                seller_name: sellerName
+            };
+            
+            // Use the new product inquiry function
+            if (typeof window.messageSellerAboutProduct === 'function') {
+                await window.messageSellerAboutProduct(productData);
             } else {
                 alert('Messaging service not available. Please refresh the page.');
             }

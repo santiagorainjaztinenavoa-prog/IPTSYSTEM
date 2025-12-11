@@ -994,8 +994,6 @@
                 <i class="bi bi-box-seam"></i>
                 <h3>No listings yet</h3>
                 <p>Start selling by creating your first listing</p>
-                ${sessionStorage.getItem('UserType') === 'seller' || sessionStorage.getItem('UserType') === 'admin' ? 
-                    '<button class="btn-add-new" onclick="openListingModal()"><i class="bi bi-plus-circle me-2"></i>Add New Listing</button>' : ''}
             </div>
         `;
     }
