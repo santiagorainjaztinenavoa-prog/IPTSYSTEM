@@ -283,7 +283,7 @@ function openListingModal() {
 
         // Reset hidden ID field
         const listingIdField = document.getElementById('listingId');
-        if (listingIdField) listingIdField.value = '0';
+        if (listingIdField) listingIdField.value = '';
 
         // Reset image preview
         resetImagePreview();
@@ -503,123 +503,54 @@ async function saveListing() {
         showSaveLoadingState();
 
         // Determine if creating or updating
-        // NOTE: listingId may be a numeric server ID or a non-numeric Firestore document ID.
         const rawId = (document.getElementById('listingId') && document.getElementById('listingId').value) ? document.getElementById('listingId').value : '';
-        const numericId = parseInt(rawId || '0');
-        const isFirebaseId = rawId && isNaN(numericId);
-        const isUpdate = !isFirebaseId && listingData.id > 0;
+        const isUpdate = !!rawId; // If we have an ID, it's an update
 
-        // If this is a Firestore-only listing (non-numeric id) and firebaseUpdateListing is available,
-        // update directly in Firestore to avoid creating a new server-side listing.
-        if (isFirebaseId && typeof window.firebaseUpdateListing === 'function') {
-            try {
-                const fbPayload = {
-                    id: rawId,
-                    title: listingData.title,
-                    description: listingData.description,
-                    price: listingData.price,
-                    category: listingData.category,
-                    condition: listingData.condition,
-                    imageUrl: listingData.imageUrl
-                };
-                const fbResult = await window.firebaseUpdateListing(fbPayload);
-                hideSaveLoadingState();
-                if (fbResult && fbResult.success) {
-                    showToast('Listing updated successfully!', 'success');
-                    // Attempt to update UI cards if helper exists
-                    if (typeof updateListingOnPage === 'function') {
-                        try { updateListingOnPage(Object.assign({}, listingData, { product_id: rawId })); } catch (e) { }
-                    }
-                    if (listingModal) listingModal.hide();
-                    setTimeout(() => window.location.reload(), 800);
-                    return;
-                } else {
-                    showToast((fbResult && fbResult.message) ? fbResult.message : 'Failed to update listing in Firestore', 'error');
-                    // fallthrough to server update as a last resort
-                }
-            } catch (e) {
-                console.error('Firestore update failed:', e);
-                // continue to attempt server-side update below if applicable
+        console.log('💾 Saving listing to Firebase...', { isUpdate, rawId, listingData });
+
+        let result;
+        if (isUpdate) {
+            // Update existing
+            if (typeof window.firebaseUpdateListing === 'function') {
+                result = await window.firebaseUpdateListing({ ...listingData, id: rawId });
+            } else {
+                throw new Error('Firebase update function not available');
+            }
+        } else {
+            // Create new
+            if (typeof window.firebaseCreateListing === 'function') {
+                result = await window.firebaseCreateListing(listingData);
+            } else {
+                throw new Error('Firebase create function not available');
             }
         }
-
-        const url = isUpdate ? '/Home/UpdateListing' : '/Home/CreateListing';
-        const actionText = isUpdate ? 'updated' : 'created';
-
-        // Send request
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(listingData)
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to ${actionText} listing`);
-        }
-
-        const result = await response.json();
 
         hideSaveLoadingState();
 
         if (result.success) {
-            showToast(`Listing ${actionText} successfully!`, 'success');
-
-            // Mirror data into Firestore (if client Firebase helpers are available)
-            // Do this BEFORE closing/reloading
-            try {
-                if (typeof window.firebaseCreateListing === 'function') {
-                    // For create action, server returns `listing` object; for update, use listingData
-                    const serverListing = result.listing || listingData;
-                    const fbPayload = {
-                        id: serverListing.id ?? serverListing.Id ?? listingData.id,
-                        title: serverListing.title ?? serverListing.Title ?? listingData.title,
-                        description: serverListing.description ?? serverListing.Description ?? listingData.description,
-                        price: serverListing.price ?? serverListing.Price ?? listingData.price,
-                        category: serverListing.category ?? serverListing.Category ?? listingData.category,
-                        condition: serverListing.condition ?? serverListing.Condition ?? listingData.condition,
-                        imageUrl: serverListing.imageUrl ?? serverListing.ImageUrl ?? listingData.imageUrl
-                    };
-
-                    console.log('🔥 Syncing to Firestore:', fbPayload);
-
-                    if (isUpdate && typeof window.firebaseUpdateListing === 'function') {
-                        const updateResult = await window.firebaseUpdateListing(fbPayload);
-                        console.log('🔥 Firestore update result:', updateResult);
-                        if (!updateResult.success) {
-                            console.error('⚠️ Firestore update failed, but server update succeeded');
-                        }
-                    } else if (!isUpdate && typeof window.firebaseCreateListing === 'function') {
-                        const createResult = await window.firebaseCreateListing(fbPayload);
-                        console.log('🔥 Firestore create result:', createResult);
-                        if (!createResult.success) {
-                            console.error('⚠️ Firestore create failed, but server create succeeded');
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('❌ Firestore mirroring error:', e);
-                // Continue anyway - the listing was saved on the server
-            }
+            showToast(isUpdate ? 'Listing updated successfully!' : 'Listing created successfully!', 'success');
 
             // Close modal
             if (listingModal) listingModal.hide();
+            const modalEl = document.getElementById('listingModal');
+            if (modalEl) {
+                const bsModal = bootstrap.Modal.getInstance(modalEl);
+                if (bsModal) bsModal.hide();
+            }
 
-            // Reload page after a short delay to show the toast and allow Firestore to complete
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
+            // Reload to show new data
+            setTimeout(() => window.location.reload(), 1000);
         } else {
-            showToast(result.message || `Failed to ${actionText} listing`, 'error');
+            throw new Error(result.message || 'Unknown error from Firebase');
         }
 
     } catch (error) {
         hideSaveLoadingState();
+        console.error('❌ Error saving listing:', error);
         showToast('Error saving listing: ' + error.message, 'error');
-        console.error('Save listing error:', error);
     }
 }
+
 
 // Get form data as object
 function getFormData() {

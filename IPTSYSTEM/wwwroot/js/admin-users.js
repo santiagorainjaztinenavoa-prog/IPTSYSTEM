@@ -4,14 +4,15 @@ import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc } from 'ht
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
 // Firebase config
+// Firebase config
 const firebaseConfig = {
-    apiKey: "AIzaSyBNWCNxC0d-YAem0Za51epjfl_WXcyDZSE",
-    authDomain: "carousell-c3b3f.firebaseapp.com",
-    projectId: "carousell-c3b3f",
-    storageBucket: "carousell-c3b3f.firebasestorage.app",
-    messagingSenderId: "33772869337",
-    appId: "1:33772869337:web:f1f86a5cc8f71d0c1050c8",
-    measurementId: "G-YR7F7YER8V"
+    apiKey: "AIzaSyBHhIZv1_Ecryd3nw99S_osVwvdLT1Z9sA",
+    authDomain: "recommerce2-c5f5c.firebaseapp.com",
+    projectId: "recommerce2-c5f5c",
+    storageBucket: "recommerce2-c5f5c.firebasestorage.app",
+    messagingSenderId: "769830240332",
+    appId: "1:769830240332:web:de0489490afe9a2242b4e9",
+    measurementId: "G-2W1Y5M0REW"
 };
 
 // Initialize Firebase
@@ -44,7 +45,7 @@ const itemsPerPage = 10;
 // Format date
 function formatDate(timestamp) {
     if (!timestamp) return 'N/A';
-    
+
     let date;
     if (timestamp.toDate) {
         // Firestore Timestamp
@@ -54,7 +55,7 @@ function formatDate(timestamp) {
     } else {
         return 'N/A';
     }
-    
+
     const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
     return date.toLocaleDateString('en-US', options);
 }
@@ -82,7 +83,7 @@ function notify(message) {
 // Render table rows
 function renderTable() {
     usersTableBody.innerHTML = '';
-    
+
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const pageUsers = filteredUsers.slice(startIndex, endIndex);
@@ -118,7 +119,7 @@ function renderTable() {
     // Update pagination info
     paginationInfo.textContent = filteredUsers.length;
     pageInfo.textContent = 'Page ' + currentPage + ' of ' + Math.ceil(filteredUsers.length / itemsPerPage);
-    
+
     // Update pagination buttons
     prevPageBtn.disabled = currentPage === 1;
     nextPageBtn.disabled = currentPage >= Math.ceil(filteredUsers.length / itemsPerPage);
@@ -130,13 +131,13 @@ function applyFilters() {
     const accountType = filterSelect.value.toLowerCase();
 
     filteredUsers = allUsers.filter(user => {
-        const matchesSearch = !searchTerm || 
+        const matchesSearch = !searchTerm ||
             (user.first_name || '').toLowerCase().includes(searchTerm) ||
             (user.last_name || '').toLowerCase().includes(searchTerm) ||
             (user.email || '').toLowerCase().includes(searchTerm) ||
             (user.username || '').toLowerCase().includes(searchTerm);
 
-        const matchesType = !accountType || 
+        const matchesType = !accountType ||
             (user.account_type || 'buyer').toLowerCase() === accountType;
 
         return matchesSearch && matchesType;
@@ -323,7 +324,7 @@ async function deactivateUser(userId) {
 
     try {
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, { 
+        await updateDoc(userRef, {
             isEnabled: false,
             status: 'inactive',
             disabled_at: new Date()
@@ -347,7 +348,7 @@ async function reactivateUser(userId) {
 
     try {
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, { 
+        await updateDoc(userRef, {
             isEnabled: true,
             status: 'active',
             enabled_at: new Date()
@@ -369,10 +370,10 @@ function renderUserRow(user) {
     // user is expected to have: id, name, email, accountType, createdAt, status, isEnabled
     const accountBadge = getAccountTypeBadge(user.accountType);
     const isEnabled = user.isEnabled !== false;
-    const statusBadge = isEnabled 
+    const statusBadge = isEnabled
         ? '<span class="px-2 py-1 rounded-full text-xs font-medium bg-green-900 text-green-300">Active</span>'
         : '<span class="px-2 py-1 rounded-full text-xs font-medium bg-red-900 text-red-300">Disabled</span>';
-    
+
     return `
     <tr class="border-b border-gray-700 hover:bg-gray-800 transition">
         <td class="py-4 px-4 font-medium text-white">${user.name}</td>

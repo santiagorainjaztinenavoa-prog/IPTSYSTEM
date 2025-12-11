@@ -16,16 +16,16 @@ let conversationsLoadedOnce = false;
 
 document.addEventListener('DOMContentLoaded', function () {
     toastNotification = new bootstrap.Toast(document.getElementById('toastNotification'));
-    
+
     // Load conversations for current user (only once)
     if (!conversationsLoadedOnce) {
         loadUserConversations();
         conversationsLoadedOnce = true;
     }
-    
+
     // Setup message notifications (uses real-time listeners - efficient)
     setupMessageNotifications();
-    
+
     // Request notification permission
     requestNotificationPermission();
 });
@@ -45,7 +45,7 @@ async function requestNotificationPermission() {
 // Setup real-time message notifications
 function setupMessageNotifications() {
     if (!currentUserId) return;
-    
+
     // Wait for Firebase to be ready
     const setupListener = () => {
         if (typeof window.firebaseListenForNewMessages === 'function') {
@@ -54,13 +54,13 @@ function setupMessageNotifications() {
                 if (notification.conversationId === currentConversationId) {
                     return;
                 }
-                
+
                 // Show toast notification
                 showToast(`New message from ${notification.senderName}: ${notification.message.substring(0, 50)}...`, 'info');
-                
+
                 // Show browser notification
                 showBrowserNotification(notification);
-                
+
                 // Update unread badge without fetching (increment locally)
                 const badge = document.querySelector('.messages-badge');
                 if (badge) {
@@ -68,7 +68,7 @@ function setupMessageNotifications() {
                     badge.textContent = current + 1;
                     badge.style.display = 'inline-block';
                 }
-                
+
                 // Update conversation in local cache instead of reloading
                 const convIndex = allConversations.findIndex(c => c.id === notification.conversationId);
                 if (convIndex !== -1) {
@@ -91,27 +91,27 @@ function setupMessageNotifications() {
             setTimeout(setupListener, 1000);
         }
     };
-    
+
     setupListener();
 }
 
 // Show browser notification
 function showBrowserNotification(notification) {
     if (!notificationPermissionGranted) return;
-    
+
     try {
         const browserNotif = new Notification('New Message - Recommerce', {
             body: `${notification.senderName}: ${notification.message.substring(0, 100)}`,
             icon: '/logo/logo.png',
             tag: notification.conversationId
         });
-        
+
         browserNotif.onclick = () => {
             window.focus();
             loadConversation(notification.conversationId);
             browserNotif.close();
         };
-        
+
         // Auto-close after 5 seconds
         setTimeout(() => browserNotif.close(), 5000);
     } catch (err) {
@@ -128,7 +128,7 @@ function updateUnreadBadgeFromCache() {
             unreadCount++;
         }
     }
-    
+
     const badge = document.querySelector('.messages-badge');
     if (badge) {
         if (unreadCount > 0) {
@@ -151,18 +151,18 @@ async function loadUserConversations() {
         `;
         return;
     }
-    
+
     try {
         // Use client-side Firebase
         if (typeof window.firebaseGetUserConversations === 'function') {
             const result = await window.firebaseGetUserConversations(currentUserId);
-            
+
             if (result.success) {
                 allConversations = result.conversations || [];
                 displayConversationList(allConversations);
                 // Update navbar badge accurately using fetched conversations
                 updateUnreadBadgeAccurate(allConversations);
-                
+
                 // If there's an initial conversation ID from URL, load it
                 if (initialConversationId) {
                     loadConversation(initialConversationId);
@@ -174,11 +174,11 @@ async function loadUserConversations() {
             // Fallback to server API
             const response = await fetch(`/Messaging/GetUserConversations?userId=${encodeURIComponent(currentUserId)}`);
             const result = await response.json();
-            
+
             if (result.success) {
                 allConversations = result.conversations || [];
                 displayConversationList(allConversations);
-                
+
                 if (initialConversationId) {
                     loadConversation(initialConversationId);
                 }
@@ -195,7 +195,7 @@ async function loadUserConversations() {
 // Display conversation list in sidebar
 async function displayConversationList(conversations) {
     const container = document.getElementById('conversationList');
-    
+
     if (!conversations || conversations.length === 0) {
         container.innerHTML = `
             <div class="empty-conversations" style="text-align: center; padding: 40px 20px; color: #6b7280;">
@@ -207,32 +207,32 @@ async function displayConversationList(conversations) {
         updateUnreadBadge(0);
         return;
     }
-    
+
     container.innerHTML = '';
-    
+
     // Count unread conversations
     let unreadCount = 0;
-    
+
     for (const conv of conversations) {
         // Determine the other person's info (if current user is buyer, show seller, and vice versa)
         const isBuyer = conv.buyerId === currentUserId;
         const otherName = isBuyer ? conv.sellerName : conv.buyerName;
         const otherId = isBuyer ? conv.sellerId : conv.buyerId;
         const otherInitial = otherName ? otherName.charAt(0).toUpperCase() : 'U';
-        
+
         // Check if conversation has unread messages using lastReadBy timestamp
         const readField = `lastReadBy_${currentUserId}`;
         const lastReadTime = conv[readField]?.seconds || 0;
         const lastMessageTime = conv.lastMessageTime?.seconds || 0;
         const isUnread = conv.lastMessageSenderId && conv.lastMessageSenderId !== currentUserId && lastMessageTime > lastReadTime;
         if (isUnread) unreadCount++;
-        
+
         const item = document.createElement('div');
         item.className = `conversation-item ${isUnread ? 'unread' : ''}`;
         item.setAttribute('data-conversation-id', conv.id);
         item.setAttribute('data-other-user-id', otherId || '');
         item.onclick = () => loadConversation(conv.id);
-        
+
         item.innerHTML = `
             <div class="conversation-avatar">
                 <div class="avatar-circle conv-avatar-${conv.id}" style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; overflow: hidden; background-size: cover; background-position: center;">
@@ -250,15 +250,15 @@ async function displayConversationList(conversations) {
                 ${isUnread ? '<span class="unread-dot" style="display: inline-block; width: 10px; height: 10px; background: #ef4444; border-radius: 50%; margin-top: 4px;"></span>' : ''}
             </div>
         `;
-        
+
         container.appendChild(item);
-        
+
         // Load profile photo and name for other user (with caching)
         if (otherId && typeof window.firebaseGetUserProfile === 'function') {
             loadConversationUserProfileCached(conv.id, otherId);
         }
     }
-    
+
     // Update navbar badge
     updateUnreadBadge(unreadCount);
 }
@@ -270,7 +270,7 @@ async function getCachedProfile(userId) {
     if (cached && (Date.now() - cached.timestamp < PROFILE_CACHE_TTL)) {
         return cached.profile;
     }
-    
+
     // Fetch from Firebase
     if (typeof window.firebaseGetUserProfile === 'function') {
         const result = await window.firebaseGetUserProfile(userId);
@@ -372,15 +372,15 @@ async function loadChatHeaderProfile(userId) {
 async function loadConversation(conversationId) {
     try {
         currentConversationId = conversationId;
-        
+
         // Mark conversation as read when opened
         if (typeof window.firebaseMarkConversationRead === 'function') {
             window.firebaseMarkConversationRead(conversationId, currentUserId);
         }
-        
+
         // Find conversation details
         currentConversation = allConversations.find(c => c.id === conversationId);
-        
+
         // If not in cache, fetch it
         if (!currentConversation) {
             if (typeof window.firebaseGetConversation === 'function') {
@@ -392,13 +392,13 @@ async function loadConversation(conversationId) {
                 }
             }
         }
-        
+
         // Update UI
         document.getElementById('chatEmptyState').style.display = 'none';
         document.getElementById('chatHeader').style.display = 'flex';
         document.getElementById('chatMessages').style.display = 'flex';
         document.getElementById('chatInputContainer').style.display = 'flex';
-        
+
         // Highlight active conversation and remove unread state
         document.querySelectorAll('.conversation-item').forEach(item => {
             item.classList.remove('active');
@@ -425,41 +425,53 @@ async function loadConversation(conversationId) {
                 updateUnreadBadge(currentCount);
             }
         }
-        
+
         // Update chat header
         if (currentConversation && (currentConversation.buyerId || currentConversation.sellerId)) {
             const isBuyer = currentConversation.buyerId === currentUserId;
             const otherName = isBuyer ? currentConversation.sellerName : currentConversation.buyerName;
             const otherId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
-            const otherInitial = otherName ? otherName.charAt(0).toUpperCase() : 'U';
+
+            // UI Improvements: Better default name and ensuring we have an ID
+            const displayName = otherName || 'User';
+            const otherInitial = displayName.charAt(0).toUpperCase();
+
+            // Set role based on conversation participation
             const otherRole = isBuyer ? 'Seller' : 'Buyer';
-            
-            document.getElementById('chatUserName').textContent = otherName || 'Unknown';
-            document.getElementById('chatUserStatus').textContent = otherRole;
-            document.getElementById('chatUserStatus').style.color = '#10b981';
-            
-            // Set avatar with initial first
+
+            const nameEl = document.getElementById('chatUserName');
+            const statusEl = document.getElementById('chatUserStatus');
             const avatarContainer = document.querySelector('.chat-user-avatar');
+
+            if (nameEl) nameEl.textContent = displayName;
+            if (statusEl) {
+                statusEl.textContent = otherRole;
+                statusEl.style.color = '#10b981';
+            }
+
+            // Set avatar with initial first (Capital Letter as requested)
             if (avatarContainer) {
                 avatarContainer.innerHTML = `
-                    <div class="avatar-circle chat-header-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 1rem; overflow: hidden; background-size: cover; background-position: center;">
+                    <div class="avatar-circle chat-header-avatar" style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #FF6B6B 0%, #EE5D5D 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.5rem; overflow: hidden; background-size: cover; background-position: center; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                         ${otherInitial}
                     </div>
-                    <span class="status-indicator online" id="chatStatus"></span>
                 `;
-                
+
                 // Load profile photo and real name for chat header
+                // This will overwrite the defaults if profile is found
                 if (otherId && typeof window.firebaseGetUserProfile === 'function') {
+                    console.log('🔄 Fetching profile for header:', otherId);
                     loadChatHeaderProfile(otherId);
                 }
             }
         } else {
             // Fallback for conversations without proper data
-            document.getElementById('chatUserName').textContent = 'Chat';
+            // Try to find ANY other user ID involved if possible, or just default
+            document.getElementById('chatUserName').textContent = 'User (No Info)';
             document.getElementById('chatUserStatus').textContent = 'Conversation';
             document.getElementById('chatUserStatus').style.color = '#9ca3af';
         }
-        
+
         // Load messages using client-side Firebase
         let messages = [];
         if (typeof window.firebaseGetMessages === 'function') {
@@ -468,13 +480,13 @@ async function loadConversation(conversationId) {
                 messages = result.messages || [];
             }
         }
-        
+
         displayMessages(messages);
         scrollToBottom();
-        
+
         // Start polling for new messages
         startMessagePolling();
-        
+
     } catch (error) {
         console.error('Error loading conversation:', error);
         showToast('Error loading conversation: ' + error.message, 'error');
@@ -485,7 +497,7 @@ async function loadConversation(conversationId) {
 function displayMessages(messages) {
     const chatMessages = document.getElementById('chatMessages');
     chatMessages.innerHTML = '';
-    
+
     if (!messages || messages.length === 0) {
         chatMessages.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #9ca3af;">
@@ -495,26 +507,26 @@ function displayMessages(messages) {
         `;
         return;
     }
-    
+
     messages.forEach(message => {
         const isSent = message.senderId === currentUserId;
-        
+
         const messageGroup = document.createElement('div');
         messageGroup.className = `message-group ${isSent ? 'sent' : 'received'}`;
         messageGroup.setAttribute('data-message-id', message.id);
-        
+
         const messageBubble = document.createElement('div');
         messageBubble.className = 'message-bubble';
         messageBubble.style.position = 'relative';
-        
+
         const messageText = document.createElement('p');
         messageText.className = 'message-text';
         messageText.innerHTML = (message.text || '').replace(/\n/g, '<br>');
-        
+
         const messageTime = document.createElement('span');
         messageTime.className = 'message-time';
         messageTime.textContent = formatTime(message.timestamp);
-        
+
         // Add delete button only for sent messages
         if (isSent) {
             const deleteBtn = document.createElement('button');
@@ -527,12 +539,12 @@ function displayMessages(messages) {
                 deleteMessage(message.id);
             };
             messageBubble.appendChild(deleteBtn);
-            
+
             // Show delete button on hover
             messageBubble.addEventListener('mouseenter', () => deleteBtn.style.opacity = '1');
             messageBubble.addEventListener('mouseleave', () => deleteBtn.style.opacity = '0');
         }
-        
+
         messageBubble.appendChild(messageText);
         messageBubble.appendChild(messageTime);
         messageGroup.appendChild(messageBubble);
@@ -544,20 +556,20 @@ function displayMessages(messages) {
 async function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
-    
+
     if (!message || !currentConversationId) return;
-    
+
     if (!currentUserId) {
         showToast('Please login to send messages', 'error');
         return;
     }
-    
+
     try {
         // Add message to UI immediately
         addMessageToUI(message, true);
         messageInput.value = '';
         scrollToBottom();
-        
+
         // Send using client-side Firebase
         if (typeof window.firebaseSendMessage === 'function') {
             const result = await window.firebaseSendMessage(
@@ -566,7 +578,7 @@ async function sendMessage() {
                 currentUserName,
                 message
             );
-            
+
             if (!result.success) {
                 showToast('Error: ' + result.message, 'error');
             }
@@ -582,16 +594,16 @@ async function sendMessage() {
                     text: message
                 })
             });
-            
+
             const result = await response.json();
-            
+
             if (!result.success) {
                 showToast('Error: ' + result.message, 'error');
             }
         }
-        
+
         messageInput.focus();
-        
+
     } catch (error) {
         console.error('Error sending message:', error);
         showToast('Error sending message: ' + error.message, 'error');
@@ -601,27 +613,27 @@ async function sendMessage() {
 // Add message to UI
 function addMessageToUI(content, isSent) {
     const chatMessages = document.getElementById('chatMessages');
-    
+
     // Remove empty state if present
     const emptyState = chatMessages.querySelector('div[style*="text-align: center"]');
     if (emptyState) {
         emptyState.remove();
     }
-    
+
     const messageGroup = document.createElement('div');
     messageGroup.className = `message-group ${isSent ? 'sent' : 'received'}`;
-    
+
     const messageBubble = document.createElement('div');
     messageBubble.className = 'message-bubble';
-    
+
     const messageText = document.createElement('p');
     messageText.className = 'message-text';
     messageText.innerHTML = content.replace(/\n/g, '<br>');
-    
+
     const messageTime = document.createElement('span');
     messageTime.className = 'message-time';
     messageTime.textContent = 'Just now';
-    
+
     messageBubble.appendChild(messageText);
     messageBubble.appendChild(messageTime);
     messageGroup.appendChild(messageBubble);
@@ -635,15 +647,15 @@ function startMessagePolling() {
         messageListenerUnsubscribe();
         messageListenerUnsubscribe = null;
     }
-    
+
     // Clear any old polling interval
     if (messagePollingInterval) {
         clearInterval(messagePollingInterval);
         messagePollingInterval = null;
     }
-    
+
     if (!currentConversationId) return;
-    
+
     // Use real-time listener instead of polling
     if (typeof window.firebaseListenToMessages === 'function') {
         messageListenerUnsubscribe = window.firebaseListenToMessages(currentConversationId, (messages) => {
@@ -688,11 +700,11 @@ function handleKeyPress(event) {
 function filterConversations() {
     const searchInput = document.getElementById('searchConversations').value.toLowerCase();
     const conversations = document.querySelectorAll('.conversation-item');
-    
+
     conversations.forEach(conversation => {
         const name = conversation.querySelector('.conversation-name')?.textContent.toLowerCase() || '';
         const preview = conversation.querySelector('.conversation-preview')?.textContent.toLowerCase() || '';
-        
+
         if (name.includes(searchInput) || preview.includes(searchInput)) {
             conversation.style.display = 'flex';
         } else {
@@ -725,7 +737,7 @@ function reportUser() {
 // Delete a single message
 async function deleteMessage(messageId) {
     if (!confirm('Delete this message?')) return;
-    
+
     try {
         if (typeof window.firebaseDeleteMessage === 'function') {
             const result = await window.firebaseDeleteMessage(currentConversationId, messageId);
@@ -751,25 +763,25 @@ async function deleteMessage(messageId) {
 // Delete entire conversation
 async function deleteChat() {
     if (!confirm('Delete this entire conversation? This action cannot be undone.')) return;
-    
+
     toggleChatOptions();
-    
+
     try {
         if (typeof window.firebaseDeleteConversation === 'function') {
             showToast('Deleting conversation...', 'info');
             const result = await window.firebaseDeleteConversation(currentConversationId);
             if (result.success) {
                 showToast('Conversation deleted', 'success');
-                
+
                 // Remove from UI
                 const convItem = document.querySelector(`[data-conversation-id="${currentConversationId}"]`);
                 if (convItem) {
                     convItem.remove();
                 }
-                
+
                 // Remove from local array
                 allConversations = allConversations.filter(c => c.id !== currentConversationId);
-                
+
                 // Reset chat panel
                 document.getElementById('chatEmptyState').style.display = 'flex';
                 document.getElementById('chatHeader').style.display = 'none';
@@ -777,7 +789,7 @@ async function deleteChat() {
                 document.getElementById('chatInputContainer').style.display = 'none';
                 currentConversationId = null;
                 currentConversation = null;
-                
+
                 // Show empty state if no more conversations
                 if (allConversations.length === 0) {
                     displayConversationList([]);
@@ -804,7 +816,7 @@ function scrollToBottom() {
 
 function formatTime(timestamp) {
     if (!timestamp) return 'Just now';
-    
+
     // Handle Firestore timestamp object
     let date;
     if (timestamp && timestamp.seconds) {
@@ -814,22 +826,22 @@ function formatTime(timestamp) {
     } else {
         date = new Date(timestamp);
     }
-    
+
     if (isNaN(date.getTime())) return 'Just now';
-    
+
     const now = new Date();
     const diff = now - date;
-    
+
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatTimeAgo(timestamp) {
     if (!timestamp) return '';
-    
+
     // Handle Firestore timestamp object
     let date;
     if (timestamp && timestamp.seconds) {
@@ -839,28 +851,28 @@ function formatTimeAgo(timestamp) {
     } else {
         date = new Date(timestamp);
     }
-    
+
     if (isNaN(date.getTime())) return '';
-    
+
     const now = new Date();
     const diff = now - date;
-    
+
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
     if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
-    
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function showToast(message, type = 'success') {
     const toastEl = document.getElementById('toastNotification');
     const toastBody = document.getElementById('toastMessage');
-    
+
     if (!toastEl || !toastBody) return;
-    
+
     toastBody.textContent = message;
-    
+
     toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
     if (type === 'success') {
         toastEl.classList.add('text-bg-success');
@@ -871,28 +883,28 @@ function showToast(message, type = 'success') {
     } else {
         toastEl.classList.add('text-bg-warning');
     }
-    
+
     if (toastNotification) {
         toastNotification.show();
     }
 }
 
 // Close dropdown when clicking outside
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
     const dropdown = document.getElementById('chatOptionsDropdown');
     const optionsBtn = document.querySelector('.btn-chat-options');
-    
+
     if (dropdown && optionsBtn && !dropdown.contains(event.target) && !optionsBtn.contains(event.target)) {
         dropdown.style.display = 'none';
     }
 });
 
 // Cleanup on page unload
-window.addEventListener('beforeunload', function() {
+window.addEventListener('beforeunload', function () {
     if (messagePollingInterval) {
         clearInterval(messagePollingInterval);
     }
-    
+
     // Stop message listener
     if (typeof window.firebaseStopMessageListener === 'function' && currentUserId) {
         window.firebaseStopMessageListener(currentUserId);
