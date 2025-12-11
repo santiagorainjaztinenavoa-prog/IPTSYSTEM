@@ -666,7 +666,7 @@ namespace IPTSYSTEM.Controllers
                 {
                     if (_firestore != null && _firestore.IsInitialized)
                     {
-                        // Firestore calls are async; don't block long here — return view with defaults
+                        // Firestore calls are async; don't block long here â€“ return view with defaults
                         _ = Task.Run(async () =>
                         {
                             try
@@ -690,6 +690,20 @@ namespace IPTSYSTEM.Controllers
                 _logger.LogError(ex, "AdminDashboard error");
                 return View(new AdminDashboardViewModel { ActiveMenu = menu ?? "overview" });
             }
+        }
+
+        // Contact Admin Messages - for buyers/sellers to contact administrator
+        [HttpGet]
+        public IActionResult AdminMessages()
+        {
+            // User must be logged in
+            var userId = HttpContext.Session.GetString("UserId");
+            if (string.IsNullOrEmpty(userId))
+            {
+                return RedirectToAction("Login");
+            }
+            
+            return View();
         }
     }
 }

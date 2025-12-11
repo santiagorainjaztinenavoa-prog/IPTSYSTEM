@@ -101,6 +101,19 @@ class LoginController {
                 } else {
                     const code = result?.code || null;
 
+                    // Handle user deleted or disabled (new login restriction system)
+                    if (code === 'user-deleted') {
+                        this.showAccountDeletedModal();
+                        this.setLoadingState(false);
+                        return;
+                    }
+                    
+                    if (code === 'user-disabled') {
+                        this.showAccountSuspendedModal();
+                        this.setLoadingState(false);
+                        return;
+                    }
+
                     // Detect suspended/inactive accounts (server or client returned)
                     const serverMsg = (result && result.message) ? result.message.toString() : '';
                     const isSuspended = code === 'inactive' || /temporarily disabled|suspend|suspended|non-compliance/i.test(serverMsg);
@@ -108,7 +121,7 @@ class LoginController {
                     // More specific user-facing messages for common auth failures
                     if (isSuspended) {
                         // Show professional suspension title and server-provided details
-                        this.showToast('Account Suspended: Policy Non-Compliance', serverMsg || 'Access to your account has been temporarily disabled due to policy non-compliance. Contact support for assistance.', 'error');
+                        this.showAccountSuspendedModal();
                     } else if (code === 'user-doc-not-found') {
                         this.showToast('Login Failed', 'Your account is missing a profile in our database. Please register first.', 'error');
                     } else if (code === 'auth/user-not-found' || code === 'auth/invalid-login-credentials') {
@@ -296,6 +309,91 @@ class LoginController {
             delay: 4000
         });
         toast.show();
+    }
+
+    // Show Account Suspended Modal with animation
+    showAccountSuspendedModal() {
+        // Remove existing modal if any
+        const existingModal = document.getElementById('accountSuspendedModal');
+        if (existingModal) existingModal.remove();
+
+        const modalHtml = `
+            <div id="accountSuspendedModal" class="modal fade" tabindex="-1" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content" style="background: linear-gradient(145deg, #1a1a1a, #2d2d2d); border: 1px solid #dc2626; border-radius: 1rem;">
+                        <div class="modal-body text-center p-5">
+                            <div class="mb-4">
+                                <div style="width: 80px; height: 80px; margin: 0 auto; background: #dc262620; border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: pulse 2s infinite;">
+                                    <i class="bi bi-shield-exclamation" style="font-size: 2.5rem; color: #dc2626;"></i>
+                                </div>
+                            </div>
+                            <h4 class="text-white mb-3" style="font-weight: 700;">Account Suspended</h4>
+                            <p class="text-secondary mb-4" style="line-height: 1.6;">
+                                Your account has been suspended by the administrator. 
+                                <br><br>
+                                Please contact the administrator for more information or to appeal this decision.
+                            </p>
+                            <button type="button" class="btn px-4 py-2" style="background: #dc2626; color: white; border-radius: 0.5rem; font-weight: 600;" data-bs-dismiss="modal">
+                                <i class="bi bi-arrow-left me-2"></i>Go Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <style>
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); opacity: 1; }
+                    50% { transform: scale(1.05); opacity: 0.8; }
+                }
+            </style>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById('accountSuspendedModal'));
+        modal.show();
+    }
+
+    // Show Account Deleted Modal with animation
+    showAccountDeletedModal() {
+        // Remove existing modal if any
+        const existingModal = document.getElementById('accountDeletedModal');
+        if (existingModal) existingModal.remove();
+
+        const modalHtml = `
+            <div id="accountDeletedModal" class="modal fade" tabindex="-1" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content" style="background: linear-gradient(145deg, #1a1a1a, #2d2d2d); border: 1px solid #ef4444; border-radius: 1rem;">
+                        <div class="modal-body text-center p-5">
+                            <div class="mb-4">
+                                <div style="width: 80px; height: 80px; margin: 0 auto; background: #ef444420; border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: shake 0.5s ease-in-out;">
+                                    <i class="bi bi-person-x" style="font-size: 2.5rem; color: #ef4444;"></i>
+                                </div>
+                            </div>
+                            <h4 class="text-white mb-3" style="font-weight: 700;">Account Deleted</h4>
+                            <p class="text-secondary mb-4" style="line-height: 1.6;">
+                                Your account has been deleted from our system.
+                                <br><br>
+                                If you believe this is an error, please contact the administrator.
+                            </p>
+                            <button type="button" class="btn px-4 py-2" style="background: #ef4444; color: white; border-radius: 0.5rem; font-weight: 600;" data-bs-dismiss="modal">
+                                <i class="bi bi-arrow-left me-2"></i>Go Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <style>
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+                    20%, 40%, 60%, 80% { transform: translateX(5px); }
+                }
+            </style>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById('accountDeletedModal'));
+        modal.show();
     }
 }
 
