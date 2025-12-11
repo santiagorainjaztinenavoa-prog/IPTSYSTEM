@@ -8,11 +8,15 @@ using Microsoft.EntityFrameworkCore;
 using IPTSYSTEM.Firebase;
 using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace IPTSYSTEM.Controllers
 {
     public partial class HomeController : Controller
     {
+        // In-memory overrides for user status set by admin during runtime
+        private static ConcurrentDictionary<string, string> _userStatus = new ConcurrentDictionary<string, string>();
+
                 private static string NormalizeCategoryName(string name)
                 {
                     if (string.IsNullOrWhiteSpace(name)) return name;
@@ -419,6 +423,24 @@ namespace IPTSYSTEM.Controllers
                 var regUser = _registeredUsers.FirstOrDefault(u => (string.Equals(u.Username, loginIdentifier, StringComparison.OrdinalIgnoreCase) || string.Equals(u.Email, loginIdentifier, StringComparison.OrdinalIgnoreCase)) && u.PasswordHash == hashed);
                 if (regUser != null)
                 {
+                    // Check Firestore status (if available) to prevent login for deactivated accounts
+                    // Try to determine Firestore uid: prefer username, then email lookup
+                    var uidToCheck = regUser.Username ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(uidToCheck) && !string.IsNullOrWhiteSpace(regUser.Email) && _firestore != null && _firestore.IsInitialized)
+                    {
+                        var doc = await _firestore.GetUserByFieldAsync("email", regUser.Email);
+                        if (doc != null && doc.TryGetValue("__docId", out var idGuess))
+                        {
+                            uidToCheck = idGuess?.ToString() ?? regUser.Email;
+                        }
+                    }
+
+                    var isActive = await IsFirestoreUserActiveAsync(uidToCheck);
+                    if (!isActive)
+                    {
+                        return Json(new LoginResponse { Success = false, Message = "Access to your account has been temporarily disabled. This action was taken because the account was found to be in non-compliance with our platform's usage policies." });
+                    }
+
                     HttpContext.Session.SetString("IsAdmin", "false");
                     HttpContext.Session.SetString("Username", regUser.Username);
                     HttpContext.Session.SetString("UserType", regUser.UserType);
@@ -508,13 +530,21 @@ namespace IPTSYSTEM.Controllers
 
         public class ClientLoginRequest { public string? Email { get; set; } public string? Uid { get; set; } public string? Username { get; set; } public string? UserType { get; set; } public string? FullName { get; set; } public string? PhoneNumber { get; set; } public string? Region { get; set; } public string? Province { get; set; } public string? City { get; set; } public string? Barangay { get; set; } public string? PostalCode { get; set; } public string? StreetAddress { get; set; } public string? Address { get; set; } }
         [HttpPost]
-        public IActionResult ClientLogin([FromBody] ClientLoginRequest req)
-        {
-            try
-            {
-                if (req == null || string.IsNullOrWhiteSpace(req.Email)) return Json(new LoginResponse { Success = false, Message = "Invalid request" });
-                if (!string.IsNullOrWhiteSpace(req.Username))
-                {
+        public async Task<IActionResult> ClientLogin([FromBody] ClientLoginRequest req)
+         {
+             try
+             {
+                 if (req == null || string.IsNullOrWhiteSpace(req.Email)) return Json(new LoginResponse { Success = false, Message = "Invalid request" });
+                 if (!string.IsNullOrWhiteSpace(req.Username))
+                 {
+                    // If Firestore is available, check status by uid (prefer req.Uid then req.Username)
+                    var uidToCheck = !string.IsNullOrWhiteSpace(req.Uid) ? req.Uid : req.Username;
+                    var isActive = await IsFirestoreUserActiveAsync(uidToCheck);
+                    if (!isActive)
+                    {
+                        return Json(new LoginResponse { Success = false, Message = "Access to your account has been temporarily disabled. This action was taken because the account was found to be in non-compliance with our platform's usage policies." });
+                    }
+
                     HttpContext.Session.SetString("IsAdmin", "false");
                     HttpContext.Session.SetString("Username", req.Username);
                     HttpContext.Session.SetString("UserType", (req.UserType ?? "buyer").ToLowerInvariant());
@@ -531,442 +561,135 @@ namespace IPTSYSTEM.Controllers
                     if (!string.IsNullOrWhiteSpace(req.Address)) HttpContext.Session.SetString("Address", req.Address);
                     return Json(new LoginResponse { Success = true, Message = "Server session established" });
                 }
-                var regUser = _registeredUsers.FirstOrDefault(u => string.Equals(u.Email, req.Email, StringComparison.OrdinalIgnoreCase));
-                if (regUser == null) return Json(new LoginResponse { Success = false, Message = "No server-side profile found for this account" });
-                HttpContext.Session.SetString("IsAdmin", "false");
-                HttpContext.Session.SetString("Username", regUser.Username);
-                HttpContext.Session.SetString("UserType", regUser.UserType);
-                HttpContext.Session.SetString("FullName", regUser.FullName ?? string.Empty);
-                HttpContext.Session.SetString("UserId", req.Uid ?? regUser.Username);
-                HttpContext.Session.SetString("Email", regUser.Email ?? string.Empty);
-                return Json(new LoginResponse { Success = true, Message = "Server session established" });
+             }
+             catch (Exception ex)
+             {
+                 _logger.LogError(ex, "ClientLogin error");
+                 return Json(new LoginResponse { Success = false, Message = "An error occurred during login. Please try again." });
+             }
+
+             return Json(new LoginResponse { Success = false, Message = "Invalid login request" });
+         }
+
+        // Helper: check Firestore for user's status and determine if active (consults in-memory overrides first)
+        private async Task<bool> IsFirestoreUserActiveAsync(string uid)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(uid)) return true;
+
+                // Check in-memory admin-set status first
+                if (_userStatus.TryGetValue(uid, out var inMemoryStatus) && !string.IsNullOrWhiteSpace(inMemoryStatus))
+                {
+                    return !string.Equals(inMemoryStatus, "inactive", StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (_firestore == null || !_firestore.IsInitialized) return true;
+
+                // First try to load by document id
+                var doc = await _firestore.GetUserAsync(uid);
+                Dictionary<string, object>? found = doc;
+
+                // If not found by doc id, try lookup by email or username fields
+                if (found == null)
+                {
+                    // Try treating uid as email
+                    var byEmail = await _firestore.GetUserByFieldAsync("email", uid);
+                    if (byEmail != null)
+                    {
+                        found = byEmail;
+                    }
+                    else
+                    {
+                        // Try username field
+                        var byUsername = await _firestore.GetUserByFieldAsync("username", uid);
+                        if (byUsername != null) found = byUsername;
+                    }
+                }
+
+                if (found == null) return true;
+
+                // status may be in the document fields
+                if (found.TryGetValue("status", out var statusObj) && statusObj is string statusStr)
+                {
+                    return !string.Equals(statusStr, "inactive", StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (found.TryGetValue("is_active", out var isActiveObj))
+                {
+                    if (isActiveObj is bool b) return b;
+                    if (bool.TryParse(isActiveObj?.ToString(), out var parsed)) return parsed;
+                }
+
+                return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "ClientLogin error");
-                return Json(new LoginResponse { Success = false, Message = "Server error" });
+                _logger.LogDebug(ex, "Failed to check Firestore user status for {Uid}", uid);
+                return true; // fail-open: don't block login when status check fails
             }
         }
 
-        // LISTINGS CRUD
-        [HttpGet]
-        public IActionResult GetListing(int id)
-        {
-            var listing = _listings.FirstOrDefault(l => l.Id == id);
-            if (listing == null) return NotFound();
-            return Json(listing);
-        }
-
-        // Centralized Firestore sync for listings
-        private void SyncListingToFirestore(Listing listing, string action)
-        {
-            try
-            {
-                _ = _firestore.MirrorListingAsync(listing.Id, new
-                {
-                    product_id = listing.Id,
-                    title = listing.Title,
-                    description = listing.Description,
-                    price = listing.Price,
-                    category = listing.Category,
-                    condition = listing.Condition,
-                    imageUrl = listing.ImageUrl,
-                    is_active = listing.IsActive,
-                    user_id = listing.SellerUserId,
-                    seller_username = listing.SellerUsername,
-                    seller_name = listing.SellerFullName,
-                    date_created_server = listing.CreatedDate.ToUniversalTime(),
-                    date_last_synced_server = DateTime.UtcNow,
-                    last_sync_action = action
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed Firestore sync for listing {Id}", listing.Id);
-            }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> CreateListing()
-        {
-            try
-            {
-                // Ensure request body can be read multiple times
-                Request.EnableBuffering();
-
-                // Read raw body
-                using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-                var raw = await reader.ReadToEndAsync();
-                // rewind for other readers
-                Request.Body.Position = 0;
-
-                Listing? payload = null;
-
-                if (!string.IsNullOrWhiteSpace(raw))
-                {
-                    try
-                    {
-                        var doc = JsonDocument.Parse(raw);
-                        var root = doc.RootElement;
-                        payload = new Listing
-                        {
-                            Id = root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt32() : (root.TryGetProperty("Id", out var idEl2) && idEl2.ValueKind == JsonValueKind.Number ? idEl2.GetInt32() : 0),
-                            Title = root.TryGetProperty("title", out var tEl) ? tEl.GetString() ?? string.Empty : (root.TryGetProperty("Title", out var tEl2) ? tEl2.GetString() ?? string.Empty : string.Empty),
-                            Description = root.TryGetProperty("description", out var dEl) ? dEl.GetString() ?? string.Empty : (root.TryGetProperty("Description", out var dEl2) ? dEl2.GetString() ?? string.Empty : string.Empty),
-                            Price = root.TryGetProperty("price", out var pEl) && pEl.TryGetDecimal(out var dec) ? dec : (root.TryGetProperty("Price", out var pEl2) && pEl2.TryGetDecimal(out var dec2) ? dec2 : 0m),
-                            Category = root.TryGetProperty("category", out var cEl) ? cEl.GetString() ?? string.Empty : (root.TryGetProperty("Category", out var cEl2) ? cEl2.GetString() ?? string.Empty : string.Empty),
-                            Condition = root.TryGetProperty("condition", out var condEl) ? condEl.GetString() ?? string.Empty : (root.TryGetProperty("Condition", out var condEl2) ? condEl2.GetString() ?? string.Empty : string.Empty),
-                            ImageUrl = root.TryGetProperty("imageUrl", out var iEl) ? iEl.GetString() ?? string.Empty : (root.TryGetProperty("ImageUrl", out var iEl2) ? iEl2.GetString() ?? string.Empty : string.Empty)
-                        };
-                    }
-                    catch (Exception jex)
-                    {
-                        _logger.LogDebug(jex, "Failed parse JSON body in CreateListing");
-                    }
-                }
-
-                // If not JSON, try form
-                if (payload == null && Request.HasFormContentType)
-                {
-                    var form = Request.Form;
-                    payload = new Listing
-                    {
-                        Title = form.TryGetValue("title", out var t) ? t.ToString() : string.Empty,
-                        Description = form.TryGetValue("description", out var d) ? d.ToString() : string.Empty,
-                        Price = form.TryGetValue("price", out var p) && decimal.TryParse(p, out var dec) ? dec : 0m,
-                        Category = form.TryGetValue("category", out var c) ? c.ToString() : string.Empty,
-                        Condition = form.TryGetValue("condition", out var cond) ? cond.ToString() : string.Empty,
-                        ImageUrl = form.TryGetValue("imageUrl", out var img) ? img.ToString() : string.Empty
-                    };
-                }
-
-                if (payload == null)
-                {
-                    _logger.LogWarning("CreateListing called with empty or invalid payload. ContentType={ContentType} RawLength={RawLength}", Request.ContentType, raw?.Length ?? 0);
-                    return Json(new { success = false, message = "Invalid listing payload" });
-                }
-
-                // Normalize and set defaults
-                var sellerUsername = HttpContext.Session.GetString("Username") ?? "Anonymous";
-                var sellerFullName = HttpContext.Session.GetString("FullName") ?? "Unknown";
-                var sellerUserId = HttpContext.Session.GetString("UserId") ?? string.Empty;
-
-                // If payload contained an Id and a listing with that Id already exists, update it instead of creating a duplicate
-                if (payload.Id > 0)
-                {
-                    var existing = _listings.FirstOrDefault(l => l.Id == payload.Id);
-                    if (existing != null)
-                    {
-                        // Only allow the owner or an admin to update the listing
-                        var isAdmin = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
-                        var isOwner = string.IsNullOrEmpty(existing.SellerUserId) || existing.SellerUserId == sellerUserId;
-                        if (!isOwner && !isAdmin)
-                        {
-                            return Json(new { success = false, message = "You are not authorized to modify this listing" });
-                        }
-
-                        existing.Title = payload.Title?.Trim() ?? existing.Title;
-                        existing.Description = payload.Description?.Trim() ?? existing.Description;
-                        existing.Price = payload.Price;
-                        existing.Category = payload.Category?.Trim() ?? existing.Category;
-                        existing.Condition = payload.Condition?.Trim() ?? existing.Condition;
-                        existing.ImageUrl = payload.ImageUrl?.Trim() ?? existing.ImageUrl;
-                        // keep existing.CreatedDate as-is
-
-                        SyncListingToFirestore(existing, "update");
-                        return Json(new { success = true, message = "Listing updated successfully!", listing = existing });
-                    }
-                    // If Id provided but not found, fall through to create a new listing with a new Id
-                }
-
-                // Extra safety: if client didn't send an Id but a listing with the same title by the same seller exists,
-                // treat this as an update to avoid creating accidental duplicates from the UI.
-                if (!string.IsNullOrWhiteSpace(payload.Title))
-                {
-                    var candidateTitle = payload.Title.Trim();
-                    var existingByTitle = _listings.FirstOrDefault(l => l.IsActive
-                        && string.Equals(l.Title?.Trim(), candidateTitle, StringComparison.OrdinalIgnoreCase)
-                        && (string.IsNullOrEmpty(l.SellerUserId) && string.IsNullOrEmpty(sellerUserId) || l.SellerUserId == sellerUserId));
-                    if (existingByTitle != null)
-                    {
-                        // Owner/admin check
-                        var isAdmin = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
-                        var isOwner = string.IsNullOrEmpty(existingByTitle.SellerUserId) || existingByTitle.SellerUserId == sellerUserId;
-                        if (!isOwner && !isAdmin)
-                        {
-                            return Json(new { success = false, message = "You are not authorized to modify this listing" });
-                        }
-
-                        existingByTitle.Description = payload.Description?.Trim() ?? existingByTitle.Description;
-                        existingByTitle.Price = payload.Price;
-                        existingByTitle.Category = payload.Category?.Trim() ?? existingByTitle.Category;
-                        existingByTitle.Condition = payload.Condition?.Trim() ?? existingByTitle.Condition;
-                        existingByTitle.ImageUrl = payload.ImageUrl?.Trim() ?? existingByTitle.ImageUrl;
-
-                        SyncListingToFirestore(existingByTitle, "update");
-                        return Json(new { success = true, message = "Listing updated successfully (merged with existing)!", listing = existingByTitle });
-                    }
-                }
-
-                var newListing = new Listing
-                {
-                    Id = _listings.Any() ? _listings.Max(l => l.Id) + 1 : 1,
-                    Title = payload.Title?.Trim() ?? string.Empty,
-                    Description = payload.Description?.Trim() ?? string.Empty,
-                    Price = payload.Price,
-                    Category = payload.Category?.Trim() ?? string.Empty,
-                    Condition = payload.Condition?.Trim() ?? string.Empty,
-                    ImageUrl = payload.ImageUrl?.Trim() ?? string.Empty,
-                    CreatedDate = DateTime.UtcNow,
-                    IsActive = true,
-                    SellerUsername = sellerUsername,
-                    SellerFullName = sellerFullName,
-                    SellerUserId = sellerUserId
-                };
-
-                _listings.Add(newListing);
-                SyncListingToFirestore(newListing, "create");
-                return Json(new { success = true, message = "Listing created successfully!", listing = newListing });
-            }
-            catch (Exception ex) { _logger.LogError(ex, "CreateListing error"); return Json(new { success = false, message = ex.Message }); }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> UpdateListing()
-        {
-            try
-            {
-                Request.EnableBuffering();
-                using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-                var raw = await reader.ReadToEndAsync();
-                Request.Body.Position = 0;
-
-                Listing? payload = null;
-
-                if (!string.IsNullOrWhiteSpace(raw))
-                {
-                    try
-                    {
-                        var doc = JsonDocument.Parse(raw);
-                        var root = doc.RootElement;
-                        payload = new Listing
-                        {
-                            Id = root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt32() : (root.TryGetProperty("Id", out var idEl2) && idEl2.ValueKind == JsonValueKind.Number ? idEl2.GetInt32() : 0),
-                            Title = root.TryGetProperty("title", out var tEl) ? tEl.GetString() ?? string.Empty : (root.TryGetProperty("Title", out var tEl2) ? tEl2.GetString() ?? string.Empty : string.Empty),
-                            Description = root.TryGetProperty("description", out var dEl) ? dEl.GetString() ?? string.Empty : (root.TryGetProperty("Description", out var dEl2) ? dEl2.GetString() ?? string.Empty : string.Empty),
-                            Price = root.TryGetProperty("price", out var pEl) && pEl.TryGetDecimal(out var dec) ? dec : (root.TryGetProperty("Price", out var pEl2) && pEl2.TryGetDecimal(out var dec2) ? dec2 : 0m),
-                            Category = root.TryGetProperty("category", out var cEl) ? cEl.GetString() ?? string.Empty : (root.TryGetProperty("Category", out var cEl2) ? cEl2.GetString() ?? string.Empty : string.Empty),
-                            Condition = root.TryGetProperty("condition", out var condEl) ? condEl.GetString() ?? string.Empty : (root.TryGetProperty("Condition", out var condEl2) ? condEl2.GetString() ?? string.Empty : string.Empty),
-                            ImageUrl = root.TryGetProperty("imageUrl", out var iEl) ? iEl.GetString() ?? string.Empty : (root.TryGetProperty("ImageUrl", out var iEl2) ? iEl2.GetString() ?? string.Empty : string.Empty)
-                        };
-                    }
-                    catch (Exception jex)
-                    {
-                        _logger.LogDebug(jex, "Failed parse JSON body in UpdateListing");
-                    }
-                }
-
-                if (payload == null && Request.HasFormContentType)
-                {
-                    var form = Request.Form;
-                    payload = new Listing
-                    {
-                        Id = form.TryGetValue("id", out var idv) && int.TryParse(idv, out var iid) ? iid : 0,
-                        Title = form.TryGetValue("title", out var t) ? t.ToString() : string.Empty,
-                        Description = form.TryGetValue("description", out var d) ? d.ToString() : string.Empty,
-                        Price = form.TryGetValue("price", out var p) && decimal.TryParse(p, out var dec) ? dec : 0m,
-                        Category = form.TryGetValue("category", out var c) ? c.ToString() : string.Empty,
-                        Condition = form.TryGetValue("condition", out var cond) ? cond.ToString() : string.Empty,
-                        ImageUrl = form.TryGetValue("imageUrl", out var img) ? img.ToString() : string.Empty
-                    };
-                }
-
-                if (payload == null)
-                {
-                    _logger.LogWarning("UpdateListing called with null payload. ContentType={ContentType}", Request.ContentType);
-                    return Json(new { success = false, message = "Invalid listing payload" });
-                }
-
-                var existingListing = _listings.FirstOrDefault(l => l.Id == payload.Id);
-                if (existingListing == null) return Json(new { success = false, message = "Listing not found" });
-
-                // Authorization: only owner or admin can modify
-                var currentUserId = HttpContext.Session.GetString("UserId") ?? string.Empty;
-                var isAdminUser = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
-                var isOwnerUser = string.IsNullOrEmpty(existingListing.SellerUserId) || existingListing.SellerUserId == currentUserId;
-                if (!isOwnerUser && !isAdminUser)
-                {
-                    return Json(new { success = false, message = "You are not authorized to modify this listing" });
-                }
-
-                existingListing.Title = payload.Title?.Trim() ?? existingListing.Title;
-                existingListing.Description = payload.Description?.Trim() ?? existingListing.Description;
-                existingListing.Price = payload.Price;
-                existingListing.Category = payload.Category?.Trim() ?? existingListing.Category;
-                existingListing.Condition = payload.Condition?.Trim() ?? existingListing.Condition;
-                existingListing.ImageUrl = payload.ImageUrl?.Trim() ?? existingListing.ImageUrl;
-                // preserve CreatedDate and seller information
-                SyncListingToFirestore(existingListing, "update");
-                return Json(new { success = true, message = "Listing updated successfully!", listing = existingListing });
-            }
-            catch (Exception ex) { _logger.LogError(ex, "UpdateListing error"); return Json(new { success = false, message = ex.Message }); }
-        }
-
-        [HttpPost]
-        public IActionResult DeleteListing(int id)
-        {
-            try
-            {
-                var listing = _listings.FirstOrDefault(l => l.Id == id);
-                if (listing == null) return Json(new { success = false, message = "Listing not found" });
-                listing.IsActive = false;
-                SyncListingToFirestore(listing, "delete");
-                return Json(new { success = true, message = "Listing deleted successfully!" });
-            }
-            catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
-        }
-
-        // New: expose user listings (server fallback for UI)
-        [HttpGet]
-        public IActionResult GetUserListings()
-        {
-            var uid = HttpContext.Session.GetString("UserId") ?? string.Empty;
-            var username = HttpContext.Session.GetString("Username") ?? string.Empty;
-            
-            // Use either uid or username to filter
-            var userIdentifier = !string.IsNullOrEmpty(uid) ? uid : username;
-            
-            if (string.IsNullOrEmpty(userIdentifier))
-            {
-                return Json(new { success = false, message = "User not logged in", listings = new List<Listing>() });
-            }
-            
-            var listings = _listings.Where(l => 
-                l.IsActive && 
-                (!string.IsNullOrEmpty(l.SellerUserId) && l.SellerUserId == userIdentifier || 
-                 !string.IsNullOrEmpty(l.SellerUsername) && l.SellerUsername == username)
-            ).OrderByDescending(l => l.CreatedDate).ToList();
-            
-            return Json(new { success = true, listings });
-        }
-
-        public IActionResult Privacy() => View();
-
-        // Diagnostics: quick health check for Firestore and listings
-        [HttpGet]
-        public async Task<IActionResult> Diagnostics()
-        {
-            var diag = new Dictionary<string, object?>();
-            try
-            {
-                diag["firestoreInitialized"] = _firestore?.IsInitialized == true;
-                diag["cacheCount"] = _listings?.Count ?? 0;
-
-                if (_firestore != null && _firestore.IsInitialized)
-                {
-                    var remote = await _firestore.GetAllListingsAsync();
-                    diag["firestoreCount"] = remote?.Count ?? 0;
-                    diag["sampleTitles"] = remote?.Take(5).Select(l => l.Title).ToArray();
-                }
-                else
-                {
-                    diag["firestoreCount"] = -1;
-                    diag["message"] = "Firestore not initialized. Ensure GOOGLE_APPLICATION_CREDENTIALS is set to a valid service account JSON.";
-                }
-
-                _logger.LogInformation("Diagnostics: FS={FS}, cache={Cache}, fsCount={FsCount}", diag["firestoreInitialized"], diag["cacheCount"], diag["firestoreCount"]);
-                return Json(new { ok = true, diagnostics = diag });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Diagnostics error");
-                return Json(new { ok = false, error = ex.Message });
-            }
-        }
-
-        // Seller public dashboard: view another seller's listings
-        [HttpGet]
-        [Route("Home/Seller/{seller}")]
-        public async Task<IActionResult> Seller(string seller)
-        {
-            if (string.IsNullOrWhiteSpace(seller))
-            {
-                return RedirectToAction("Browse");
-            }
-            try
-            {
-                List<Listing> listings;
-                if (_firestore != null && _firestore.IsInitialized)
-                {
-                    var all = await _firestore.GetAllListingsAsync();
-                    listings = all.Where(l => l.IsActive && (
-                        string.Equals(l.SellerUserId?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(l.SellerUsername?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(l.SellerFullName?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase)
-                    )).OrderByDescending(l => l.CreatedDate).ToList();
-
-                    if (all != null && all.Count > 0) _listings = all;
-                }
-                else
-                {
-                    listings = _listings.Where(l => l.IsActive && (
-                        string.Equals(l.SellerUserId?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(l.SellerUsername?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(l.SellerFullName?.Trim(), seller.Trim(), StringComparison.OrdinalIgnoreCase)
-                    )).OrderByDescending(l => l.CreatedDate).ToList();
-                }
-
-                ViewBag.Seller = seller;
-                ViewBag.SellerDisplay = listings.FirstOrDefault()?.SellerFullName ?? listings.FirstOrDefault()?.SellerUsername ?? seller;
-                _logger.LogInformation("Seller dashboard for {Seller} showing {Count} listings", seller, listings.Count);
-                return View("BrowseSeller", listings);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error loading seller dashboard for {Seller}", seller);
-                ViewBag.Seller = seller;
-                return View("BrowseSeller", new List<Listing>());
-            }
-        }
-
-        // Admin Dashboard
         [HttpGet]
         public IActionResult AdminDashboard(string? menu = "overview")
         {
-            // Check if user is admin
-            var isAdmin = string.Equals(HttpContext.Session.GetString("IsAdmin"), "true", StringComparison.OrdinalIgnoreCase);
-            if (!isAdmin)
+            try
             {
-                return RedirectToAction("Login");
+                var model = new AdminDashboardViewModel
+                {
+                    ActiveMenu = string.IsNullOrWhiteSpace(menu) ? "overview" : menu
+                };
+
+                // Populate basic stats from in-memory or database where available
+                try
+                {
+                    // Prefer server cache/listings for listing counts
+                    model.Stats.TotalListings = _listings?.Count(l => l.IsActive) ?? 0;
+                    model.Stats.TotalUsers = 0; // unknown without full user store
+                    model.Stats.TotalRevenue = 0m;
+                    model.Stats.ActiveTransactions = 0;
+
+                    // If EF DbContext has data, try to populate conversations/messages counts
+                    try
+                    {
+                        if (_db != null)
+                        {
+                            model.Stats.ActiveTransactions = _db.Conversations?.Count() ?? model.Stats.ActiveTransactions;
+                        }
+                    }
+                    catch { /* non-fatal */ }
+                }
+                catch { /* non-fatal */ }
+
+                // Recent users & listings - best-effort from firestore if available
+                try
+                {
+                    if (_firestore != null && _firestore.IsInitialized)
+                    {
+                        // Firestore calls are async; don't block long here — return view with defaults
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var listings = await _firestore.GetAllListingsAsync();
+                                if (listings != null)
+                                {
+                                    model.RecentListings = listings.Take(10).Select(l => new AdminDashboardViewModel.ListingInfo { Title = l.Title, Price = l.Price, Views = l.Views, Status = l.IsActive ? "active" : "inactive" }).ToList();
+                                }
+                            }
+                            catch { }
+                        });
+                    }
+                }
+                catch { }
+
+                return View(model);
             }
-
-            var viewModel = new AdminDashboardViewModel
+            catch (Exception ex)
             {
-                ActiveMenu = menu ?? "overview",
-                Stats = new AdminDashboardViewModel.DashboardStats
-                {
-                    TotalUsers = _registeredUsers.Count,
-                    TotalListings = _listings.Count(l => l.IsActive),
-                    TotalRevenue = _listings.Where(l => l.IsActive).Sum(l => l.Price),
-                    ActiveTransactions = _listings.Count(l => l.IsActive)
-                },
-                RecentUsers = _registeredUsers.Take(10).Select(u => new AdminDashboardViewModel.UserInfo
-                {
-                    Name = u.FullName,
-                    Email = u.Email,
-                    Status = "active",
-                    JoinDate = DateTime.Now.AddDays(-5).ToString("MM/dd/yyyy")
-                }).ToList(),
-                RecentListings = _listings.Where(l => l.IsActive).OrderByDescending(l => l.CreatedDate).Take(10).Select(l => new AdminDashboardViewModel.ListingInfo
-                {
-                    Title = l.Title,
-                    Price = l.Price,
-                    Views = 0,
-                    Status = "active"
-                }).ToList()
-            };
-
-            return View(viewModel);
+                _logger.LogError(ex, "AdminDashboard error");
+                return View(new AdminDashboardViewModel { ActiveMenu = menu ?? "overview" });
+            }
         }
     }
 }

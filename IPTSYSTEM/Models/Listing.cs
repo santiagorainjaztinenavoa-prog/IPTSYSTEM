@@ -19,5 +19,8 @@ namespace IPTSYSTEM.Models
         
         // Firebase user_id for Firestore sync
         public string UserId { get; set; } = string.Empty;
+
+        // View count (optional) - some UI expects this field
+        public int Views { get; set; } = 0;
     }
 }

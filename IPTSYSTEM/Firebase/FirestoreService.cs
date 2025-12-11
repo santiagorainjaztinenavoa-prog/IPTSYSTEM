@@ -245,6 +245,30 @@ namespace IPTSYSTEM.Firebase
             }
         }
 
+        // Try to find a user document by an indexed field (email or username). Returns first match or null.
+        public async Task<Dictionary<string, object>?> GetUserByFieldAsync(string fieldName, string value)
+        {
+            if (!IsInitialized || string.IsNullOrWhiteSpace(fieldName) || string.IsNullOrWhiteSpace(value)) return null;
+            try
+            {
+                var col = _db!.Collection("users");
+                var query = col.WhereEqualTo(fieldName, value).Limit(1);
+                var snapshot = await query.GetSnapshotAsync();
+                if (snapshot.Count == 0) return null;
+                var doc = snapshot.Documents[0];
+                if (!doc.Exists) return null;
+                var dict = doc.ToDictionary();
+                // include document id so callers can identify the doc
+                dict["__docId"] = doc.Id;
+                return dict;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "GetUserByFieldAsync failed for {Field}={Value}", fieldName, value);
+                return null;
+            }
+        }
+
         // ========== MESSAGING METHODS ==========
 
         /// <summary>

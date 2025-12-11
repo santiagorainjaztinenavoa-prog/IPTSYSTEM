@@ -180,7 +180,35 @@ window.firebaseDeleteListing = async function(productIdOrDocId) { try { console.
 window.firebaseMarkAsSold = async function(productIdOrDocId) { try { console.log('firebaseMarkAsSold called with:', productIdOrDocId); const col = collection(db, 'tbl_listing'); const q = query(col, where('product_id', '==', productIdOrDocId)); const snaps = await getDocs(q); console.log('Found', snaps.size, 'documents with product_id:', productIdOrDocId); if (snaps.size === 0) { try { console.log('No docs found by product_id, trying as firestore doc id'); const docReference = doc(db, 'tbl_listing', String(productIdOrDocId)); await updateDoc(docReference, { status: 'sold', sold_date: serverTimestamp() }); console.log('Marked as sold by firestore id'); return { success: true }; } catch (e) { console.error('Error marking as sold by doc id:', e); return { success: false, message: 'No matching listing found' }; } } for (const d of snaps.docs) { console.log('Marking as sold doc:', d.id); await updateDoc(doc(db, 'tbl_listing', d.id), { status: 'sold', sold_date: serverTimestamp() }); } console.log('Mark as sold completed successfully'); return { success: true }; } catch (err) { console.error('firebaseMarkAsSold error', err); return { success: false, message: err?.message || String(err) }; } };
 window.firebaseFetchSoldItems = async function(sellerUserId) { try { console.log('🔍 Fetching sold items for seller:', sellerUserId); const col = collection(db, 'tbl_listing'); let q = query(col, where('user_id', '==', sellerUserId), where('status', '==', 'sold')); let snaps = await getDocs(q); console.log('📊 Found', snaps.size, 'sold items'); const soldItems = []; snaps.forEach((docSnap) => { const data = docSnap.data(); if (data.title && typeof data.title === 'string' && data.title.trim() !== '') { soldItems.push({ id: docSnap.id, ...data }); } }); console.log('✅ Returning', soldItems.length, 'sold items'); return { success: true, items: soldItems, count: soldItems.length }; } catch (err) { console.error('firebaseFetchSoldItems error', err); return { success: false, message: err?.message || String(err), items: [] }; } };
 window.__firebaseConfig = firebaseConfig;
-window.firebaseSignIn = async function(email, password) { try { const userCred = await signInWithEmailAndPassword(auth, email, password); const uid = userCred.user.uid; const userDocRef = doc(db, 'users', uid); const snap = await getDoc(userDocRef); if (!snap.exists()) { try { console.warn('Profile document missing for uid, attempting to create minimal profile', { uid }); await setDoc(userDocRef, { first_name: userCred.user.displayName ? userCred.user.displayName.split(' ')[0] : '', last_name: userCred.user.displayName ? userCred.user.displayName.split(' ').slice(1).join(' ') : '', email: userCred.user.email || '', username: (userCred.user.email ? userCred.user.email.split('@')[0] : uid), account_type: 'Buyer', phone_number: '', user_id: uid, date_created: serverTimestamp() }); const newSnap = await getDoc(userDocRef); if (newSnap.exists()) { return { success: true, uid, profile: newSnap.data(), migrated: true }; } else { try { await signOut(auth); } catch { } return { success: false, code: 'user-doc-missing-after-create', message: 'Authenticated but profile could not be created in Firestore.' }; } } catch (createErr) { console.error('Failed to auto-create user profile document', createErr); try { await signOut(auth); } catch { } return { success: false, code: createErr?.code || 'user-doc-create-failed', message: createErr?.message || String(createErr) }; } } return { success: true, uid, profile: snap.data() }; } catch (err) { const code = err?.code || null; const message = err?.message || String(err); console.error('Firebase signIn error', { code, message, err }); return { success: false, code, message }; } };
+window.firebaseSignIn = async function(email, password) { try { const userCred = await signInWithEmailAndPassword(auth, email, password); const uid = userCred.user.uid; const userDocRef = doc(db, 'users', uid); const snap = await getDoc(userDocRef); if (!snap.exists()) { try { console.warn('Profile document missing for uid, attempting to create minimal profile', { uid }); await setDoc(userDocRef, { first_name: userCred.user.displayName ? userCred.user.displayName.split(' ')[0] : '', last_name: userCred.user.displayName ? userCred.user.displayName.split(' ').slice(1).join(' ') : '', email: userCred.user.email || '', username: (userCred.user.email ? userCred.user.email.split('@')[0] : uid), account_type: 'Buyer', phone_number: '', user_id: uid, date_created: serverTimestamp() }); const newSnap = await getDoc(userDocRef); if (newSnap.exists()) { return { success: true, uid, profile: newSnap.data(), migrated: true }; } else { try { await signOut(auth); } catch { } return { success: false, code: 'user-doc-missing-after-create', message: 'Authenticated but profile could not be created in Firestore.' }; } } catch (createErr) { console.error('Failed to auto-create user profile document', createErr); try { await signOut(auth); } catch { } return { success: false, code: createErr?.code || 'user-doc-create-failed', message: createErr?.message || String(createErr) }; } }
+
+        // SECURITY: block sign-in on client if Firestore profile indicates inactive status
+        try {
+            const profile = snap.exists() ? snap.data() : null;
+            let isInactive = false;
+            if (profile) {
+                // status string field
+                if (profile.status && String(profile.status).trim().toLowerCase() === 'inactive') isInactive = true;
+                // account_status alias
+                if (!isInactive && profile.account_status && String(profile.account_status).trim().toLowerCase() === 'inactive') isInactive = true;
+                // boolean flags
+                if (!isInactive && (profile.is_active !== undefined)) {
+                    if (profile.is_active === false || String(profile.is_active).ToLowerCase() === 'false') isInactive = true;
+                }
+                if (!isInactive && (profile.active !== undefined)) {
+                    if (profile.active === false || String(profile.active).ToLowerCase() === 'false') isInactive = true;
+                }
+            }
+            if (isInactive) {
+                try { await signOut(auth); } catch { /* ignore */ }
+                return { success: false, code: 'inactive', message: 'This account has been deactivated. Contact support.' };
+            }
+        } catch (checkErr) {
+            console.debug('Could not verify user status from client Firestore:', checkErr?.message || checkErr);
+            // Fall through — do not block sign-in if client-side check fails
+        }
+
+         return { success: true, uid, profile: snap.data() }; } catch (err) { const code = err?.code || null; const message = err?.message || String(err); console.error('Firebase signIn error', { code, message, err }); return { success: false, code, message }; } };
 window.firebaseUserExistsByEmail = async function(email) { try { const q = query(collection(db, 'users'), where('email', '==', email)); const snap = await getDocs(q); return snap.size > 0; } catch (err) { console.error('Error checking user exists by email', err); return false; } };
 window.establishServerSession = async function(email, uid) { try { let profile = null; try { const userDocRef = doc(db, 'users', uid); const s = await getDoc(userDocRef); if (s.exists()) profile = s.data(); } catch (e) { console.debug('Could not load user profile for server session:', e); } const payload = { Email: email, Uid: uid, Username: profile?.username || null, UserType: profile?.account_type || null, FullName: profile?.first_name || profile?.last_name ? `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() : null }; const resp = await fetch('/Home/ClientLogin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(payload) }); return await resp.json(); } catch (e) { console.error('Failed to establish server session', e); return { success: false, message: e?.message || String(e) }; } };
 window.firebaseFetchSellerProducts = async function(sellerUserId, forceRefresh = false, includeSold = false) {
@@ -926,7 +954,7 @@ window.firebaseGetUnreadCount = async function(userId) {
         
         return { success: true, count: unreadCount };
     } catch (err) {
-        console.error('❌ firebaseGetUnreadCount error:', err);
+        console.error('❌ firebaseGetUnreadCount error', err);
         return { success: false, count: 0 };
     }
 };

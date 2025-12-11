@@ -1,6 +1,6 @@
 // Admin Dashboard Users Management
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
-import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
 // Firebase config
@@ -69,6 +69,16 @@ function getAccountTypeBadge(accountType) {
     }
 }
 
+// Small helper for alerts (replaceable)
+function notify(message) {
+    try {
+        // try in-page toast if you have one; fallback to alert
+        alert(message);
+    } catch (e) {
+        console.log(message);
+    }
+}
+
 // Render table rows
 function renderTable() {
     usersTableBody.innerHTML = '';
@@ -89,27 +99,20 @@ function renderTable() {
     paginationContainer.classList.remove('hidden');
 
     pageUsers.forEach((user) => {
-        const row = document.createElement('tr');
-        row.className = 'border-b border-gray-700 hover:bg-gray-800 transition';
-        
-        const userInitial = (user.first_name?.charAt(0) || user.email?.charAt(0) || 'U').toUpperCase();
-        const userName = user.first_name || 'Unknown';
-        const userLastName = user.last_name || '';
-        const userEmail = user.email || 'N/A';
-        const userUsername = user.username || 'N/A';
-        const accountTypeBadge = getAccountTypeBadge(user.account_type);
-        const joinedDate = formatDate(user.date_created);
-        
-        row.innerHTML = '<td class="py-4 px-4"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">' +
-            userInitial +
-            '</div><div><p class="font-medium text-white">' + userName + ' ' + userLastName + '</p><p class="text-xs text-gray-500">@' + userUsername + '</p></div></div></td>' +
-            '<td class="py-4 px-4 text-gray-300">' + userEmail + '</td>' +
-            '<td class="py-4 px-4">' + accountTypeBadge + '</td>' +
-            '<td class="py-4 px-4 text-gray-400 text-sm">' + joinedDate + '</td>' +
-            '<td class="py-4 px-4 text-center"><button class="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded transition" title="View user details"><i class="bi bi-eye"></i></button></td>';
-        
-        usersTableBody.appendChild(row);
+        // Normalize user fields for the renderer
+        const userForRow = {
+            id: user.id,
+            name: ((user.first_name || user.name || 'Unknown') + (user.last_name ? (' ' + user.last_name) : '')).trim(),
+            email: user.email || 'N/A',
+            accountType: user.account_type || user.accountType || 'buyer',
+            createdAt: formatDate(user.date_created),
+            status: (user.status || 'inactive').toLowerCase()
+        };
+
+        // Insert the rendered row HTML (renderUserRow returns a full <tr>...</tr>)
+        usersTableBody.insertAdjacentHTML('beforeend', renderUserRow(userForRow));
     });
+
 
     // Update pagination info
     paginationInfo.textContent = filteredUsers.length;
@@ -160,10 +163,10 @@ async function fetchUsers() {
         const snapshot = await getDocs(usersCollection);
 
         allUsers = [];
-        snapshot.forEach(doc => {
+        snapshot.forEach(docSnap => {
             allUsers.push({
-                id: doc.id,
-                ...doc.data()
+                id: docSnap.id,
+                ...docSnap.data()
             });
         });
 
@@ -228,3 +231,169 @@ if (document.readyState === 'loading') {
 } else {
     initializeUsersTable();
 }
+
+// Edit User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".editUserBtn")) {
+        const userId = e.target.closest(".editUserBtn").dataset.id;
+        openEditUserModal(userId);
+    }
+});
+
+// Delete User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".deleteUserBtn")) {
+        const userId = e.target.closest(".deleteUserBtn").dataset.id;
+        deleteUserAccount(userId);
+    }
+});
+
+// Deactivate User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".deactivateUserBtn")) {
+        const userId = e.target.closest(".deactivateUserBtn").dataset.id;
+        deactivateUser(userId);
+    }
+});
+
+// Reactivate User
+document.addEventListener("click", (e) => {
+    if (e.target.closest(".reactivateUserBtn")) {
+        const userId = e.target.closest(".reactivateUserBtn").dataset.id;
+        reactivateUser(userId);
+    }
+});
+
+// ---- Implementations for Edit / Delete / Deactivate / Reactivate ----
+
+async function openEditUserModal(userId) {
+    const user = allUsers.find(u => u.id === userId);
+    if (!user) {
+        notify('User not found');
+        return;
+    }
+
+    // Simple prompt-based editor (replace with a proper modal in the future)
+    const currentFullName = ((user.first_name || '') + (user.last_name ? (' ' + user.last_name) : '')).trim();
+    const newFullName = prompt('Edit full name for ' + (user.email || userId), currentFullName);
+    if (newFullName === null) return; // cancelled
+
+    const parts = newFullName.trim().split(/\s+/);
+    const first = parts.shift() || '';
+    const last = parts.join(' ') || '';
+
+    try {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, { first_name: first, last_name: last });
+        notify('User updated');
+        // Update local cache and re-render
+        const idx = allUsers.findIndex(u => u.id === userId);
+        if (idx !== -1) {
+            allUsers[idx].first_name = first;
+            allUsers[idx].last_name = last;
+        }
+        applyFilters();
+    } catch (err) {
+        console.error('Error updating user:', err);
+        notify('Failed to update user: ' + (err.message || err));
+    }
+}
+
+async function deleteUserAccount(userId) {
+    const confirmed = confirm('Delete this user? This action cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+        const userRef = doc(db, 'users', userId);
+        await deleteDoc(userRef);
+        notify('User deleted');
+        // Remove from local cache and re-render
+        allUsers = allUsers.filter(u => u.id !== userId);
+        applyFilters();
+    } catch (err) {
+        console.error('Error deleting user:', err);
+        notify('Failed to delete user: ' + (err.message || err));
+    }
+}
+
+async function deactivateUser(userId) {
+    const confirmed = confirm('Deactivate this user?');
+    if (!confirmed) return;
+
+    try {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, { status: 'inactive' });
+        notify('User deactivated');
+        const idx = allUsers.findIndex(u => u.id === userId);
+        if (idx !== -1) allUsers[idx].status = 'inactive';
+        applyFilters();
+    } catch (err) {
+        console.error('Error deactivating user:', err);
+        notify('Failed to deactivate user: ' + (err.message || err));
+    }
+}
+
+async function reactivateUser(userId) {
+    const confirmed = confirm('Reactivate this user?');
+    if (!confirmed) return;
+
+    try {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, { status: 'active' });
+        notify('User reactivated');
+        const idx = allUsers.findIndex(u => u.id === userId);
+        if (idx !== -1) allUsers[idx].status = 'active';
+        applyFilters();
+    } catch (err) {
+        console.error('Error reactivating user:', err);
+        notify('Failed to reactivate user: ' + (err.message || err));
+    }
+}
+
+function renderUserRow(user) {
+    // user is expected to have: id, name, email, accountType, createdAt, status
+    const accountBadge = getAccountTypeBadge(user.accountType);
+    return `
+    <tr class="border-b border-gray-700 hover:bg-gray-800 transition">
+        <td class="py-4 px-4 font-medium text-white">${user.name}</td>
+        <td class="py-4 px-4 text-gray-300">${user.email}</td>
+        <td class="py-4 px-4">${accountBadge}</td>
+        <td class="py-4 px-4 text-gray-300">${user.createdAt}</td>
+
+        <td class="py-4 px-4 text-center">
+            <div class="flex items-center justify-center gap-2">
+
+                <!-- EDIT -->
+                <button class="editUserBtn px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs font-medium transition"
+                        data-id="${user.id}">
+                    <i class="bi bi-pencil-square"></i>
+                </button>
+
+                <!-- DELETE -->
+                <button class="deleteUserBtn px-3 py-1.5 rounded-lg bg-red-900 hover:bg-red-800 text-red-300 text-xs font-medium transition"
+                        data-id="${user.id}">
+                    <i class="bi bi-trash"></i>
+                </button>
+
+                <!-- DEACTIVATE -->
+                ${user.status === "active" ? `
+                    <button class="deactivateUserBtn px-3 py-1.5 rounded-lg bg-yellow-900 hover:bg-yellow-800 text-yellow-300 text-xs font-medium transition"
+                            data-id="${user.id}">
+                        <i class="bi bi-slash-circle"></i>
+                    </button>
+                ` : ""}
+
+                <!-- REACTIVATE -->
+                ${user.status === "inactive" ? `
+                    <button class="reactivateUserBtn px-3 py-1.5 rounded-lg bg-green-900 hover:bg-green-800 text-green-300 text-xs font-medium transition"
+                            data-id="${user.id}">
+                        <i class="bi bi-check-circle"></i>
+                    </button>
+                ` : ""}
+
+            </div>
+        </td>
+    </tr>`;
+}
+
+
