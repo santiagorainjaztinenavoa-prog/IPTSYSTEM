@@ -77,7 +77,8 @@
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-auto">
+        <!-- Add data-active-menu so client scripts can detect the active admin page without parsing URL -->
+        <main class="flex-1 overflow-auto" data-active-menu="@Model.ActiveMenu">
             <!-- Header -->
             <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                 <h1 class="text-2xl font-bold text-white">Admin Dashboard</h1>
@@ -110,6 +111,7 @@
                                     <i class="bi bi-people text-blue-400 text-2xl"></i>
                                 </div>
                             </div>
+                            <!-- ID used by admin-reports.js to populate realtime/aggregated counts -->
                             <p id="totalUsers" class="text-3xl font-bold text-white">@Model.Stats.TotalUsers.ToString("N0")</p>
                             <p class="text-xs text-green-400 mt-2 flex items-center gap-1">
                                 <i class="bi bi-arrow-up"></i> +12.5% from last month
@@ -177,6 +179,7 @@
                                             <th class="text-left py-3 px-2 font-semibold">Status</th>
                                         </tr>
                                     </thead>
+                                    <!-- admin-reports.js will update #recentUsersBody realtime; server-side Razor output still provided as initial markup -->
                                     <tbody id="recentUsersBody">
                                         @foreach (var user in Model.RecentUsers)
                                         {
@@ -213,6 +216,7 @@
                                             <th class="text-center py-3 px-2 font-semibold">Actions</th>
                                         </tr>
                                     </thead>
+                                    <!-- admin-reports.js will update #recentListingsBody realtime; server-side Razor output still provided as initial markup -->
                                     <tbody id="recentListingsBody">
                                         @foreach (var listing in Model.RecentListings)
                                         {
@@ -221,7 +225,7 @@
                                                 <td class="py-3 px-2 text-gray-300">₱@listing.Price.ToString("N0")</td>
 
                                                 <td class="py-3 px-2 text-gray-300">
-                                                    <span class="flex items-center gap-1" onclick="viewUserModal" (${JSON.stringify(user)})>
+                                                    <span class="flex items-center gap-1">
                                                         <i class="bi bi-eye"></i> @listing.Views
                                                     </span>
                                                 </td>
@@ -444,6 +448,8 @@
                         </div>
                     </div>
                 }
+            </div>
+        </main>
     </div>
 
     <script>
@@ -520,8 +526,14 @@
         }
     </script>
 
-    <!-- Admin Users Management Module -->
+    <!-- Admin Users & Overview Modules -->
     <script type="module" src="/js/admin-users.js"></script>
-            <script type="module" src="/js/admin-overview.js"></script>
+    <script type="module" src="/js/admin-overview.js"></script>
+
+    @* Load reports module only when Reports menu is active to avoid unnecessary listeners/reads *@
+    @if (Model.ActiveMenu == "reports")
+    {
+        <script type="module" src="/js/admin-reports.js"></script>
+    }
 </body>
 </html>
