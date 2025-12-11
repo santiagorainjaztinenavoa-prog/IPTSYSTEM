@@ -104,6 +104,14 @@
     </div>
 </div>
 
+<!-- Load listings-manager EARLY so onclick handlers can find the functions -->
+<script src="~/js/listings-manager.js?v=@DateTime.Now.Ticks"></script>
+<script>
+    // Quick runtime check to show whether the functions are available
+    console.log('🏷️ Inline check - window.openListingModal:', typeof window.openListingModal);
+    console.log('🏷️ Inline check - window.editListing:', typeof window.editListing);
+</script>
+
 <section class="profile-page py-4" 
          data-user-name="@username"
          data-user-fullname="@fullName"
@@ -548,7 +556,7 @@
 </div>
 
 @section Scripts {
-<script src="~/js/firebase-client.js?v=@DateTime.Now.Ticks" type="module"></script>
+
 <script>
     // Immediate loading without waiting for Firebase
     let userListingsLoaded = false;
@@ -1449,7 +1457,6 @@
     // Also enable on DOM ready in case of pre-rendered
     document.addEventListener('DOMContentLoaded', () => enableReviewMediaClicks());
 </script>
-<script src="~/js/listings-manager.js?v=@DateTime.Now.Ticks"></script>
 <script src="~/js/listings-enhanced.js?v=@DateTime.Now.Ticks"></script>
 <script>
     // OVERRIDE FUNCTIONS AFTER ALL SCRIPTS LOAD - This ensures our modal functions are FINAL
