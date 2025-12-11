@@ -1,5 +1,14 @@
 // ========== LISTINGS MANAGER - ENHANCED CRUD OPERATIONS ==========
 
+console.log('🔍 listings-manager.js LOADED');
+
+// Expose placeholder functions immediately so onclick handlers don't fail
+window.openListingModal = window.openListingModal || function () { console.warn('openListingModal placeholder called - real function not ready yet'); };
+window.editListing = window.editListing || function () { console.warn('editListing placeholder called - real function not ready yet'); };
+window.saveListing = window.saveListing || function () { console.warn('saveListing placeholder called - real function not ready yet'); };
+window.deleteListing = window.deleteListing || function () { console.warn('deleteListing placeholder called - real function not ready yet'); };
+window.removeImage = window.removeImage || function () { console.warn('removeImage placeholder called - real function not ready yet'); };
+
 let listingModal;
 let toastNotification;
 
@@ -7,7 +16,7 @@ let toastNotification;
 function categoryToIcon(category) {
     if (!category || typeof category !== 'string') return 'bi-tag';
     const c = category.trim().toLowerCase();
-    switch(c) {
+    switch (c) {
         case 'electronics': return 'bi-laptop';
         case 'fashion': return 'bi-bag';
         case 'home & living': return 'bi-house-door';
@@ -28,24 +37,43 @@ function normalizeCategoryName(category) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    console.log('🎯 listings-manager.js DOMContentLoaded event fired');
+
     // Initialize Bootstrap components
     const modalEl = document.getElementById('listingModal');
     const toastEl = document.getElementById('toastNotification');
-    
+
     if (modalEl) {
         listingModal = new bootstrap.Modal(modalEl);
+        console.log('✅ listingModal Bootstrap instance created');
+    } else {
+        console.warn('⚠️ listingModal element not found during init');
     }
-    
+
     if (toastEl) {
- toastNotification = new bootstrap.Toast(toastEl);
+        toastNotification = new bootstrap.Toast(toastEl);
+        console.log('✅ toastNotification Bootstrap instance created');
     }
-    
+
     // Initialize form event listeners
     initializeFormListeners();
-    
+    console.log('✅ Form listeners initialized');
+
     // Initialize image upload
     initializeImageUpload();
-    
+    console.log('✅ Image upload initialized');
+
+    // Attach direct click handlers to buttons as additional safety measure
+    const addNewListingBtn = document.getElementById('addNewListingBtn');
+    if (addNewListingBtn) {
+        console.log('✅ Found Add New Listing button, attaching click handler');
+        addNewListingBtn.addEventListener('click', function (e) {
+            console.log('🖱️ Add New Listing button clicked');
+            e.preventDefault();
+            openListingModal();
+        });
+    }
+
     // Note: loadListingsFromFirebase() is called from the Mylisting.cshtml view
     // after sessionStorage is properly populated
 });
@@ -56,93 +84,93 @@ function initializeImageUpload() {
     const imagePreviewArea = document.getElementById('imagePreviewArea');
     const imageFileInput = document.getElementById('imageFileInput');
     const imageUrlInput = document.getElementById('imageUrlInput');
-    
+
     if (!imagePreviewArea || !imageFileInput) return;
-    
+
     // Click to upload
-    imagePreviewArea.addEventListener('click', function() {
-  imageFileInput.click();
+    imagePreviewArea.addEventListener('click', function () {
+        imageFileInput.click();
     });
-    
+
     // File selection
-    imageFileInput.addEventListener('change', function(e) {
+    imageFileInput.addEventListener('change', function (e) {
         const file = e.target.files[0];
-    if (file) {
-        handleImageFile(file);
+        if (file) {
+            handleImageFile(file);
         }
     });
-    
+
     // Drag and drop events
-    imagePreviewArea.addEventListener('dragover', function(e) {
-   e.preventDefault();
+    imagePreviewArea.addEventListener('dragover', function (e) {
+        e.preventDefault();
         e.stopPropagation();
- this.classList.add('drag-over');
+        this.classList.add('drag-over');
     });
-    
-    imagePreviewArea.addEventListener('dragleave', function(e) {
+
+    imagePreviewArea.addEventListener('dragleave', function (e) {
         e.preventDefault();
         e.stopPropagation();
         this.classList.remove('drag-over');
     });
-    
-    imagePreviewArea.addEventListener('drop', function(e) {
+
+    imagePreviewArea.addEventListener('drop', function (e) {
         e.preventDefault();
-    e.stopPropagation();
+        e.stopPropagation();
         this.classList.remove('drag-over');
-        
+
         const files = e.dataTransfer.files;
         if (files.length > 0) {
-       const file = files[0];
-      if (file.type.startsWith('image/')) {
-         imageFileInput.files = files;
-    handleImageFile(file);
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                imageFileInput.files = files;
+                handleImageFile(file);
             } else {
-           showToast('Please upload an image file', 'warning');
+                showToast('Please upload an image file', 'warning');
             }
         }
     });
-    
+
     // URL input alternative
     if (imageUrlInput) {
-        imageUrlInput.addEventListener('input', debounce(function() {
+        imageUrlInput.addEventListener('input', debounce(function () {
             const url = this.value.trim();
-  if (url) {
-      updateImagePreview(url);
-    }
+            if (url) {
+                updateImagePreview(url);
+            }
         }, 500));
     }
 }
 
 function handleImageFile(file) {
     // Validate file type
-if (!file.type.startsWith('image/')) {
-  showToast('Please select an image file', 'warning');
-      return;
+    if (!file.type.startsWith('image/')) {
+        showToast('Please select an image file', 'warning');
+        return;
     }
-    
+
     // Validate file size (10MB max)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
- showToast('Image size must be less than 10MB', 'warning');
+        showToast('Image size must be less than 10MB', 'warning');
         return;
     }
-    
+
     // Read and preview the image
- const reader = new FileReader();
-    
-    reader.onload = function(e) {
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
         const imageUrl = e.target.result;
         updateImagePreview(imageUrl);
-        
+
         // Store the base64 image in the hidden field
-      document.getElementById('imageUrl').value = imageUrl;
+        document.getElementById('imageUrl').value = imageUrl;
     };
-    
-    reader.onerror = function() {
+
+    reader.onerror = function () {
         showToast('Failed to read image file', 'error');
     };
-    
-reader.readAsDataURL(file);
+
+    reader.readAsDataURL(file);
 }
 
 function updateImagePreview(imageUrl) {
@@ -150,9 +178,9 @@ function updateImagePreview(imageUrl) {
     const uploadPlaceholder = document.getElementById('uploadPlaceholder');
     const removeBtn = document.getElementById('removeImageBtn');
     const imagePreviewArea = document.getElementById('imagePreviewArea');
-    
+
     if (!imagePreview || !uploadPlaceholder || !removeBtn) return;
-    
+
     // Update preview image
     imagePreview.src = imageUrl;
     imagePreview.classList.add('show');
@@ -160,65 +188,65 @@ function updateImagePreview(imageUrl) {
 
     // Hide placeholder
     uploadPlaceholder.style.display = 'none';
-    
+
     // Show remove button
     removeBtn.classList.add('show');
     removeBtn.style.display = 'flex';
-    
+
     // Add has-image class
     imagePreviewArea.classList.add('has-image');
-    
+
     // Handle image load error
-    imagePreview.onerror = function() {
+    imagePreview.onerror = function () {
         showToast('Failed to load image', 'warning');
-    resetImagePreview();
+        resetImagePreview();
     };
-    
+
     // Store URL in hidden field if not already base64
     if (!imageUrl.startsWith('data:')) {
         document.getElementById('imageUrl').value = imageUrl;
-  }
+    }
 }
 
 function removeImage() {
     resetImagePreview();
-    
+
     // Clear file input
     const imageFileInput = document.getElementById('imageFileInput');
     if (imageFileInput) {
         imageFileInput.value = '';
     }
-    
+
     // Clear URL input
     const imageUrlInput = document.getElementById('imageUrlInput');
     if (imageUrlInput) {
         imageUrlInput.value = '';
     }
-    
+
     // Clear hidden field
     document.getElementById('imageUrl').value = '';
 }
 
 function resetImagePreview() {
-  const imagePreview = document.getElementById('imagePreview');
-  const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+    const imagePreview = document.getElementById('imagePreview');
+    const uploadPlaceholder = document.getElementById('uploadPlaceholder');
     const removeBtn = document.getElementById('removeImageBtn');
     const imagePreviewArea = document.getElementById('imagePreviewArea');
-    
+
     if (!imagePreview || !uploadPlaceholder || !removeBtn) return;
-    
+
     // Hide preview image
     imagePreview.src = '';
     imagePreview.classList.remove('show');
     imagePreview.style.display = 'none';
-    
+
     // Show placeholder
     uploadPlaceholder.style.display = 'block';
-    
+
     // Hide remove button
     removeBtn.classList.remove('show');
     removeBtn.style.display = 'none';
-    
+
     // Remove has-image class
     imagePreviewArea.classList.remove('has-image');
 }
@@ -227,129 +255,180 @@ function resetImagePreview() {
 
 // Open modal for creating new listing
 function openListingModal() {
-    const form = document.getElementById('listingForm');
-    const modalTitle = document.getElementById('modalTitle');
-  const saveButtonText = document.getElementById('saveButtonText');
-    
-    if (modalTitle) modalTitle.textContent = 'Add New Listing';
-    if (saveButtonText) saveButtonText.textContent = 'Save Listing';
- 
-    if (form) form.reset();
-    
-    // Reset hidden ID field
- const listingIdField = document.getElementById('listingId');
-    if (listingIdField) listingIdField.value = '0';
+    try {
+        console.log('🔓 openListingModal called');
 
-    // Reset image preview
-    resetImagePreview();
-    
-    // Clear form validation states
- clearValidationStates();
-    
-    if (listingModal) listingModal.show();
+        // Find the modal element
+        const modalEl = document.getElementById('listingModal');
+        console.log('📋 Modal element found:', !!modalEl);
+
+        if (!modalEl) {
+            console.error('❌ Modal element not found in DOM');
+            return;
+        }
+
+        // Reset form
+        const form = document.getElementById('listingForm');
+        if (form) {
+            form.reset();
+            console.log('✅ Form reset');
+        }
+
+        // Reset modal title and button text
+        const modalTitle = document.getElementById('modalTitle');
+        if (modalTitle) modalTitle.textContent = 'Add New Listing';
+
+        const saveButtonText = document.getElementById('saveButtonText');
+        if (saveButtonText) saveButtonText.textContent = 'Save Listing';
+
+        // Reset hidden ID field
+        const listingIdField = document.getElementById('listingId');
+        if (listingIdField) listingIdField.value = '0';
+
+        // Reset image preview
+        resetImagePreview();
+
+        // Clear form validation states
+        clearValidationStates();
+
+        // Get or create Bootstrap Modal instance
+        let modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (!modalInstance) {
+            console.log('⚙️  Creating new Bootstrap Modal instance...');
+            modalInstance = new bootstrap.Modal(modalEl);
+        }
+
+        // Show the modal
+        console.log('📂 Showing modal...');
+        modalInstance.show();
+        console.log('✅ Modal shown successfully');
+
+    } catch (error) {
+        console.error('❌ Error in openListingModal:', error);
+        console.error('Error details:', error.message);
+        alert('Failed to open listing modal: ' + error.message);
+    }
 }
+
+// Expose functions to global scope for onclick handlers
+console.log('🔧 Setting window.openListingModal...');
+window.openListingModal = openListingModal;
+console.log('✅ window.openListingModal is now:', typeof window.openListingModal);
 
 // Edit existing listing
 async function editListing(id) {
     try {
+        console.log('✏️ editListing called with id:', id);
         showLoadingState();
-        console.log('🔍 Attempting to edit listing:', id);
-        
+
+        // Find the modal element
+        const modalEl = document.getElementById('listingModal');
+        if (!modalEl) {
+            console.error('❌ Modal element not found');
+            return;
+        }
+
         // Try to get the listing from the current page first (faster)
         const existingCard = document.getElementById(`listing-${id}`);
         if (existingCard) {
             console.log('✅ Found listing in page DOM');
             const listing = {
                 id: id,
-                title: existingCard.getAttribute('data-title') || existingCard.querySelector('.product-title')?.textContent ||'',
+                title: existingCard.getAttribute('data-title') || existingCard.querySelector('.product-title')?.textContent || '',
                 description: existingCard.getAttribute('data-description') || existingCard.querySelector('.product-description')?.textContent || '',
                 price: parseFloat(existingCard.getAttribute('data-price') || existingCard.querySelector('.product-price')?.textContent.replace(/[^0-9.]/g, '') || '0'),
                 category: existingCard.getAttribute('data-category') || existingCard.querySelector('.product-category')?.textContent || '',
                 condition: existingCard.getAttribute('data-condition') || 'New',
                 imageUrl: existingCard.querySelector('.product-image')?.src || ''
             };
-            
+
             // Update modal title
             const modalTitle = document.getElementById('modalTitle');
             const saveButtonText = document.getElementById('saveButtonText');
-            
+
             if (modalTitle) modalTitle.textContent = 'Edit Listing';
             if (saveButtonText) saveButtonText.textContent = 'Update Listing';
-            
+
             // Populate form fields
             populateForm(listing);
-            
+
             // Show preview image
             if (listing.imageUrl) {
                 updateImagePreview(listing.imageUrl);
             }
-            
+
             hideLoadingState();
-            
-            if (listingModal) listingModal.show();
+
+            // Get or create Bootstrap Modal instance and show
+            let modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (!modalInstance) {
+                modalInstance = new bootstrap.Modal(modalEl);
+            }
+            modalInstance.show();
+            console.log('✅ Edit modal opened');
             return;
         }
-        
+
         // Try Firebase fetch
         if (typeof window.firebaseFetchProductById === 'function') {
             console.log('📡 Fetching from Firebase...');
             const result = await window.firebaseFetchProductById(id);
-            
+
             if (result && result.success && result.product) {
                 console.log('✅ Found listing in Firebase');
                 const listing = result.product;
-                
+
                 // Update modal title
                 const modalTitle = document.getElementById('modalTitle');
                 const saveButtonText = document.getElementById('saveButtonText');
-                
+
                 if (modalTitle) modalTitle.textContent = 'Edit Listing';
                 if (saveButtonText) saveButtonText.textContent = 'Update Listing';
-                
+
                 // Populate form fields
                 populateForm(listing);
-                
+
                 // Show preview image
                 if (listing.imageUrl) {
                     updateImagePreview(listing.imageUrl);
                 }
-                
+
                 hideLoadingState();
-                
+
                 if (listingModal) listingModal.show();
                 return;
             }
         }
-        
+
         // Fall back to server-side fetch if not found in DOM or Firebase
         console.log('📡 Fetching from server API...');
         const response = await fetch(`/Home/GetListing?id=${id}`);
-        
+
         if (!response.ok) {
             throw new Error('Failed to fetch listing details');
         }
-        
+
         const listing = await response.json();
-        
+
         // Update modal title
         const modalTitle = document.getElementById('modalTitle');
         const saveButtonText = document.getElementById('saveButtonText');
-        
+
         if (modalTitle) modalTitle.textContent = 'Edit Listing';
         if (saveButtonText) saveButtonText.textContent = 'Update Listing';
-        
+
         // Populate form fields
         populateForm(listing);
-        
+
         // Show preview image
         if (listing.imageUrl || listing.ImageUrl) {
             updateImagePreview(listing.imageUrl || listing.ImageUrl);
         }
-        
+
         hideLoadingState();
-        
+
         if (listingModal) listingModal.show();
-        
+
     } catch (error) {
         hideLoadingState();
         showToast('Error loading listing: ' + error.message, 'error');
@@ -360,18 +439,18 @@ async function editListing(id) {
 // Populate form with listing data
 function populateForm(listing) {
     console.log('📝 Populating form with listing:', listing);
-    
+
     // Set all form fields (handle both server and Firebase formats)
     setFieldValue('listingId', listing.id || listing.Id || listing.product_id || '');
     setFieldValue('title', listing.title || listing.Title || '');
     setFieldValue('description', listing.description || listing.Description || '');
     setFieldValue('price', listing.price || listing.Price || 0);
     setFieldValue('category', listing.category || listing.Category || '');
-    
+
     // Set image URL in hidden field
     const imageUrl = listing.imageUrl || listing.image_url || listing.ImageUrl || '';
     setFieldValue('imageUrl', imageUrl);
-    
+
     // Show image preview if imageUrl exists
     if (imageUrl) {
         console.log('📷 Showing image preview:', imageUrl);
@@ -380,21 +459,21 @@ function populateForm(listing) {
         console.log('⚠️ No image URL found in listing');
         resetImagePreview();
     }
-    
+
     // Set condition radio button
     const condition = listing.condition || listing.Condition || '';
     const conditionInput = document.querySelector(`input[name="condition"][value="${condition}"]`);
     if (conditionInput) {
         conditionInput.checked = true;
     }
-    
+
     console.log('✅ Form populated successfully');
 }
 
 // Helper to set field value safely
 function setFieldValue(fieldId, value) {
     const field = document.getElementById(fieldId);
-  if (field && value !== null && value !== undefined) {
+    if (field && value !== null && value !== undefined) {
         field.value = value;
     }
 }
@@ -403,90 +482,90 @@ function setFieldValue(fieldId, value) {
 
 async function saveListing() {
     const form = document.getElementById('listingForm');
-    
+
     // Validate form
     if (!validateForm(form)) {
         showToast('Please fill in all required fields correctly', 'warning');
         return;
     }
-    
+
     // Get form data
     const listingData = getFormData();
-    
+
     // Validate listing data
     if (!listingData) {
-      showToast('Please check your form data', 'error');
+        showToast('Please check your form data', 'error');
         return;
     }
- 
-try {
-  // Show loading state
+
+    try {
+        // Show loading state
         showSaveLoadingState();
-  
-    // Determine if creating or updating
-   // NOTE: listingId may be a numeric server ID or a non-numeric Firestore document ID.
-   const rawId = (document.getElementById('listingId') && document.getElementById('listingId').value) ? document.getElementById('listingId').value : '';
-   const numericId = parseInt(rawId || '0');
-   const isFirebaseId = rawId && isNaN(numericId);
-   const isUpdate = !isFirebaseId && listingData.id > 0;
 
-  // If this is a Firestore-only listing (non-numeric id) and firebaseUpdateListing is available,
-  // update directly in Firestore to avoid creating a new server-side listing.
-  if (isFirebaseId && typeof window.firebaseUpdateListing === 'function') {
-        try {
-            const fbPayload = {
-                id: rawId,
-                title: listingData.title,
-                description: listingData.description,
-                price: listingData.price,
-                category: listingData.category,
-                condition: listingData.condition,
-                imageUrl: listingData.imageUrl
-            };
-            const fbResult = await window.firebaseUpdateListing(fbPayload);
-            hideSaveLoadingState();
-            if (fbResult && fbResult.success) {
-                showToast('Listing updated successfully!', 'success');
-                // Attempt to update UI cards if helper exists
-                if (typeof updateListingOnPage === 'function') {
-                    try { updateListingOnPage(Object.assign({}, listingData, { product_id: rawId })); } catch (e) { }
+        // Determine if creating or updating
+        // NOTE: listingId may be a numeric server ID or a non-numeric Firestore document ID.
+        const rawId = (document.getElementById('listingId') && document.getElementById('listingId').value) ? document.getElementById('listingId').value : '';
+        const numericId = parseInt(rawId || '0');
+        const isFirebaseId = rawId && isNaN(numericId);
+        const isUpdate = !isFirebaseId && listingData.id > 0;
+
+        // If this is a Firestore-only listing (non-numeric id) and firebaseUpdateListing is available,
+        // update directly in Firestore to avoid creating a new server-side listing.
+        if (isFirebaseId && typeof window.firebaseUpdateListing === 'function') {
+            try {
+                const fbPayload = {
+                    id: rawId,
+                    title: listingData.title,
+                    description: listingData.description,
+                    price: listingData.price,
+                    category: listingData.category,
+                    condition: listingData.condition,
+                    imageUrl: listingData.imageUrl
+                };
+                const fbResult = await window.firebaseUpdateListing(fbPayload);
+                hideSaveLoadingState();
+                if (fbResult && fbResult.success) {
+                    showToast('Listing updated successfully!', 'success');
+                    // Attempt to update UI cards if helper exists
+                    if (typeof updateListingOnPage === 'function') {
+                        try { updateListingOnPage(Object.assign({}, listingData, { product_id: rawId })); } catch (e) { }
+                    }
+                    if (listingModal) listingModal.hide();
+                    setTimeout(() => window.location.reload(), 800);
+                    return;
+                } else {
+                    showToast((fbResult && fbResult.message) ? fbResult.message : 'Failed to update listing in Firestore', 'error');
+                    // fallthrough to server update as a last resort
                 }
-                if (listingModal) listingModal.hide();
-                setTimeout(() => window.location.reload(), 800);
-                return;
-            } else {
-                showToast((fbResult && fbResult.message) ? fbResult.message : 'Failed to update listing in Firestore', 'error');
-                // fallthrough to server update as a last resort
+            } catch (e) {
+                console.error('Firestore update failed:', e);
+                // continue to attempt server-side update below if applicable
             }
-        } catch (e) {
-            console.error('Firestore update failed:', e);
-            // continue to attempt server-side update below if applicable
         }
-    }
 
-  const url = isUpdate ? '/Home/UpdateListing' : '/Home/CreateListing';
+        const url = isUpdate ? '/Home/UpdateListing' : '/Home/CreateListing';
         const actionText = isUpdate ? 'updated' : 'created';
-        
-   // Send request
-    const response = await fetch(url, {
-   method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
- },
+
+        // Send request
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify(listingData)
-   });
-      
-   if (!response.ok) {
-        throw new Error(`Failed to ${actionText} listing`);
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to ${actionText} listing`);
         }
- 
+
         const result = await response.json();
-        
-hideSaveLoadingState();
-      
+
+        hideSaveLoadingState();
+
         if (result.success) {
             showToast(`Listing ${actionText} successfully!`, 'success');
-      
+
             // Mirror data into Firestore (if client Firebase helpers are available)
             // Do this BEFORE closing/reloading
             try {
@@ -504,7 +583,7 @@ hideSaveLoadingState();
                     };
 
                     console.log('🔥 Syncing to Firestore:', fbPayload);
-                    
+
                     if (isUpdate && typeof window.firebaseUpdateListing === 'function') {
                         const updateResult = await window.firebaseUpdateListing(fbPayload);
                         console.log('🔥 Firestore update result:', updateResult);
@@ -523,10 +602,10 @@ hideSaveLoadingState();
                 console.error('❌ Firestore mirroring error:', e);
                 // Continue anyway - the listing was saved on the server
             }
-      
+
             // Close modal
             if (listingModal) listingModal.hide();
-      
+
             // Reload page after a short delay to show the toast and allow Firestore to complete
             setTimeout(() => {
                 window.location.reload();
@@ -534,8 +613,8 @@ hideSaveLoadingState();
         } else {
             showToast(result.message || `Failed to ${actionText} listing`, 'error');
         }
-        
-  } catch (error) {
+
+    } catch (error) {
         hideSaveLoadingState();
         showToast('Error saving listing: ' + error.message, 'error');
         console.error('Save listing error:', error);
@@ -545,31 +624,31 @@ hideSaveLoadingState();
 // Get form data as object
 function getFormData() {
     try {
-     const listingId = parseInt(document.getElementById('listingId')?.value || '0');
-      const title = document.getElementById('title')?.value?.trim();
-     const description = document.getElementById('description')?.value?.trim();
+        const listingId = parseInt(document.getElementById('listingId')?.value || '0');
+        const title = document.getElementById('title')?.value?.trim();
+        const description = document.getElementById('description')?.value?.trim();
         const price = parseFloat(document.getElementById('price')?.value || '0');
         const category = document.getElementById('category')?.value;
-    const imageUrl = document.getElementById('imageUrl')?.value?.trim();
-    
+        const imageUrl = document.getElementById('imageUrl')?.value?.trim();
+
         // Get selected condition
         const conditionInput = document.querySelector('input[name="condition"]:checked');
         const condition = conditionInput?.value;
-      
-// Validate required fields
-    if (!title || !description || !category || !condition) {
+
+        // Validate required fields
+        if (!title || !description || !category || !condition) {
             return null;
         }
- 
-      return {
-   id: listingId,
-       title: title,
-description: description,
-      price: price,
-    category: category,
-     condition: condition,
+
+        return {
+            id: listingId,
+            title: title,
+            description: description,
+            price: price,
+            category: category,
+            condition: condition,
             imageUrl: imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'
-  };
+        };
     } catch (error) {
         console.error('Error getting form data:', error);
         return null;
@@ -579,25 +658,25 @@ description: description,
 // Validate form
 function validateForm(form) {
     if (!form) return false;
-    
+
     // Use HTML5 validation
     if (!form.checkValidity()) {
         form.reportValidity();
-  return false;
+        return false;
     }
-    
+
     // Additional custom validation
     const price = parseFloat(document.getElementById('price')?.value || '0');
     if (price < 0) {
-    showToast('Price must be a positive number', 'warning');
-      return false;
+        showToast('Price must be a positive number', 'warning');
+        return false;
     }
-  
+
     // Check if condition is selected
     const conditionSelected = document.querySelector('input[name="condition"]:checked');
-  if (!conditionSelected) {
-showToast('Please select a condition', 'warning');
-    return false;
+    if (!conditionSelected) {
+        showToast('Please select a condition', 'warning');
+        return false;
     }
 
     return true;
@@ -608,7 +687,7 @@ showToast('Please select a condition', 'warning');
 function deleteListing(id, title) {
     // Create a better confirmation dialog
     const confirmMessage = `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`;
-    
+
     if (confirm(confirmMessage)) {
         performDelete(id, title);
     }
@@ -622,15 +701,15 @@ async function performDelete(id, title) {
             console.log('🔥 Deleting from Firestore for listing ID:', id);
             const deleteResult = await window.firebaseDeleteListing(id);
             console.log('🔥 Firestore delete result:', deleteResult);
-            
+
             if (!deleteResult.success) {
                 showToast('Failed to delete listing from database', 'error');
                 return;
             }
         }
-        
+
         showToast(`"${title}" deleted successfully!`, 'success');
-        
+
         // Animate card removal
         const card = document.getElementById(`listing-${id}`);
         if (card) {
@@ -638,11 +717,11 @@ async function performDelete(id, title) {
             card.style.opacity = '0';
             card.style.transform = 'scale(0.95)';
             card.style.transition = 'all 0.4s ease';
-            
+
             // Remove card after animation
             setTimeout(() => {
                 card.remove();
-                
+
                 // Check if there are no more listings
                 const container = document.getElementById('listings-container');
                 if (container && container.children.length === 0) {
@@ -651,7 +730,7 @@ async function performDelete(id, title) {
                 }
             }, 400);
         }
-        
+
     } catch (error) {
         showToast('Error deleting listing: ' + error.message, 'error');
         console.error('Delete listing error:', error);
@@ -664,34 +743,34 @@ function initializeFormListeners() {
     // Character counters
     initCharacterCounter('title', 'titleCounter', 100);
     initCharacterCounter('description', 'descCounter', 500);
-    
+
     // Form submission on Enter (except textarea)
     const form = document.getElementById('listingForm');
     if (form) {
-        form.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
-     e.preventDefault();
-       saveListing();
-        }
+        form.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                saveListing();
+            }
         });
     }
 }
 
 function initCharacterCounter(inputId, counterId, maxLength) {
- const input = document.getElementById(inputId);
- const counter = document.getElementById(counterId);
-    
+    const input = document.getElementById(inputId);
+    const counter = document.getElementById(counterId);
+
     if (input && counter) {
-        input.addEventListener('input', function() {
-      const length = this.value.length;
-  counter.textContent = length;
-     
+        input.addEventListener('input', function () {
+            const length = this.value.length;
+            counter.textContent = length;
+
             // Change color if near limit
-   if (length > maxLength * 0.9) {
-   counter.style.color = '#ef4444';
+            if (length > maxLength * 0.9) {
+                counter.style.color = '#ef4444';
             } else {
-           counter.style.color = '#6b7280';
-   }
+                counter.style.color = '#6b7280';
+            }
         });
     }
 }
@@ -700,31 +779,31 @@ function initCharacterCounter(inputId, counterId, maxLength) {
 
 function showToast(message, type = 'success') {
     const toastEl = document.getElementById('toastNotification');
-  const toastBody = document.getElementById('toastMessage');
-    
+    const toastBody = document.getElementById('toastMessage');
+
     if (!toastEl || !toastBody) return;
-    
+
     toastBody.textContent = message;
-    
+
     // Set toast color based on type
     toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
-    
-    switch(type) {
+
+    switch (type) {
         case 'success':
             toastEl.classList.add('text-bg-success');
-       break;
-    case 'error':
- toastEl.classList.add('text-bg-danger');
-    break;
-   case 'warning':
-       toastEl.classList.add('text-bg-warning');
+            break;
+        case 'error':
+            toastEl.classList.add('text-bg-danger');
+            break;
+        case 'warning':
+            toastEl.classList.add('text-bg-warning');
             break;
         default:
-toastEl.classList.add('text-bg-info');
+            toastEl.classList.add('text-bg-info');
     }
-    
+
     if (toastNotification) {
-     toastNotification.show();
+        toastNotification.show();
     }
 }
 
@@ -739,23 +818,23 @@ function hideLoadingState() {
 function showSaveLoadingState() {
     const saveBtn = document.getElementById('saveButtonText');
     if (saveBtn) {
-   saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
     }
 }
 
 function hideSaveLoadingState() {
     const saveBtn = document.getElementById('saveButtonText');
     if (saveBtn) {
-  saveBtn.textContent = 'Save Listing';
+        saveBtn.textContent = 'Save Listing';
     }
 }
 
 function clearValidationStates() {
     const form = document.getElementById('listingForm');
     if (form) {
- const inputs = form.querySelectorAll('.is-invalid, .is-valid');
-   inputs.forEach(input => {
-   input.classList.remove('is-invalid', 'is-valid');
+        const inputs = form.querySelectorAll('.is-invalid, .is-valid');
+        inputs.forEach(input => {
+            input.classList.remove('is-invalid', 'is-valid');
         });
     }
 }
@@ -765,13 +844,28 @@ function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
         const later = () => {
-        clearTimeout(timeout);
-      func(...args);
-     };
+            clearTimeout(timeout);
+            func(...args);
+        };
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
-};
+    };
 }
+
+// ========== EXPOSE FUNCTIONS TO GLOBAL SCOPE ==========
+// Required for onclick handlers in HTML to work properly
+console.log('🔧 Exposing functions to window object...');
+window.editListing = editListing;
+window.saveListing = saveListing;
+window.deleteListing = deleteListing;
+window.removeImage = removeImage;
+window.loadListingsFromFirebase = loadListingsFromFirebase;
+console.log('✅ All functions exposed to window object');
+console.log('   window.openListingModal:', typeof window.openListingModal);
+console.log('   window.editListing:', typeof window.editListing);
+console.log('   window.saveListing:', typeof window.saveListing);
+console.log('   window.deleteListing:', typeof window.deleteListing);
+console.log('   window.removeImage:', typeof window.removeImage);
 
 // ========== FIREBASE LISTINGS LOADING ==========
 
@@ -782,13 +876,13 @@ async function loadListingsFromFirebase() {
         const username = sessionStorage.getItem('Username');
         const fullName = sessionStorage.getItem('FullName');
         const userType = sessionStorage.getItem('UserType');
-        
+
         console.log('🔄 loadListingsFromFirebase called');
         console.log('   userId:', userId);
         console.log('   username:', username);
         console.log('   fullName:', fullName);
         console.log('   userType:', userType);
-        
+
         // Try multiple fallback options for userId
         if (!userId || userId === '') {
             if (fullName && fullName !== '') {
@@ -803,38 +897,38 @@ async function loadListingsFromFirebase() {
                 userId = 'unknown-user';
             }
         }
-        
+
         // Wait for Firebase to be ready
         if (typeof window.firebaseFetchSellerProducts !== 'function') {
             console.log('⏳ Firebase not ready, will retry in 500ms');
             setTimeout(loadListingsFromFirebase, 500);
             return;
         }
-        
+
         console.log('✅ Firebase ready, fetching seller products for user:', userId);
-        
+
         // Fetch seller's products from Firestore
         const result = await window.firebaseFetchSellerProducts(userId);
-        
+
         console.log('📦 Firebase result:', result);
-        
+
         if (!result.success) {
             console.error('❌ Failed to load listings from Firebase:', result.message);
             return;
         }
-        
+
         // Get the container - check both possible IDs (Profile uses listingsContainer, Mylisting uses listings-container)
         let container = document.getElementById('listings-container') || document.getElementById('listingsContainer');
         if (!container) {
             console.error('❌ listings container not found in DOM (tried listings-container and listingsContainer)');
             return;
         }
-        
+
         const products = result.products || [];
-        
+
         console.log('📊 Loaded', products.length, 'products from Firebase');
         console.log('Product data sample:', products.length > 0 ? products[0] : 'No products');
-        
+
         if (products.length === 0) {
             // Show empty state with option to create first listing
             container.innerHTML = `
@@ -844,7 +938,7 @@ async function loadListingsFromFirebase() {
                     <p>Create your first listing to get started!</p>
                 </div>
             `;
-            
+
             // Also try to load from server for migration purposes
             console.log('🔄 No Firebase products, attempting to load from server for display...');
             try {
@@ -858,7 +952,7 @@ async function loadListingsFromFirebase() {
             }
             return;
         }
-        
+
         // Build the HTML for all products
         const html = products.map(product => `
             <div class="listing-card-minimal" 
@@ -908,4 +1002,18 @@ async function loadListingsFromFirebase() {
                                 Buy
                             </button>
                         `}
-                `}
+            `).join('');
+
+        container.innerHTML = `<div class="listings-grid">${html}</div>`;
+
+    } catch (error) {
+        console.error('Error in loadListingsFromFirebase:', error);
+        const container = document.getElementById('listings-container') || document.getElementById('listingsContainer');
+        if (container) {
+            container.innerHTML = `<div class="text-center text-danger p-5">
+                <i class="bi bi-exclamation-circle" style="font-size:2rem"></i>
+                <p>Error loading listings: ${error.message}</p>
+             </div>`;
+        }
+    }
+}

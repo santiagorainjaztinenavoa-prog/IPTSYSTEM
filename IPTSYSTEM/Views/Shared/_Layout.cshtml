@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -222,7 +222,7 @@
             const SAVED_COUNT_KEY = `savedProductsCount_${globalUserId}`;
             const SAVED_TS_KEY = `savedProductsCountTimestamp_${globalUserId}`;
         </script>
-        <script type="module" src="~/js/firebase-client.js"></script>
+        <script type="module" src="~/js/firebase-client.js?v=@DateTime.Now.Ticks"></script>
         <script>
             // Presentation Mode toggle removed
             // Wait for Firebase to be ready and load avatar - OPTIMIZED with sessionStorage caching

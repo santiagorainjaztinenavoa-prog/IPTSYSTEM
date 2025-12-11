@@ -8,7 +8,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore, doc, setDoc, serverTimestamp, getDoc, query, where, collection, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, orderBy, limit } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
 
-const firebaseConfig = { apiKey: "AIzaSyBNWCNxC0d-YAem0Za51epjfl_WXcyDZSE", authDomain: "carousell-c3b3f.firebaseapp.com", projectId: "carousell-c3b3f", storageBucket: "carousell-c3b3f.firebasestorage.app", messagingSenderId: "33772869337", appId: "1:33772869337:web:f1f86a5cc8f71d0c1050c8", measurementId: "G-YR7F7YER8V" };
+const firebaseConfig = { apiKey: "AIzaSyBHhIZv1_Ecryd3nw99S_osVwvdLT1Z9sA", authDomain: "recommerce2-c5f5c.firebaseapp.com", projectId: "recommerce2-c5f5c", storageBucket: "recommerce2-c5f5c.firebasestorage.app", messagingSenderId: "769830240332", appId: "1:769830240332:web:de0489490afe9a2242b4e9", measurementId: "G-2W1Y5M0REW" };
 const app = initializeApp(firebaseConfig);
 let analytics = null; try { analytics = getAnalytics(app); } catch (e) { console.debug('Firebase analytics not available:', e?.message || e); }
 const auth = getAuth(app); const db = getFirestore(app); const storage = getStorage(app);
