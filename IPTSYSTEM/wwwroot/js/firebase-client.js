@@ -1889,32 +1889,54 @@ window.firebaseGetAdminDashboardStats = async function () {
         };
 
         // Get total users count
-        const usersCol = collection(db, 'users');
-        const usersSnap = await getDocs(query(usersCol, limit(1000)));
-        stats.totalUsers = usersSnap.size;
+        try {
+            const usersCol = collection(db, 'users');
+            const usersSnap = await getDocs(query(usersCol, limit(1000)));
+            stats.totalUsers = usersSnap.size;
 
-        // Count disabled users
-        usersSnap.forEach(doc => {
-            const data = doc.data();
-            if (data.isEnabled === false) {
-                stats.totalDisabledUsers++;
-            }
-        });
+            // Count disabled users
+            usersSnap.forEach(doc => {
+                const data = doc.data();
+                if (data.isEnabled === false) {
+                    stats.totalDisabledUsers++;
+                }
+            });
+            console.log('✅ Users stats loaded:', { totalUsers: stats.totalUsers, totalDisabledUsers: stats.totalDisabledUsers });
+        } catch (err) {
+            console.error('⚠️ Error fetching users stats:', err);
+        }
 
-        // Get total active listings count
-        const listingsCol = collection(db, 'tbl_listing');
-        const listingsSnap = await getDocs(query(listingsCol, where('status', '!=', 'sold'), limit(1000)));
-        stats.totalItems = listingsSnap.size;
+        // Get total listings count (all items in tbl_listing)
+        try {
+            const listingsCol = collection(db, 'tbl_listing');
+            const listingsSnap = await getDocs(query(listingsCol, limit(1000)));
+
+            // Count ALL items in tbl_listing collection
+            stats.totalItems = listingsSnap.size;
+            console.log('✅ Listings stats loaded:', { totalItems: stats.totalItems, totalDocs: listingsSnap.size });
+        } catch (err) {
+            console.error('⚠️ Error fetching listings stats:', err);
+        }
 
         // Get total reports count
-        const reportsCol = collection(db, 'reports');
-        const reportsSnap = await getDocs(query(reportsCol, limit(1000)));
-        stats.totalReports = reportsSnap.size;
+        try {
+            const reportsCol = collection(db, 'reports');
+            const reportsSnap = await getDocs(query(reportsCol, limit(1000)));
+            stats.totalReports = reportsSnap.size;
+            console.log('✅ Reports stats loaded:', { totalReports: stats.totalReports });
+        } catch (err) {
+            console.error('⚠️ Error fetching reports stats:', err);
+        }
 
         // Get total admin messages count
-        const adminMsgsCol = collection(db, 'admin_messages');
-        const adminMsgsSnap = await getDocs(query(adminMsgsCol, limit(1000)));
-        stats.totalMessages = adminMsgsSnap.size;
+        try {
+            const adminMsgsCol = collection(db, 'admin_messages');
+            const adminMsgsSnap = await getDocs(query(adminMsgsCol, limit(1000)));
+            stats.totalMessages = adminMsgsSnap.size;
+            console.log('✅ Admin messages stats loaded:', { totalMessages: stats.totalMessages });
+        } catch (err) {
+            console.error('⚠️ Error fetching admin messages stats:', err);
+        }
 
         console.log('✅ Admin dashboard stats loaded:', stats);
         return { success: true, stats };
@@ -2999,12 +3021,43 @@ window.firebaseDeleteConversation = async function (conversationId) {
 
 // Wrapper for Reporting User specifically
 window.firebaseReportUser = async function (reporterId, reporterName, reportedId, reason, description) {
-    // We reuse the admin message system but with a specific subject prefix
-    const subject = `[REPORT] User ${reportedId} - ${reason}`;
-    const body = `Reported User ID: ${reportedId}\nReason: ${reason}\n\nDetails:\n${description}`;
+    try {
+        // Fetch the reported user's profile to get their username
+        let reportedUsername = reportedId; // Fallback to ID if username not found
+        try {
+            const userDoc = await getDoc(doc(db, 'users', reportedId));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                reportedUsername = userData.username || userData.email?.split('@')[0] || `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || reportedId;
+            }
+        } catch (err) {
+            console.warn('Could not fetch reported user profile, using ID:', err);
+        }
 
-    // We might not have reporterEmail easily, pass empty or fetch it
-    return window.firebaseSendAdminMessage(reporterId, reporterName, '', subject, body);
+        // Use username in subject and body for readability
+        const subject = `[REPORT] User ${reportedUsername} - ${reason}`;
+        const body = `Reported User: ${reportedUsername}\nReported User ID: ${reportedId}\nReason: ${reason}\n\nDetails:\n${description}`;
+
+        // Send the message with the reported_user_id field for backend functionality
+        const result = await window.firebaseSendAdminMessage(reporterId, reporterName, '', subject, body);
+
+        // Add the reported_user_id to the message document for reference
+        if (result.success && result.messageId) {
+            try {
+                await updateDoc(doc(db, 'admin_messages', result.messageId), {
+                    reported_user_id: reportedId,
+                    reported_username: reportedUsername
+                });
+            } catch (err) {
+                console.warn('Could not add reported_user_id field:', err);
+            }
+        }
+
+        return result;
+    } catch (err) {
+        console.error('❌ firebaseReportUser error:', err);
+        return { success: false, message: err?.message || String(err) };
+    }
 };
 
 // ========== USER REVIEWS FUNCTIONS ==========

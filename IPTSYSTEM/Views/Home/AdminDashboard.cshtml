@@ -651,22 +651,67 @@
         async function loadDashboardStats() {
             try {
                 const result = await window.firebaseGetAdminDashboardStats();
-                if (result.success) {
-                    document.getElementById('totalUsers').textContent = result.stats.totalUsers.toLocaleString();
-                    document.getElementById('totalListings').textContent = result.stats.totalItems.toLocaleString();
-                    document.getElementById('totalDisabledUsers').textContent = result.stats.totalDisabledUsers.toLocaleString();
-                    document.getElementById('totalReports').textContent = result.stats.totalReports.toLocaleString();
-                    document.getElementById('totalMessages').textContent = result.stats.totalMessages.toLocaleString();
+                if (result.success && result.stats) {
+                    // Update each stat individually, only if value exists
+                    const totalUsersEl = document.getElementById('totalUsers');
+                    const totalListingsEl = document.getElementById('totalListings');
+                    const totalDisabledUsersEl = document.getElementById('totalDisabledUsers');
+                    const totalReportsEl = document.getElementById('totalReports');
+                    const totalMessagesEl = document.getElementById('totalMessages');
+
+                    if (totalUsersEl && result.stats.totalUsers !== undefined) {
+                        totalUsersEl.textContent = result.stats.totalUsers.toLocaleString();
+                    }
+                    if (totalListingsEl && result.stats.totalItems !== undefined) {
+                        totalListingsEl.textContent = result.stats.totalItems.toLocaleString();
+                    }
+                    if (totalDisabledUsersEl && result.stats.totalDisabledUsers !== undefined) {
+                        totalDisabledUsersEl.textContent = result.stats.totalDisabledUsers.toLocaleString();
+                    }
+                    if (totalReportsEl && result.stats.totalReports !== undefined) {
+                        totalReportsEl.textContent = result.stats.totalReports.toLocaleString();
+                    }
+                    if (totalMessagesEl && result.stats.totalMessages !== undefined) {
+                        totalMessagesEl.textContent = result.stats.totalMessages.toLocaleString();
+                    }
+                    
+                    console.log('✅ Dashboard stats updated successfully');
+                } else {
+                    // If the entire request failed, show Error for all stats
+                    console.error('Failed to load dashboard stats:', result.message);
+                    const totalUsersEl = document.getElementById('totalUsers');
+                    const totalListingsEl = document.getElementById('totalListings');
+                    const totalDisabledUsersEl = document.getElementById('totalDisabledUsers');
+                    const totalReportsEl = document.getElementById('totalReports');
+                    const totalMessagesEl = document.getElementById('totalMessages');
+                    
+                    if (totalUsersEl) totalUsersEl.textContent = 'Error';
+                    if (totalListingsEl) totalListingsEl.textContent = 'Error';
+                    if (totalDisabledUsersEl) totalDisabledUsersEl.textContent = 'Error';
+                    if (totalReportsEl) totalReportsEl.textContent = 'Error';
+                    if (totalMessagesEl) totalMessagesEl.textContent = 'Error';
                 }
             } catch (err) {
                 console.error('Error loading dashboard stats:', err);
+                // Only show Error if there was an actual error, not just loading
+                const totalUsersEl = document.getElementById('totalUsers');
+                const totalListingsEl = document.getElementById('totalListings');
+                const totalDisabledUsersEl = document.getElementById('totalDisabledUsers');
+                const totalReportsEl = document.getElementById('totalReports');
+                const totalMessagesEl = document.getElementById('totalMessages');
+                
+                if (totalUsersEl) totalUsersEl.textContent = 'Error';
+                if (totalListingsEl) totalListingsEl.textContent = 'Error';
+                if (totalDisabledUsersEl) totalDisabledUsersEl.textContent = 'Error';
+                if (totalReportsEl) totalReportsEl.textContent = 'Error';
+                if (totalMessagesEl) totalMessagesEl.textContent = 'Error';
             }
         }
 
         // Load Recent Users
         async function loadRecentUsers() {
             try {
-                const result = await window.firebaseGetRecentUsers(5);
+                const result = await window.firebaseGetRecentUsers(4);
                 const tbody = document.getElementById('recentUsersBody');
                 if (!tbody) return;
                 
@@ -694,7 +739,7 @@
         // Load Recent Listings
         async function loadRecentListings() {
             try {
-                const result = await window.firebaseGetRecentListings(5);
+                const result = await window.firebaseGetRecentListings(4);
                 const tbody = document.getElementById('recentListingsBody');
                 if (!tbody) return;
                 
@@ -1340,9 +1385,9 @@
         const activeMenu = '@Model.ActiveMenu';
         
         if (activeMenu === 'overview') {
-            loadDashboardStats();
-            loadRecentUsers();
-            loadRecentListings();
+            await loadDashboardStats();
+            await loadRecentUsers();
+            await loadRecentListings();
         } else if (activeMenu === 'reports') {
             loadReports();
             document.getElementById('refreshReportsBtn')?.addEventListener('click', loadReports);
