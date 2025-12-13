@@ -11,6 +11,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Recommerce</title>
+    <link rel="icon" type="image/png" href="/logo/logo.png" />
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,32 +19,35 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
-        /* Custom scrollbar */
+        /* Custom scrollbar for dark theme */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
         ::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: #1f2937;
         }
         ::-webkit-scrollbar-thumb {
-            background: #888;
+            background: #4b5563;
             border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #555;
+            background: #6b7280;
         }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-gray-950">
     <div class="flex h-screen">
         <!-- Sidebar -->
-        <aside id="sidebar" class="w-64 bg-gray-900 text-white transition-all duration-300 flex flex-col">
+        <aside id="sidebar" class="w-64 bg-black text-white transition-all duration-300 flex flex-col border-r border-gray-800">
             <!-- Sidebar Header -->
-            <div class="p-4 flex items-center justify-between border-b border-gray-700">
+            <div class="p-4 flex items-center justify-between border-b border-gray-800">
                 <span id="sidebarBrand" class="text-xl font-bold">Recommerce</span>
-                <button id="sidebarToggle" class="hover:bg-gray-800 p-2 rounded transition">
+                <button id="sidebarToggle" class="hover:bg-gray-900 p-2 rounded transition">
                     <i class="bi bi-x-lg" id="sidebarIcon"></i>
                 </button>
             </div>
@@ -51,59 +55,49 @@
             <!-- Navigation Menu -->
             <nav class="flex-1 px-2 py-4 space-y-1">
                 <a href="@Url.Action("AdminDashboard", "Home", new { menu = "overview" })" 
-                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "overview" ? "bg-red-500" : "hover:bg-gray-800")">
+                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "overview" ? "bg-red-600 hover:bg-red-700" : "text-gray-400 hover:bg-gray-900 hover:text-white")">
                     <i class="bi bi-graph-up text-lg"></i>
                     <span class="sidebar-text">Overview</span>
                 </a>
 
                 <a href="@Url.Action("AdminDashboard", "Home", new { menu = "users" })" 
-                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "users" ? "bg-red-500" : "hover:bg-gray-800")">
+                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "users" ? "bg-red-600 hover:bg-red-700" : "text-gray-400 hover:bg-gray-900 hover:text-white")">
                     <i class="bi bi-people text-lg"></i>
                     <span class="sidebar-text">Users</span>
                 </a>
 
-                <a href="@Url.Action("AdminDashboard", "Home", new { menu = "listings" })" 
-                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "listings" ? "bg-red-500" : "hover:bg-gray-800")">
-                    <i class="bi bi-cart3 text-lg"></i>
-                    <span class="sidebar-text">Listings</span>
+                <a href="@Url.Action("AdminDashboard", "Home", new { menu = "messages" })" 
+                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "messages" ? "bg-red-600 hover:bg-red-700" : "text-gray-400 hover:bg-gray-900 hover:text-white")">
+                    <i class="bi bi-envelope text-lg"></i>
+                    <span class="sidebar-text">Messages</span>
+                    <span id="adminMsgBadge" class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full hidden">0</span>
                 </a>
 
-                <a href="@Url.Action("AdminDashboard", "Home", new { menu = "transactions" })" 
-                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "transactions" ? "bg-red-500" : "hover:bg-gray-800")">
-                    <i class="bi bi-currency-dollar text-lg"></i>
-                    <span class="sidebar-text">Transactions</span>
-                </a>
-
-                <a href="@Url.Action("AdminDashboard", "Home", new { menu = "settings" })" 
-                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "settings" ? "bg-red-500" : "hover:bg-gray-800")">
-                    <i class="bi bi-gear text-lg"></i>
-                    <span class="sidebar-text">Settings</span>
+                <a href="@Url.Action("AdminDashboard", "Home", new { menu = "reports" })" 
+                   class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition @(Model.ActiveMenu == "reports" ? "bg-red-600 hover:bg-red-700" : "text-gray-400 hover:bg-gray-900 hover:text-white")">
+                    <i class="bi bi-bar-chart text-lg"></i>
+                    <span class="sidebar-text">Reports</span>
                 </a>
             </nav>
 
-            <!-- Logout -->
-            <div class="p-2 border-t border-gray-700">
-                <form method="post" asp-controller="Home" asp-action="Logout">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-800 rounded-lg transition text-gray-300">
-                        <i class="bi bi-box-arrow-right text-lg"></i>
-                        <span class="sidebar-text">Logout</span>
-                    </button>
-                </form>
-            </div>
+
         </aside>
 
         <!-- Main Content -->
         <main class="flex-1 overflow-auto">
             <!-- Header -->
-            <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-                <h1 class="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
+            <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+                <h1 class="text-2xl font-bold text-white">Admin Dashboard</h1>
                 <div class="flex items-center gap-4">
-                    <button class="p-2 hover:bg-gray-100 rounded-lg transition relative">
-                        <i class="bi bi-bell text-gray-600 text-xl"></i>
-                        <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                    </button>
-                    <div class="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white font-bold">
+                    <a href="@Url.Action("Index", "Home")" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition flex items-center gap-2">
+                        <i class="bi bi-house-fill"></i>
+                        Back to Home
+                    </a>
+                    <div class="text-right">
+                        <p class="text-white font-semibold">Admin</p>
+                        <p class="text-gray-400 text-sm">Administrator</p>
+                    </div>
+                    <div class="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-bold">
                         A
                     </div>
                 </div>
@@ -114,60 +108,69 @@
                 @if (Model.ActiveMenu == "overview")
                 {
                     <!-- Statistics Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
                         <!-- Total Users -->
-                        <div class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition">
                             <div class="flex items-center justify-between mb-3">
-                                <p class="text-gray-600 text-sm font-medium">Total Users</p>
-                                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <i class="bi bi-people text-blue-500 text-2xl"></i>
+                                <p class="text-gray-400 text-sm font-medium">Total Users</p>
+                                <div class="w-12 h-12 bg-blue-900 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-people text-blue-400 text-2xl"></i>
                                 </div>
                             </div>
-                            <p class="text-3xl font-bold text-gray-800">@Model.Stats.TotalUsers.ToString("N0")</p>
-                            <p class="text-xs text-green-600 mt-2 flex items-center gap-1">
-                                <i class="bi bi-arrow-up"></i> +12.5% from last month
+                            <p id="totalUsers" class="text-3xl font-bold text-white">
+                                <span class="animate-pulse">Loading...</span>
                             </p>
                         </div>
 
-                        <!-- Active Listings -->
-                        <div class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+                        <!-- Total Items -->
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition">
                             <div class="flex items-center justify-between mb-3">
-                                <p class="text-gray-600 text-sm font-medium">Active Listings</p>
-                                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                                    <i class="bi bi-cart3 text-purple-500 text-2xl"></i>
+                                <p class="text-gray-400 text-sm font-medium">Total Items</p>
+                                <div class="w-12 h-12 bg-purple-900 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-cart3 text-purple-400 text-2xl"></i>
                                 </div>
                             </div>
-                            <p class="text-3xl font-bold text-gray-800">@Model.Stats.TotalListings.ToString("N0")</p>
-                            <p class="text-xs text-green-600 mt-2 flex items-center gap-1">
-                                <i class="bi bi-arrow-up"></i> +8.2% from last month
+                            <p id="totalListings" class="text-3xl font-bold text-white">
+                                <span class="animate-pulse">Loading...</span>
                             </p>
                         </div>
 
-                        <!-- Total Revenue -->
-                        <div class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+                        <!-- Disabled Users -->
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition">
                             <div class="flex items-center justify-between mb-3">
-                                <p class="text-gray-600 text-sm font-medium">Total Revenue</p>
-                                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                                    <i class="bi bi-currency-dollar text-green-500 text-2xl"></i>
+                                <p class="text-gray-400 text-sm font-medium">Disabled Users</p>
+                                <div class="w-12 h-12 bg-red-900 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-person-slash text-red-400 text-2xl"></i>
                                 </div>
                             </div>
-                            <p class="text-3xl font-bold text-gray-800">?@((Model.Stats.TotalRevenue / 1000).ToString("N1"))k</p>
-                            <p class="text-xs text-green-600 mt-2 flex items-center gap-1">
-                                <i class="bi bi-arrow-up"></i> +23.1% from last month
+                            <p id="totalDisabledUsers" class="text-3xl font-bold text-white">
+                                <span class="animate-pulse">Loading...</span>
                             </p>
                         </div>
 
-                        <!-- Active Transactions -->
-                        <div class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+                        <!-- Total Reports -->
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition">
                             <div class="flex items-center justify-between mb-3">
-                                <p class="text-gray-600 text-sm font-medium">Active Transactions</p>
-                                <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                                    <i class="bi bi-graph-up text-orange-500 text-2xl"></i>
+                                <p class="text-gray-400 text-sm font-medium">Total Reports</p>
+                                <div class="w-12 h-12 bg-orange-900 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-flag text-orange-400 text-2xl"></i>
                                 </div>
                             </div>
-                            <p class="text-3xl font-bold text-gray-800">@Model.Stats.ActiveTransactions</p>
-                            <p class="text-xs text-green-600 mt-2 flex items-center gap-1">
-                                <i class="bi bi-arrow-up"></i> +5.4% from last month
+                            <p id="totalReports" class="text-3xl font-bold text-white">
+                                <span class="animate-pulse">Loading...</span>
+                            </p>
+                        </div>
+
+                        <!-- Total Messages -->
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-gray-400 text-sm font-medium">Total Messages</p>
+                                <div class="w-12 h-12 bg-green-900 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-envelope text-green-400 text-2xl"></i>
+                                </div>
+                            </div>
+                            <p id="totalMessages" class="text-3xl font-bold text-white">
+                                <span class="animate-pulse">Loading...</span>
                             </p>
                         </div>
                     </div>
@@ -175,14 +178,14 @@
                     <!-- Tables Section -->
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <!-- Recent Users Table -->
-                        <div class="bg-white rounded-xl shadow-md p-6">
-                            <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="bi bi-people text-blue-500"></i>
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6">
+                            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                <i class="bi bi-people text-blue-400"></i>
                                 Recent Users
                             </h2>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm">
-                                    <thead class="text-gray-600 border-b">
+                                    <thead class="text-gray-400 border-b border-gray-700">
                                         <tr>
                                             <th class="text-left py-3 px-2 font-semibold">Name</th>
                                             <th class="text-left py-3 px-2 font-semibold">Email</th>
@@ -190,59 +193,39 @@
                                             <th class="text-left py-3 px-2 font-semibold">Status</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        @foreach (var user in Model.RecentUsers)
-                                        {
-                                            <tr class="border-b hover:bg-gray-50 transition">
-                                                <td class="py-3 px-2 font-medium text-gray-800">@user.Name</td>
-                                                <td class="py-3 px-2 text-gray-600">@user.Email</td>
-                                                <td class="py-3 px-2 text-gray-600">@user.JoinDate</td>
-                                                <td class="py-3 px-2">
-                                                    <span class="px-3 py-1 rounded-full text-xs font-medium @(user.Status == "active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800")">
-                                                        @user.Status
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        }
+                                    <tbody id="recentUsersBody">
+                                        <tr>
+                                            <td colspan="4" class="py-4 text-center text-gray-400">
+                                                <span class="animate-pulse">Loading recent users...</span>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
-                        <!-- Recent Listings Table -->
-                        <div class="bg-white rounded-xl shadow-md p-6">
-                            <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                                <i class="bi bi-cart3 text-purple-500"></i>
-                                Recent Listings
+                        <!-- Recent Items Table -->
+                        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6">
+                            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                <i class="bi bi-cart3 text-purple-400"></i>
+                                Recent Added Items
                             </h2>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm">
-                                    <thead class="text-gray-600 border-b">
+                                    <thead class="text-gray-400 border-b border-gray-700">
                                         <tr>
                                             <th class="text-left py-3 px-2 font-semibold">Title</th>
                                             <th class="text-left py-3 px-2 font-semibold">Price</th>
-                                            <th class="text-left py-3 px-2 font-semibold">Views</th>
+                                            <th class="text-left py-3 px-2 font-semibold">Category</th>
                                             <th class="text-left py-3 px-2 font-semibold">Status</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        @foreach (var listing in Model.RecentListings)
-                                        {
-                                            <tr class="border-b hover:bg-gray-50 transition">
-                                                <td class="py-3 px-2 font-medium text-gray-800">@listing.Title</td>
-                                                <td class="py-3 px-2 text-gray-600">?@listing.Price.ToString("N0")</td>
-                                                <td class="py-3 px-2 text-gray-600">
-                                                    <span class="flex items-center gap-1">
-                                                        <i class="bi bi-eye"></i> @listing.Views
-                                                    </span>
-                                                </td>
-                                                <td class="py-3 px-2">
-                                                    <span class="px-3 py-1 rounded-full text-xs font-medium @(listing.Status == "active" ? "bg-green-100 text-green-800" : listing.Status == "flagged" ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-800")">
-                                                        @listing.Status
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        }
+                                    <tbody id="recentListingsBody">
+                                        <tr>
+                                            <td colspan="4" class="py-4 text-center text-gray-400">
+                                                <span class="animate-pulse">Loading recent items...</span>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -251,54 +234,355 @@
                 }
                 else if (Model.ActiveMenu == "users")
                 {
-                    <div class="bg-white rounded-xl shadow-md p-8">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <i class="bi bi-people text-blue-500 text-2xl"></i>
+                    <div class="bg-gray-900 rounded-xl border border-gray-800 p-6">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-12 h-12 bg-blue-900 rounded-lg flex items-center justify-center">
+                                <i class="bi bi-people text-blue-400 text-2xl"></i>
                             </div>
-                            <h2 class="text-2xl font-semibold text-gray-800">User Management</h2>
+                            <div class="flex-1">
+                                <h2 class="text-2xl font-semibold text-white">User Management</h2>
+                                <p class="text-gray-400 text-sm">Manage users, view activity, and handle reports</p>
+                            </div>
+                            <button id="refreshUsersBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition flex items-center gap-2">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                Refresh
+                            </button>
                         </div>
-                        <p class="text-gray-600">Manage users, view activity, and handle reports.</p>
+
+                        <!-- Search and Filter Section -->
+                        <div class="mb-6 flex gap-4 flex-wrap">
+                            <input type="text" id="searchUsers" placeholder="Search by name or email..." class="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-blue-500 focus:outline-none flex-1 min-w-xs">
+                            <select id="filterAccountType" class="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-blue-500 focus:outline-none">
+                                <option value="">All Account Types</option>
+                                <option value="buyer">Buyer</option>
+                                <option value="seller">Seller</option>
+                            </select>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div id="loadingState" class="flex items-center justify-center py-12 hidden">
+                            <div class="text-center">
+                                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mb-4"></div>
+                                <p class="text-gray-400">Loading users from Firebase...</p>
+                            </div>
+                        </div>
+
+                        <!-- Error State -->
+                        <div id="errorState" class="hidden">
+                            <div class="bg-red-900 border border-red-700 text-red-300 px-4 py-3 rounded-lg flex items-center gap-3">
+                                <i class="bi bi-exclamation-circle text-xl"></i>
+                                <div>
+                                    <p class="font-semibold">Error Loading Users</p>
+                                    <p id="errorMessage" class="text-sm"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Users Table -->
+                        <div id="usersTableContainer" class="overflow-x-auto hidden">
+                            <table class="w-full text-sm">
+                                <thead class="text-gray-400 border-b border-gray-700 bg-gray-800 sticky top-0">
+                                    <tr>
+                                        <th class="text-left py-4 px-4 font-semibold">Name</th>
+                                        <th class="text-left py-4 px-4 font-semibold">Email</th>
+                                        <th class="text-left py-4 px-4 font-semibold">Account Type</th>
+                                        <th class="text-left py-4 px-4 font-semibold">Status</th>
+                                        <th class="text-left py-4 px-4 font-semibold">Joined</th>
+                                        <th class="text-center py-4 px-4 font-semibold">Actions</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody id="usersTableBody">
+                                    <!-- Users will be populated here dynamically -->
+
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="emptyState" class="flex flex-col items-center justify-center py-12 hidden">
+                            <i class="bi bi-inbox text-4xl text-gray-600 mb-4"></i>
+                            <p class="text-gray-400 text-lg">No users found</p>
+                            <p class="text-gray-500 text-sm">Try adjusting your search or filters</p>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div id="paginationContainer" class="flex items-center justify-between mt-6 pt-4 border-t border-gray-700 hidden">
+                            <p class="text-gray-400 text-sm">
+                                Showing <span id="paginationInfo">0</span> users
+                            </p>
+                            <div class="flex gap-2">
+                                <button id="prevPageBtn" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i class="bi bi-chevron-left"></i>
+                                </button>
+                                <span id="pageInfo" class="px-3 py-2 text-gray-400">Page 1</span>
+                                <button id="nextPageBtn" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i class="bi bi-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 }
-                else if (Model.ActiveMenu == "listings")
+                else if (Model.ActiveMenu == "reports")
                 {
-                    <div class="bg-white rounded-xl shadow-md p-8">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <i class="bi bi-cart3 text-purple-500 text-2xl"></i>
+                    <!-- Sales Reports & Analytics Section -->
+                    <div class="bg-gray-900 rounded-xl border border-gray-800 p-8">
+                        <!-- Header with Filter and Export -->
+                        <div class="flex flex-wrap items-start justify-between gap-4 mb-8">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 bg-orange-900 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-graph-up text-orange-400 text-2xl"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-2xl font-semibold text-white">Sales Reports & Analytics</h2>
+                                    <p class="text-gray-400 text-sm">Platform-wide sales performance and insights</p>
+                                </div>
                             </div>
-                            <h2 class="text-2xl font-semibold text-gray-800">Listings Management</h2>
+                            <div class="flex gap-3 items-center flex-wrap">
+                                <!-- Time Period Filter -->
+                                <select id="adminReportsPeriodFilter" onchange="filterAdminReportsByPeriod()" class="px-4 py-2 bg-gray-800 text-gray-200 border border-gray-700 rounded-lg focus:border-orange-500 focus:outline-none cursor-pointer">
+                                    <option value="all">All Time</option>
+                                    <option value="weekly">This Week</option>
+                                    <option value="monthly">This Month</option>
+                                    <option value="yearly">This Year</option>
+                                </select>
+                                <!-- Export PDF Button -->
+                                <button onclick="exportAdminReportsToPDF()" class="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                    Export PDF
+                                </button>
+                                <!-- Refresh Button -->
+                                <button id="refreshReportsBtn" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition flex items-center gap-2">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    Refresh
+                                </button>
+                            </div>
                         </div>
-                        <p class="text-gray-600">Review, approve, or remove listings from the platform.</p>
+
+                        <!-- Loading State -->
+                        <div id="reportsLoadingState" class="flex items-center justify-center py-12">
+                            <div class="text-center">
+                                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-orange-400 mb-4"></div>
+                                <p class="text-gray-400">Loading analytics from Firebase...</p>
+                            </div>
+                        </div>
+
+                        <!-- Analytics Content (Hidden until loaded) -->
+                        <div id="analyticsContent" class="hidden">
+                            <!-- Quick Stats Bar -->
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                                <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-orange-900 rounded-lg flex items-center justify-center">
+                                            <i class="bi bi-cart-check text-orange-400 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400 uppercase tracking-wide">Total Sales</p>
+                                            <p id="adminTotalSales" class="text-xl font-bold text-white">0</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-green-900 rounded-lg flex items-center justify-center">
+                                            <i class="bi bi-cash-stack text-green-400 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400 uppercase tracking-wide">Total Revenue</p>
+                                            <p id="adminTotalRevenue" class="text-xl font-bold text-white">₱0.00</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-blue-900 rounded-lg flex items-center justify-center">
+                                            <i class="bi bi-people text-blue-400 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400 uppercase tracking-wide">Active Sellers</p>
+                                            <p id="adminUniqueSellers" class="text-xl font-bold text-white">0</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-purple-900 rounded-lg flex items-center justify-center">
+                                            <i class="bi bi-tags text-purple-400 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400 uppercase tracking-wide">Categories</p>
+                                            <p id="adminTotalCategories" class="text-xl font-bold text-white">0</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center">
+                                            <i class="bi bi-calendar-range text-gray-400 text-lg"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400 uppercase tracking-wide">Period</p>
+                                            <p id="adminPeriodLabel" class="text-lg font-semibold text-white">All Time</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Charts Grid -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                <!-- Distribution Donut Chart -->
+                                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                                    <h3 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                        <i class="bi bi-pie-chart text-orange-400"></i>
+                                        Top Items by Revenue
+                                    </h3>
+                                    <div class="h-60 flex items-center justify-center">
+                                        <canvas id="adminChartDistribution"></canvas>
+                                    </div>
+                                </div>
+
+                                <!-- Category Bar Chart -->
+                                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                                    <h3 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                        <i class="bi bi-bar-chart text-orange-400"></i>
+                                        Sales by Category
+                                    </h3>
+                                    <div class="h-60">
+                                        <canvas id="adminChartCategory"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Daily Sales Line Chart -->
+                            <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 mb-6">
+                                <h3 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                    <i class="bi bi-graph-up text-orange-400"></i>
+                                    Daily Sales Trend
+                                </h3>
+                                <div class="h-64">
+                                    <canvas id="adminChartDailySales"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Top Sellers Chart -->
+                            <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 mb-6">
+                                <h3 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                    <i class="bi bi-trophy text-orange-400"></i>
+                                    Top Sellers by Revenue
+                                </h3>
+                                <div class="h-64">
+                                    <canvas id="adminChartTopSellers"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Detailed Sales Table -->
+                            <div class="bg-gray-800 rounded-xl p-5 border border-gray-700">
+                                <h3 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                    <i class="bi bi-table text-orange-400"></i>
+                                    Detailed Sales Report
+                                </h3>
+                                <div id="adminReportsTableContainer" class="overflow-x-auto">
+                                    <table class="w-full text-sm">
+                                        <thead class="text-gray-400 border-b border-gray-600 bg-gray-900 sticky top-0">
+                                            <tr>
+                                                <th class="text-left py-3 px-4 font-semibold">Item</th>
+                                                <th class="text-left py-3 px-4 font-semibold">Category</th>
+                                                <th class="text-left py-3 px-4 font-semibold">Seller</th>
+                                                <th class="text-center py-3 px-4 font-semibold">Qty</th>
+                                                <th class="text-right py-3 px-4 font-semibold">Price</th>
+                                                <th class="text-right py-3 px-4 font-semibold">Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adminReportsTableBody" class="text-gray-300">
+                                            <tr>
+                                                <td colspan="6" class="py-8 text-center text-gray-500">
+                                                    <div class="animate-spin inline-block w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full mr-2"></div>
+                                                    Loading...
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="reportsEmptyState" class="hidden flex flex-col items-center justify-center py-12">
+                            <i class="bi bi-graph-up text-4xl text-gray-600 mb-4"></i>
+                            <p class="text-gray-400 text-lg">No sales data found</p>
+                            <p class="text-gray-500 text-sm">Sales will appear here once items are sold</p>
+                        </div>
                     </div>
                 }
-                else if (Model.ActiveMenu == "transactions")
+                else if (Model.ActiveMenu == "messages")
                 {
-                    <div class="bg-white rounded-xl shadow-md p-8">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                                <i class="bi bi-currency-dollar text-green-500 text-2xl"></i>
+                    <!-- Admin Messages Section -->
+                    <div class="bg-gray-900 rounded-xl border border-gray-800 p-8">
+                        <div class="flex items-center gap-3 mb-8">
+                            <div class="w-12 h-12 bg-green-900 rounded-lg flex items-center justify-center">
+                                <i class="bi bi-envelope text-green-400 text-2xl"></i>
                             </div>
-                            <h2 class="text-2xl font-semibold text-gray-800">Transaction History</h2>
+                            <div class="flex-1">
+                                <h2 class="text-2xl font-semibold text-white">User Messages</h2>
+                                <p class="text-gray-400 text-sm">Messages from buyers and sellers</p>
+                            </div>
+                            <button id="refreshMessagesBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition flex items-center gap-2">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                Refresh
+                            </button>
                         </div>
-                        <p class="text-gray-600">Monitor all transactions, refunds, and payments.</p>
+
+                        <!-- Loading State -->
+                        <div id="messagesLoadingState" class="flex items-center justify-center py-12">
+                            <div class="text-center">
+                                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-400 mb-4"></div>
+                                <p class="text-gray-400">Loading messages from Firebase...</p>
+                            </div>
+                        </div>
+
+                        <!-- Messages List -->
+                        <div id="messagesListContainer" class="hidden">
+                            <div id="messagesList" class="space-y-4">
+                                <!-- Messages will be populated here dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="messagesEmptyState" class="hidden flex flex-col items-center justify-center py-12">
+                            <i class="bi bi-envelope text-4xl text-gray-600 mb-4"></i>
+                            <p class="text-gray-400 text-lg">No messages found</p>
+                            <p class="text-gray-500 text-sm">User messages will appear here</p>
+                        </div>
+                    </div>
+
+                    <!-- Reply Modal -->
+                    <div id="replyModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+                        <div class="bg-gray-900 rounded-xl border border-gray-700 w-full max-w-lg mx-4 p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-xl font-semibold text-white">Reply to Message</h3>
+                                <button onclick="closeReplyModal()" class="text-gray-400 hover:text-white">
+                                    <i class="bi bi-x-lg text-xl"></i>
+                                </button>
+                            </div>
+                            <div id="replyModalOriginal" class="bg-gray-800 rounded-lg p-4 mb-4">
+                                <p class="text-gray-400 text-sm mb-1">Original Message:</p>
+                                <p id="replyModalMessage" class="text-gray-200"></p>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-400 text-sm mb-2">Your Reply:</label>
+                                <textarea id="replyText" rows="4" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-green-500 focus:outline-none"></textarea>
+                            </div>
+                            <div class="flex gap-3">
+                                <button onclick="closeReplyModal()" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition">
+                                    Cancel
+                                </button>
+                                <button onclick="sendReply()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition">
+                                    Send Reply
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 }
-                else if (Model.ActiveMenu == "settings")
-                {
-                    <div class="bg-white rounded-xl shadow-md p-8">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                                <i class="bi bi-gear text-gray-500 text-2xl"></i>
-                            </div>
-                            <h2 class="text-2xl font-semibold text-gray-800">Admin Settings</h2>
-                        </div>
-                        <p class="text-gray-600">Configure platform settings, permissions, and notifications.</p>
-                    </div>
-                }
-            </div>
-        </main>
     </div>
 
     <script>
@@ -327,5 +611,861 @@
             }
         });
     </script>
+
+    <!-- Firebase Client Module -->
+    <script type="module" src="/js/firebase-client.js"></script>
+    
+    <!-- Admin Dashboard Data Fetcher -->
+    <script type="module">
+        // Wait for Firebase to initialize
+        function waitForFirebase() {
+            return new Promise((resolve) => {
+                const check = () => {
+                    if (typeof window.firebaseGetAdminDashboardStats === 'function') {
+                        resolve();
+                    } else {
+                        setTimeout(check, 100);
+                    }
+                };
+                check();
+            });
+        }
+
+        // Format date helper
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            let date;
+            if (timestamp.seconds) {
+                date = new Date(timestamp.seconds * 1000);
+            } else if (timestamp.toDate) {
+                date = timestamp.toDate();
+            } else if (typeof timestamp === 'string') {
+                date = new Date(timestamp);
+            } else {
+                return 'N/A';
+            }
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        // Load Overview Dashboard Stats
+        async function loadDashboardStats() {
+            try {
+                const result = await window.firebaseGetAdminDashboardStats();
+                if (result.success && result.stats) {
+                    // Update each stat individually, only if value exists
+                    const totalUsersEl = document.getElementById('totalUsers');
+                    const totalListingsEl = document.getElementById('totalListings');
+                    const totalDisabledUsersEl = document.getElementById('totalDisabledUsers');
+                    const totalReportsEl = document.getElementById('totalReports');
+                    const totalMessagesEl = document.getElementById('totalMessages');
+
+                    if (totalUsersEl && result.stats.totalUsers !== undefined) {
+                        totalUsersEl.textContent = result.stats.totalUsers.toLocaleString();
+                    }
+                    if (totalListingsEl && result.stats.totalItems !== undefined) {
+                        totalListingsEl.textContent = result.stats.totalItems.toLocaleString();
+                    }
+                    if (totalDisabledUsersEl && result.stats.totalDisabledUsers !== undefined) {
+                        totalDisabledUsersEl.textContent = result.stats.totalDisabledUsers.toLocaleString();
+                    }
+                    if (totalReportsEl && result.stats.totalReports !== undefined) {
+                        totalReportsEl.textContent = result.stats.totalReports.toLocaleString();
+                    }
+                    if (totalMessagesEl && result.stats.totalMessages !== undefined) {
+                        totalMessagesEl.textContent = result.stats.totalMessages.toLocaleString();
+                    }
+                    
+                    console.log('✅ Dashboard stats updated successfully');
+                } else {
+                    // If the entire request failed, show Error for all stats
+                    console.error('Failed to load dashboard stats:', result.message);
+                    const totalUsersEl = document.getElementById('totalUsers');
+                    const totalListingsEl = document.getElementById('totalListings');
+                    const totalDisabledUsersEl = document.getElementById('totalDisabledUsers');
+                    const totalReportsEl = document.getElementById('totalReports');
+                    const totalMessagesEl = document.getElementById('totalMessages');
+                    
+                    if (totalUsersEl) totalUsersEl.textContent = 'Error';
+                    if (totalListingsEl) totalListingsEl.textContent = 'Error';
+                    if (totalDisabledUsersEl) totalDisabledUsersEl.textContent = 'Error';
+                    if (totalReportsEl) totalReportsEl.textContent = 'Error';
+                    if (totalMessagesEl) totalMessagesEl.textContent = 'Error';
+                }
+            } catch (err) {
+                console.error('Error loading dashboard stats:', err);
+                // Only show Error if there was an actual error, not just loading
+                const totalUsersEl = document.getElementById('totalUsers');
+                const totalListingsEl = document.getElementById('totalListings');
+                const totalDisabledUsersEl = document.getElementById('totalDisabledUsers');
+                const totalReportsEl = document.getElementById('totalReports');
+                const totalMessagesEl = document.getElementById('totalMessages');
+                
+                if (totalUsersEl) totalUsersEl.textContent = 'Error';
+                if (totalListingsEl) totalListingsEl.textContent = 'Error';
+                if (totalDisabledUsersEl) totalDisabledUsersEl.textContent = 'Error';
+                if (totalReportsEl) totalReportsEl.textContent = 'Error';
+                if (totalMessagesEl) totalMessagesEl.textContent = 'Error';
+            }
+        }
+
+        // Load Recent Users
+        async function loadRecentUsers() {
+            try {
+                const result = await window.firebaseGetRecentUsers(4);
+                const tbody = document.getElementById('recentUsersBody');
+                if (!tbody) return;
+                
+                if (result.success && result.users.length > 0) {
+                    tbody.innerHTML = result.users.map(user => `
+                        <tr class="border-b border-gray-800 hover:bg-gray-800 transition">
+                            <td class="py-3 px-2 font-medium text-white">${user.name}</td>
+                            <td class="py-3 px-2 text-gray-300">${user.email}</td>
+                            <td class="py-3 px-2 text-gray-300">${formatDate(user.joinDate)}</td>
+                            <td class="py-3 px-2">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium ${user.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}">
+                                    ${user.status}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-gray-400">No recent users found</td></tr>';
+                }
+            } catch (err) {
+                console.error('Error loading recent users:', err);
+            }
+        }
+
+        // Load Recent Listings
+        async function loadRecentListings() {
+            try {
+                const result = await window.firebaseGetRecentListings(4);
+                const tbody = document.getElementById('recentListingsBody');
+                if (!tbody) return;
+                
+                if (result.success && result.listings.length > 0) {
+                    tbody.innerHTML = result.listings.map(listing => `
+                        <tr class="border-b border-gray-800 hover:bg-gray-800 transition">
+                            <td class="py-3 px-2 font-medium text-white">${listing.title}</td>
+                            <td class="py-3 px-2 text-gray-300">₱${(listing.price || 0).toLocaleString()}</td>
+                            <td class="py-3 px-2 text-gray-300">${listing.category || 'N/A'}</td>
+                            <td class="py-3 px-2">
+                                <span class="px-3 py-1 rounded-full text-xs font-medium ${listing.status === 'sold' ? 'bg-blue-900 text-blue-300' : 'bg-green-900 text-green-300'}">
+                                    ${listing.status || 'active'}
+                                </span>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-gray-400">No recent listings found</td></tr>';
+                }
+            } catch (err) {
+                console.error('Error loading recent listings:', err);
+            }
+        }
+
+        // Load Reports
+        let currentAdminAnalytics = null;
+        let adminChartDistribution = null;
+        let adminChartCategory = null;
+        let adminChartDailySales = null;
+        let adminChartTopSellers = null;
+
+        async function loadReports() {
+            const loadingState = document.getElementById('reportsLoadingState');
+            const analyticsContent = document.getElementById('analyticsContent');
+            const emptyState = document.getElementById('reportsEmptyState');
+            
+            if (!loadingState) return;
+            
+            try {
+                loadingState.classList.remove('hidden');
+                analyticsContent?.classList.add('hidden');
+                emptyState?.classList.add('hidden');
+                
+                // Wait for the function to be available
+                let retries = 0;
+                while (typeof window.firebaseGetAllSalesAnalytics !== 'function' && retries < 30) {
+                    await new Promise(r => setTimeout(r, 100));
+                    retries++;
+                }
+
+                const result = await window.firebaseGetAllSalesAnalytics();
+                loadingState.classList.add('hidden');
+                
+                if (result.success && result.analytics) {
+                    currentAdminAnalytics = result.analytics;
+                    
+                    if (result.analytics.totalSales > 0) {
+                        analyticsContent?.classList.remove('hidden');
+                        updateAdminAnalyticsUI(result.analytics);
+                    } else {
+                        emptyState?.classList.remove('hidden');
+                    }
+                } else {
+                    emptyState?.classList.remove('hidden');
+                    if (result.message) {
+                        emptyState.innerHTML = `
+                            <i class="bi bi-exclamation-triangle text-4xl text-orange-400 mb-4"></i>
+                            <p class="text-gray-400 text-lg">Error loading analytics</p>
+                            <p class="text-gray-500 text-sm">${result.message}</p>
+                        `;
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading reports:', err);
+                loadingState.classList.add('hidden');
+                emptyState?.classList.remove('hidden');
+                emptyState.innerHTML = `
+                    <i class="bi bi-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+                    <p class="text-gray-400 text-lg">Error loading reports</p>
+                    <p class="text-gray-500 text-sm">${err?.message || 'Please try again later'}</p>
+                `;
+            }
+        }
+
+        function updateAdminAnalyticsUI(analytics) {
+            // Update stats
+            document.getElementById('adminTotalSales').textContent = analytics.totalSales.toLocaleString();
+            document.getElementById('adminTotalRevenue').textContent = '₱' + analytics.totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('adminUniqueSellers').textContent = analytics.uniqueSellers || 0;
+            document.getElementById('adminTotalCategories').textContent = Object.keys(analytics.byCategory || {}).length;
+            
+            // Load Chart.js if needed, then create charts
+            if (typeof Chart === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
+                script.onload = () => initAdminCharts(analytics);
+                document.head.appendChild(script);
+            } else {
+                initAdminCharts(analytics);
+            }
+            
+            // Populate table
+            populateAdminReportsTable(analytics);
+        }
+
+        function initAdminCharts(analytics) {
+            createAdminDistributionChart(analytics);
+            createAdminCategoryChart(analytics);
+            createAdminDailySalesChart(analytics);
+            createAdminTopSellersChart(analytics);
+        }
+
+        function createAdminDistributionChart(analytics) {
+            const ctx = document.getElementById('adminChartDistribution');
+            if (!ctx) return;
+            
+            // Destroy existing chart
+            if (adminChartDistribution) adminChartDistribution.destroy();
+            
+            const items = Object.entries(analytics.itemsSold || {})
+                .sort((a, b) => b[1].revenue - a[1].revenue)
+                .slice(0, 5);
+            
+            if (items.length === 0) {
+                ctx.parentElement.innerHTML = '<div class="text-gray-500 text-center py-8">No data available</div>';
+                return;
+            }
+            
+            const labels = items.map(([name]) => name.length > 15 ? name.substring(0, 15) + '...' : name);
+            const data = items.map(([_, d]) => d.revenue);
+            const colors = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5'];
+            
+            adminChartDistribution = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderColor: '#1f2937',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'right',
+                            labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 12, padding: 10 }
+                        },
+                        tooltip: {
+                            backgroundColor: '#111827',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            callbacks: {
+                                label: ctx => `₱${ctx.parsed.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createAdminCategoryChart(analytics) {
+            const ctx = document.getElementById('adminChartCategory');
+            if (!ctx) return;
+            
+            if (adminChartCategory) adminChartCategory.destroy();
+            
+            const categories = Object.entries(analytics.byCategory || {}).sort((a, b) => b[1].count - a[1].count);
+            
+            if (categories.length === 0) {
+                ctx.parentElement.innerHTML = '<div class="text-gray-500 text-center py-8">No data available</div>';
+                return;
+            }
+            
+            adminChartCategory = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: categories.map(([name]) => name),
+                    datasets: [{
+                        label: 'Items Sold',
+                        data: categories.map(([_, d]) => d.count),
+                        backgroundColor: '#f97316',
+                        borderRadius: 6,
+                        barThickness: 30
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { backgroundColor: '#111827', titleColor: '#fff', bodyColor: '#fff' }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 11 } } },
+                        y: { beginAtZero: true, grid: { color: '#374151' }, ticks: { color: '#9ca3af', stepSize: 1 } }
+                    }
+                }
+            });
+        }
+
+        function createAdminDailySalesChart(analytics) {
+            const ctx = document.getElementById('adminChartDailySales');
+            if (!ctx) return;
+            
+            if (adminChartDailySales) adminChartDailySales.destroy();
+            
+            const dates = Object.keys(analytics.dailySales || {}).filter(d => d !== 'Unknown').sort();
+            
+            if (dates.length === 0) {
+                ctx.parentElement.innerHTML = '<div class="text-gray-500 text-center py-8">No data available</div>';
+                return;
+            }
+            
+            const formattedDates = dates.map(d => {
+                const date = new Date(d);
+                return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+            });
+            
+            adminChartDailySales = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: formattedDates,
+                    datasets: [{
+                        label: 'Daily Revenue',
+                        data: dates.map(d => analytics.dailySales[d]),
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#f97316',
+                        pointBorderColor: '#1f2937',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111827',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            callbacks: {
+                                label: ctx => `₱${ctx.parsed.y.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 10 } } },
+                        y: { beginAtZero: true, grid: { color: '#374151' }, ticks: { color: '#9ca3af', callback: v => '₱' + v.toLocaleString() } }
+                    }
+                }
+            });
+        }
+
+        function createAdminTopSellersChart(analytics) {
+            const ctx = document.getElementById('adminChartTopSellers');
+            if (!ctx) return;
+            
+            if (adminChartTopSellers) adminChartTopSellers.destroy();
+            
+            const sellers = Object.entries(analytics.bySeller || {})
+                .sort((a, b) => b[1].revenue - a[1].revenue)
+                .slice(0, 10);
+            
+            if (sellers.length === 0) {
+                ctx.parentElement.innerHTML = '<div class="text-gray-500 text-center py-8">No data available</div>';
+                return;
+            }
+            
+            adminChartTopSellers = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sellers.map(([name]) => name.length > 12 ? name.substring(0, 12) + '...' : name),
+                    datasets: [{
+                        label: 'Revenue',
+                        data: sellers.map(([_, d]) => d.revenue),
+                        backgroundColor: '#22c55e',
+                        borderRadius: 6,
+                        barThickness: 25
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111827',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            callbacks: {
+                                label: ctx => `₱${ctx.parsed.x.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, grid: { color: '#374151' }, ticks: { color: '#9ca3af', callback: v => '₱' + v.toLocaleString() } },
+                        y: { grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        function populateAdminReportsTable(analytics) {
+            const tbody = document.getElementById('adminReportsTableBody');
+            if (!tbody) return;
+            
+            const items = analytics.rawItems || [];
+            
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-gray-500">No sales data available</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = items.slice(0, 50).map(item => `
+                <tr class="border-b border-gray-700 hover:bg-gray-700/50 transition">
+                    <td class="py-3 px-4 text-white font-medium">${item.title || 'Unknown'}</td>
+                    <td class="py-3 px-4 text-gray-400">${item.category || 'N/A'}</td>
+                    <td class="py-3 px-4 text-gray-400">${item.seller || 'Unknown'}</td>
+                    <td class="py-3 px-4 text-center text-gray-300">${item.quantity}</td>
+                    <td class="py-3 px-4 text-right text-green-400">₱${(item.price || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                    <td class="py-3 px-4 text-right text-gray-400">${item.date || 'N/A'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Filter by period
+        window.filterAdminReportsByPeriod = function() {
+            const period = document.getElementById('adminReportsPeriodFilter').value;
+            const periodLabel = document.getElementById('adminPeriodLabel');
+            
+            if (!currentAdminAnalytics) return;
+            
+            let filteredAnalytics = { ...currentAdminAnalytics };
+            const now = new Date();
+            let startDate = null;
+            
+            switch (period) {
+                case 'weekly':
+                    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    if (periodLabel) periodLabel.textContent = 'This Week';
+                    break;
+                case 'monthly':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    if (periodLabel) periodLabel.textContent = 'This Month';
+                    break;
+                case 'yearly':
+                    startDate = new Date(now.getFullYear(), 0, 1);
+                    if (periodLabel) periodLabel.textContent = 'This Year';
+                    break;
+                default:
+                    if (periodLabel) periodLabel.textContent = 'All Time';
+            }
+            
+            if (startDate) {
+                // Filter raw items
+                const filtered = (currentAdminAnalytics.rawItems || []).filter(item => {
+                    if (!item.dateObj) return false;
+                    return item.dateObj >= startDate;
+                });
+                
+                // Recalculate analytics
+                filteredAnalytics = recalculateAnalytics(filtered);
+            }
+            
+            updateAdminAnalyticsUI(filteredAnalytics);
+        };
+
+        function recalculateAnalytics(items) {
+            const analytics = {
+                totalSales: 0,
+                totalRevenue: 0,
+                uniqueSellers: new Set(),
+                itemsSold: {},
+                byCategory: {},
+                bySeller: {},
+                dailySales: {},
+                rawItems: items
+            };
+            
+            items.forEach(item => {
+                analytics.totalSales++;
+                analytics.totalRevenue += item.price || 0;
+                analytics.uniqueSellers.add(item.sellerId);
+                
+                // Items sold
+                if (!analytics.itemsSold[item.title]) {
+                    analytics.itemsSold[item.title] = { quantity: 0, revenue: 0, category: item.category };
+                }
+                analytics.itemsSold[item.title].quantity++;
+                analytics.itemsSold[item.title].revenue += item.price || 0;
+                
+                // By category
+                if (!analytics.byCategory[item.category]) {
+                    analytics.byCategory[item.category] = { count: 0, revenue: 0 };
+                }
+                analytics.byCategory[item.category].count++;
+                analytics.byCategory[item.category].revenue += item.price || 0;
+                
+                // By seller
+                if (!analytics.bySeller[item.seller]) {
+                    analytics.bySeller[item.seller] = { count: 0, revenue: 0 };
+                }
+                analytics.bySeller[item.seller].count++;
+                analytics.bySeller[item.seller].revenue += item.price || 0;
+                
+                // Daily sales
+                const dateKey = item.date || 'Unknown';
+                if (!analytics.dailySales[dateKey]) analytics.dailySales[dateKey] = 0;
+                analytics.dailySales[dateKey] += item.price || 0;
+            });
+            
+            analytics.uniqueSellers = analytics.uniqueSellers.size;
+            return analytics;
+        }
+
+        // Export to PDF
+        window.exportAdminReportsToPDF = async function() {
+            if (!currentAdminAnalytics) {
+                alert('No data to export');
+                return;
+            }
+            
+            // Load jsPDF if needed
+            if (typeof jspdf === 'undefined' && typeof jsPDF === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                script.onload = () => generateAdminPDF();
+                document.head.appendChild(script);
+            } else {
+                generateAdminPDF();
+            }
+        };
+
+        function generateAdminPDF() {
+            const { jsPDF } = window.jspdf || window;
+            const doc = new jsPDF();
+            const analytics = currentAdminAnalytics;
+            
+            // Title
+            doc.setFontSize(20);
+            doc.setTextColor(249, 115, 22);
+            doc.text('IPT SYSTEM - Platform Sales Report', 20, 20);
+            
+            // Date
+            doc.setFontSize(10);
+            doc.setTextColor(128);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 28);
+            
+            // Summary
+            doc.setFontSize(14);
+            doc.setTextColor(0);
+            doc.text('Summary', 20, 42);
+            
+            doc.setFontSize(11);
+            doc.text(`Total Sales: ${analytics.totalSales}`, 20, 52);
+            doc.text(`Total Revenue: PHP ${analytics.totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`, 20, 60);
+            doc.text(`Active Sellers: ${analytics.uniqueSellers}`, 20, 68);
+            doc.text(`Categories: ${Object.keys(analytics.byCategory).length}`, 20, 76);
+            
+            // Top Items
+            doc.setFontSize(14);
+            doc.text('Top Items by Revenue', 20, 92);
+            
+            const topItems = Object.entries(analytics.itemsSold)
+                .sort((a, b) => b[1].revenue - a[1].revenue)
+                .slice(0, 10);
+            
+            let y = 102;
+            doc.setFontSize(10);
+            topItems.forEach(([name, data], i) => {
+                doc.text(`${i + 1}. ${name.substring(0, 40)} - PHP ${data.revenue.toLocaleString()}`, 20, y);
+                y += 7;
+            });
+            
+            // Save
+            doc.save('ipt-platform-sales-report.pdf');
+        }
+
+        // Store messages for reply functionality
+        let adminMessages = [];
+        let currentReplyMessageId = null;
+
+        // Load Admin Messages
+        async function loadAdminMessages() {
+            const loadingState = document.getElementById('messagesLoadingState');
+            const listContainer = document.getElementById('messagesListContainer');
+            const emptyState = document.getElementById('messagesEmptyState');
+            const messagesList = document.getElementById('messagesList');
+            
+            if (!loadingState) return;
+            
+            try {
+                loadingState.classList.remove('hidden');
+                listContainer?.classList.add('hidden');
+                emptyState?.classList.add('hidden');
+                
+                const result = await window.firebaseGetAllAdminMessages(100);
+                loadingState.classList.add('hidden');
+                
+                if (result.success && result.messages.length > 0) {
+                    adminMessages = result.messages;
+                    listContainer?.classList.remove('hidden');
+                    
+                    messagesList.innerHTML = result.messages.map(msg => `
+                        <div class="bg-gray-800 rounded-xl border border-gray-700 p-4 ${msg.status === 'unread' ? 'border-l-4 border-l-green-500' : ''}">
+                            <div class="flex items-start justify-between mb-3">
+                                <div>
+                                    <h4 class="text-white font-medium">${msg.user_name || 'Unknown User'}</h4>
+                                    <p class="text-gray-400 text-sm">${msg.user_email || ''}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium ${
+                                        msg.status === 'unread' ? 'bg-green-900 text-green-300' : 
+                                        msg.status === 'replied' ? 'bg-blue-900 text-blue-300' : 
+                                        'bg-gray-700 text-gray-300'
+                                    }">
+                                        ${msg.status || 'unread'}
+                                    </span>
+                                    <span class="text-gray-500 text-xs">${formatDate(msg.created_at)}</span>
+                                </div>
+                            </div>
+                            <p class="text-gray-200 mb-3"><strong class="text-gray-400">Subject:</strong> ${msg.subject || 'No Subject'}</p>
+                            <p class="text-gray-300 mb-4">${msg.message || ''}</p>
+                            
+                            ${msg.replies && msg.replies.length > 0 ? `
+                                <div class="border-t border-gray-700 pt-3 mt-3 space-y-2">
+                                    <p class="text-gray-400 text-sm font-medium">Replies:</p>
+                                    ${msg.replies.map(reply => `
+                                        <div class="pl-4 border-l-2 ${reply.from === 'admin' ? 'border-l-blue-500' : 'border-l-green-500'}">
+                                            <p class="text-xs text-gray-500 mb-1">${reply.from === 'admin' ? 'Admin' : 'User'} • ${reply.timestamp ? new Date(reply.timestamp).toLocaleString() : ''}</p>
+                                            <p class="text-gray-300 text-sm">${reply.text}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            <div class="flex gap-2 mt-4">
+                                <button onclick="openReplyModal('${msg.id}')" class="px-3 py-1.5 rounded-lg bg-green-900 hover:bg-green-800 text-green-300 text-xs font-medium transition">
+                                    <i class="bi bi-reply me-1"></i> Reply
+                                </button>
+                                ${msg.status === 'unread' ? `
+                                    <button onclick="markAsRead('${msg.id}')" class="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium transition">
+                                        <i class="bi bi-check2 me-1"></i> Mark Read
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    // Update badge
+                    updateAdminMsgBadge(result.messages.filter(m => m.status === 'unread').length);
+                } else {
+                    emptyState?.classList.remove('hidden');
+                    updateAdminMsgBadge(0);
+                }
+            } catch (err) {
+                console.error('Error loading admin messages:', err);
+                loadingState.classList.add('hidden');
+                emptyState?.classList.remove('hidden');
+            }
+        }
+
+        function updateAdminMsgBadge(count) {
+            const badge = document.getElementById('adminMsgBadge');
+            if (badge) {
+                if (count > 0) {
+                    badge.textContent = count;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        }
+
+        // Reply Modal Functions
+        window.openReplyModal = function(messageId) {
+            currentReplyMessageId = messageId;
+            const msg = adminMessages.find(m => m.id === messageId);
+            if (msg) {
+                document.getElementById('replyModalMessage').textContent = msg.message;
+                document.getElementById('replyText').value = '';
+                document.getElementById('replyModal').classList.remove('hidden');
+            }
+        };
+
+        window.closeReplyModal = function() {
+            document.getElementById('replyModal').classList.add('hidden');
+            currentReplyMessageId = null;
+        };
+
+        window.sendReply = async function() {
+            const replyText = document.getElementById('replyText').value.trim();
+            if (!replyText || !currentReplyMessageId) {
+                alert('Please enter a reply message');
+                return;
+            }
+            
+            try {
+                const result = await window.firebaseAdminReplyMessage(currentReplyMessageId, replyText);
+                if (result.success) {
+                    closeReplyModal();
+                    loadAdminMessages(); // Refresh
+                    alert('Reply sent successfully!');
+                } else {
+                    alert('Failed to send reply: ' + (result.message || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Error sending reply:', err);
+                alert('Failed to send reply');
+            }
+        };
+
+        window.markAsRead = async function(messageId) {
+            try {
+                const result = await window.firebaseMarkAdminMessageRead(messageId);
+                if (result.success) {
+                    loadAdminMessages(); // Refresh
+                }
+            } catch (err) {
+                console.error('Error marking as read:', err);
+            }
+        };
+
+        window.viewReport = function(reportId) {
+            alert('View report: ' + reportId + '\n\nDetailed report view coming soon!');
+        };
+
+        // Initialize based on active menu
+        await waitForFirebase();
+        
+        const activeMenu = '@Model.ActiveMenu';
+        
+        if (activeMenu === 'overview') {
+            await loadDashboardStats();
+            await loadRecentUsers();
+            await loadRecentListings();
+        } else if (activeMenu === 'reports') {
+            loadReports();
+            document.getElementById('refreshReportsBtn')?.addEventListener('click', loadReports);
+        } else if (activeMenu === 'messages') {
+            loadAdminMessages();
+            document.getElementById('refreshMessagesBtn')?.addEventListener('click', loadAdminMessages);
+        }
+        
+        // Load unread message count for badge
+        if (typeof window.firebaseGetUnreadAdminMessagesCount === 'function') {
+            const countResult = await window.firebaseGetUnreadAdminMessagesCount();
+            if (countResult.success) {
+                updateAdminMsgBadge(countResult.count);
+            }
+        }
+    </script>
+
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-gray-900 rounded-xl border border-gray-700 w-full max-w-lg mx-4 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-white">Edit User</h3>
+                <button id="closeEditUserModalBtn" class="text-gray-400 hover:text-white">
+                    <i class="bi bi-x-lg text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="editUserForm">
+                <input type="hidden" id="editUserId">
+                
+                <div class="space-y-4">
+                    <!-- Email (Read-only) -->
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-2">Email Address</label>
+                        <input type="text" id="editUserEmail" class="w-full bg-gray-800 text-gray-400 rounded-lg border border-gray-700 p-3 cursor-not-allowed" readonly>
+                    </div>
+
+                    <!-- Names -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-400 text-sm mb-2">First Name</label>
+                            <input type="text" id="editUserFirstName" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-blue-500 focus:outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 text-sm mb-2">Last Name</label>
+                            <input type="text" id="editUserLastName" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-blue-500 focus:outline-none" required>
+                        </div>
+                    </div>
+
+                    <!-- Account Type -->
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-2">Account Type</label>
+                        <select id="editUserType" class="w-full bg-gray-800 text-white rounded-lg border border-gray-700 p-3 focus:border-blue-500 focus:outline-none">
+                            <option value="Buyer">Buyer</option>
+                            <option value="Seller">Seller</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button type="button" id="cancelEditUserBtn" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase Client -->
+    <script type="module" src="/js/firebase-client.js"></script>
+    
+    <!-- Admin Overview Statistics -->
+    <script type="module" src="/js/admin-overview.js"></script>
+    
+    <!-- Admin Users Management Module -->
+    <script type="module" src="/js/admin-users.js"></script>
 </body>
 </html>

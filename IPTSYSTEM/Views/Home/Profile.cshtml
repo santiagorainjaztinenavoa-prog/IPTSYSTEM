@@ -1,0 +1,2393 @@
+@model IPTSYSTEM.Models.UserProfileViewModel
+@{
+    ViewData["Title"] = "My Profile";
+    var initial = string.IsNullOrWhiteSpace(Model.FullName)
+        ? (string.IsNullOrWhiteSpace(Model.Username) ? "?" : Model.Username.Substring(0,1).ToUpperInvariant())
+        : Model.FullName.Substring(0,1).ToUpperInvariant();
+    
+    // Calculate days since joined
+    var daysSinceJoined = 12;
+    var joinedText = daysSinceJoined < 30 ? $"{daysSinceJoined}d" : $"{daysSinceJoined / 30}m {daysSinceJoined % 30}d";
+    
+    var userType = Context.Session.GetString("UserType") ?? "buyer";
+    var username = Context.Session.GetString("Username") ?? "";
+    var fullName = Context.Session.GetString("FullName") ?? "";
+    var userId = Context.Session.GetString("UserId") ?? "";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/pages/profile.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/pages/mylistings.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/listing-form.css" asp-append-version="true" />
+    <style>
+        /* Smooth modal animations */
+        .modal.fade .modal-dialog {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transform: scale(0.7) translateY(-30px);
+            opacity: 0;
+        }
+        
+        .modal.show .modal-dialog {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+        
+        .modal-backdrop.fade {
+            transition: opacity 0.3s ease;
+        }
+        
+        .modal-backdrop.show {
+            opacity: 0.6;
+        }
+        
+        /* Sold out items in history - grayscale and lower opacity */
+        .sold-item {
+            filter: grayscale(100%);
+            opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+        
+        .sold-item:hover {
+            opacity: 0.8;
+        }
+        
+        .sold-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(220, 38, 38, 0.95);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            z-index: 2;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Button hover animations */
+        #confirmSoldBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5) !important;
+        }
+        
+        #confirmDeleteBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.5) !important;
+        }
+        
+        .modal .btn:hover {
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
+        /* Review media gallery styles */
+        .review-gallery { display:flex; flex-wrap:wrap; gap:8px; }
+        .review-thumb { width:96px; height:96px; border-radius:8px; background:#f3f4f6; overflow:hidden; display:flex; align-items:center; justify-content:center; position:relative; }
+        .review-thumb img { max-width:100%; max-height:100%; object-fit:cover; }
+        .video-preview { max-width:320px; border-radius:8px; background:#f3f4f6; }
+
+        /* Lightbox styles */
+        .review-lightbox-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; z-index: 1056; }
+        .review-lightbox { max-width: 90vw; max-height: 85vh; border-radius: 12px; overflow:hidden; box-shadow: 0 20px 60px rgba(0,0,0,.4); background:#000; position:relative; }
+        .review-lightbox img, .review-lightbox video { max-width: 90vw; max-height: 85vh; display:block; }
+        .lightbox-close { position:absolute; top:8px; right:8px; background: rgba(255,255,255,.15); border:none; color:#fff; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+        .lightbox-close:hover { background: rgba(255,255,255,.3); }
+    </style>
+}
+
+<!-- Lightbox for review media -->
+<div id="reviewLightboxBackdrop" class="review-lightbox-backdrop">
+    <div class="review-lightbox" id="reviewLightbox">
+        <button class="lightbox-close" id="lightboxCloseBtn" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        <!-- content injected dynamically -->
+    </div>
+</div>
+
+<!-- Load listings-manager EARLY so onclick handlers can find the functions -->
+<script src="~/js/listings-manager.js?v=@DateTime.Now.Ticks"></script>
+<script>
+
+</script>
+
+<section class="profile-page py-4" 
+         data-user-name="@username"
+         data-user-fullname="@fullName"
+         data-user-id="@userId"
+         data-user-type="@userType">
+    <div class="container">
+        <!-- Profile Header -->
+        <div class="profile-header-section">
+            <div class="profile-header-content">
+                <div id="profileAvatar" class="profile-avatar-large">@initial</div>
+                <div class="profile-info-section">
+                    <div class="profile-name-row">
+                        <h1 class="profile-name">@(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Username : Model.FullName)</h1>
+                        <span class="profile-verified-badge">Not verified</span>
+                    </div>
+                    <a href="#" id="profileDetailsLink" class="profile-username-link">
+                        Profile details <i class="bi bi-chevron-right"></i>
+                    </a>
+                    <div class="profile-meta-stats">
+                        <div class="profile-meta-item">
+                            <span class="profile-meta-value">N/A</span>
+                            <span class="profile-meta-label">No review yet</span>
+                        </div>
+                        <div class="profile-meta-item">
+                            <span class="profile-meta-value">@joinedText</span>
+                            <span class="profile-meta-label">Joined</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <a href="@Url.Action("AccountSettings", "Home")" class="btn btn-edit-profile">Edit Profile</a>
+                    <button class="btn btn-share-profile" title="Share profile" onclick="shareProfile()">
+                        <i class="bi bi-upload"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Profile Tabs with Add Button -->
+        <div class="profile-tabs-section">
+            <div class="d-flex justify-content-between align-items-center" style="padding: 0 40px;">
+                <div class="profile-tabs">
+                    @if (userType.ToLower() == "buyer")
+                    {
+                        <button class="profile-tab active" data-tab="listings" onclick="switchTab('listings')">Listings</button>
+                        <button class="profile-tab" data-tab="review" onclick="switchTab('review')">Reviews</button>
+                    }
+                    else
+                    {
+                        <button class="profile-tab active" data-tab="listings" onclick="switchTab('listings')">Listings</button>
+                        <button class="profile-tab" data-tab="history" onclick="switchTab('history')">History</button>
+                        <button class="profile-tab" data-tab="reports" onclick="switchTab('reports')">Reports</button>
+                        <button class="profile-tab" data-tab="review" onclick="switchTab('review')">Review</button>
+                    }
+                </div>
+                @if (userType == "seller" || userType == "admin")
+                {
+                    <button class="btn-add-new" id="addNewListingBtn" onclick="openListingModal()" style="margin: 12px 0;">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        Add New Listing
+                    </button>
+                }
+            </div>
+        </div>
+        
+        <!-- Tab Contents -->
+        <div class="profile-content-section">
+            <!-- Listings Content (For Both Buyer and Seller) -->
+            <div class="tab-content active" id="listingsContent">
+                <div class="listings-grid" id="listingsContainer">
+                    <!-- Skeleton Loader -->
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                    <div class="listing-card listing-skeleton" style="height: 300px;"></div>
+                </div>
+            </div>
+
+            <!-- History Content -->
+            <div class="tab-content" id="historyContent">
+                <div class="empty-tab-state">
+                    <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Purchase History</h3>
+                    <p>Your transaction history will appear here</p>
+                </div>
+            </div>
+
+            <!-- Reports Content -->
+            <div class="tab-content" id="reportsContent">
+                <div class="reports-container" style="padding: 24px 0;">
+                    
+                    <!-- Header with Filter and Export -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+                        <div>
+                            <h2 style="font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0 0 6px 0;">Sales Reports & Analytics</h2>
+                            <p style="font-size: 14px; color: #6b7280; margin: 0;">Track your sales performance and insights</p>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <!-- Time Period Filter -->
+                            <select id="reportsPeriodFilter" onchange="filterReportsByPeriod()" style="padding: 10px 16px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; color: #374151; background: white; cursor: pointer; min-width: 140px;">
+                                <option value="all">All Time</option>
+                                <option value="weekly">This Week</option>
+                                <option value="monthly">This Month</option>
+                                <option value="yearly">This Year</option>
+                            </select>
+                            <!-- Export PDF Button -->
+                            <button onclick="exportReportsToPDF()" style="display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, #dc3545, #c82333); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                                Export PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Stats Bar -->
+                    <div style="display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; background: #ffffff; padding: 20px 24px; border-radius: 12px; border: 1px solid #f0f0f0;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #dc3545, #c82333); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                <i class="bi bi-cart-check" style="color: white; font-size: 18px;"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 11px; color: #6b7280; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Total Sales</p>
+                                <p id="totalSalesStat" style="font-size: 20px; font-weight: 700; color: #1a1a2e; margin: 0;">0</p>
+                            </div>
+                        </div>
+                        <div style="width: 1px; background: #e5e7eb;"></div>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #dc3545, #c82333); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                <i class="bi bi-cash-stack" style="color: white; font-size: 18px;"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 11px; color: #6b7280; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Total Revenue</p>
+                                <p id="totalRevenueStat" style="font-size: 20px; font-weight: 700; color: #1a1a2e; margin: 0;">₱0.00</p>
+                            </div>
+                        </div>
+                        <div style="width: 1px; background: #e5e7eb;"></div>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #dc3545, #c82333); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                <i class="bi bi-wallet2" style="color: white; font-size: 18px;"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 11px; color: #6b7280; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Net Earnings</p>
+                                <p id="totalEarningsStat" style="font-size: 20px; font-weight: 700; color: #1a1a2e; margin: 0;">₱0.00</p>
+                            </div>
+                        </div>
+                        <div style="width: 1px; background: #e5e7eb;"></div>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #6b7280, #4b5563); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                <i class="bi bi-calendar-range" style="color: white; font-size: 18px;"></i>
+                            </div>
+                            <div>
+                                <p style="font-size: 11px; color: #6b7280; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Period</p>
+                                <p id="periodLabel" style="font-size: 16px; font-weight: 600; color: #1a1a2e; margin: 0;">All Time</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Grid -->
+                    <div id="chartsContainer" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px;">
+                        
+                        <!-- Distribution of Sales Chart -->
+                        <div style="background: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #f0f0f0;">
+                            <h3 style="font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                                <i class="bi bi-pie-chart" style="color: #dc3545;"></i>
+                                Distribution of Sales by Quantity & Price
+                            </h3>
+                            <div style="height: 240px; display: flex; align-items: center; justify-content: center;">
+                                <canvas id="chartDistributionDonut"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Items by Category Chart -->
+                        <div style="background: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #f0f0f0;">
+                            <h3 style="font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                                <i class="bi bi-bar-chart" style="color: #dc3545;"></i>
+                                Items Sold by Category
+                            </h3>
+                            <div style="height: 240px;">
+                                <canvas id="chartBarCategory"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Daily Sales Chart -->
+                    <div style="background: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #f0f0f0; margin-bottom: 20px;">
+                        <h3 style="font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-graph-up" style="color: #dc3545;"></i>
+                            Daily Sales Report
+                        </h3>
+                        <div style="height: 260px;">
+                            <canvas id="chartLineDailySales"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Report Table -->
+                    <div style="background: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #f0f0f0;">
+                        <h3 style="font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-table" style="color: #dc3545;"></i>
+                            Detailed Sales Report
+                        </h3>
+                        <div id="reportsTableContainer" style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                <thead>
+                                    <tr style="background: #fafafa;">
+                                        <th style="padding: 10px 12px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #dc3545;">Item</th>
+                                        <th style="padding: 10px 12px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #dc3545;">Category</th>
+                                        <th style="padding: 10px 12px; text-align: center; font-weight: 600; color: #374151; border-bottom: 2px solid #dc3545;">Qty</th>
+                                        <th style="padding: 10px 12px; text-align: right; font-weight: 600; color: #374151; border-bottom: 2px solid #dc3545;">Price</th>
+                                        <th style="padding: 10px 12px; text-align: right; font-weight: 600; color: #374151; border-bottom: 2px solid #dc3545;">Total</th>
+                                        <th style="padding: 10px 12px; text-align: right; font-weight: 600; color: #374151; border-bottom: 2px solid #dc3545;">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportsTableBody">
+                                    <tr>
+                                        <td colspan="6" style="padding: 32px; text-align: center; color: #9ca3af;">
+                                            <div class="spinner-border spinner-border-sm me-2" style="color: #dc3545;" role="status"></div>
+                                            Loading...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="reportsEmptyState" style="display: none; background: #ffffff; border-radius: 12px; padding: 48px; text-align: center; border: 1px solid #f0f0f0; margin-top: 20px;">
+                        <div style="width: 64px; height: 64px; background: #fef2f2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+                            <i class="bi bi-graph-up" style="font-size: 28px; color: #dc3545;"></i>
+                        </div>
+                        <h3 style="font-size: 16px; font-weight: 600; color: #1a1a2e; margin: 0 0 8px 0;">No Sales Yet</h3>
+                        <p style="color: #6b7280; margin: 0; font-size: 14px;">Mark items as sold to see your analytics</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Review Content -->
+            <div class="tab-content" id="reviewContent">
+                <div class="reviews-container" id="reviewsContainer">
+                    <div class="loading-state">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading reviews...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Profile Details Modal -->
+<div class="modal fade" id="profileDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">About @Model.Username</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="mb-3">Account details</h6>
+        <ul class="list-unstyled d-flex flex-column gap-2">
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-calendar"></i> <span>Joined @joinedText</span></li>
+            <li class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> <span id="profileLocation">@(Model.City ?? "Unknown City")</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Modals -->
+<!-- Sold Out Confirmation Modal -->
+<div class="modal fade" id="soldOutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
+            <div class="modal-header border-0" style="padding: 24px 24px 0;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #10b981 0%, #16a34a 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-check-circle-fill" style="font-size: 24px; color: white;"></i>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px 24px;">
+                <h5 class="mb-2" style="font-weight: 700; color: #1a1a1a;">Mark as Sold Out?</h5>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">
+                    <span id="soldOutItemTitle" style="font-weight: 600; color: #16a34a;"></span> will be moved to your history and removed from Browse.
+                </p>
+            </div>
+            <div class="modal-footer border-0" style="padding: 0 24px 24px; gap: 12px;">
+                <button type="button" class="btn" data-bs-dismiss="modal" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: #f3f4f6; color: #6b7280; border: none;">
+                    Cancel
+                </button>
+                <button type="button" class="btn" id="confirmSoldBtn" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: linear-gradient(135deg, #10b981 0%, #16a34a 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);">
+                    <i class="bi bi-check-circle me-2"></i>Mark as Sold
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);">
+            <div class="modal-header border-0" style="padding: 24px 24px 0;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-trash-fill" style="font-size: 24px; color: white;"></i>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px 24px;">
+                <h5 class="mb-2" style="font-weight: 700; color: #1a1a1a;">Delete Listing?</h5>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">
+                    Are you sure you want to delete <span id="deleteItemTitle" style="font-weight: 600, color: #dc2626;"></span>? This action cannot be undone.
+                </p>
+            </div>
+            <div class="modal-footer border-0" style="padding: 0 24px 24px; gap: 12px;">
+                <button type="button" class="btn" data-bs-dismiss="modal" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: #f3f4f6; color: #6b7280; border: none;">
+                    Cancel
+                </button>
+                <button type="button" class="btn" id="confirmDeleteBtn" style="flex: 1; padding: 12px; border-radius: 10px; font-weight: 600; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border: none; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);">
+                    <i class="bi bi-trash me-2"></i>Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Listing Modal -->
+<div class="modal fade" id="listingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content modern-modal">
+            <div class="modal-header border-0">
+                <div>
+                    <h2 class="modal-title" id="modalTitle">Add New Listing</h2>
+                    <p class="modal-subtitle">Fill in the details below</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="listingForm">
+                    <input type="hidden" id="listingId" value="0">
+                    <input type="hidden" id="imageUrl" value="">
+                    
+                    <!-- Image Upload Section -->
+                    <div class="mb-4">
+                        <label class="form-label">Product Photo *</label>
+                        <div class="image-upload-container" id="imageUploadContainer">
+                            <div class="image-preview-area" id="imagePreviewArea">
+                                <img id="imagePreview" src="" alt="Preview" style="display: none;">
+                                <div class="upload-placeholder" id="uploadPlaceholder">
+                                    <i class="bi bi-cloud-upload" style="font-size: 3rem; color: #9ca3af;"></i>
+                                    <p class="mt-3 mb-2" style="font-weight: 600; color: #1a1a1a;">Click to upload or drag and drop</p>
+                                    <p class="text-muted" style="font-size: 0.875rem;">PNG, JPG, GIF up to 10MB</p>
+                                </div>
+                            </div>
+                            <input type="file" id="imageFileInput" accept="image/*" style="display: none;">
+                            <button type="button" class="btn-remove-image" id="removeImageBtn" style="display: none;" onclick="removeImage()">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        <div class="mt-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <hr class="flex-grow-1">
+                                <span class="px-3 text-muted" style="font-size: 0.875rem;">or paste image URL</span>
+                                <hr class="flex-grow-1">
+                            </div>
+                            <input type="url" class="form-control minimal-input" id="imageUrlInput" placeholder="https://example.com/image.jpg">
+                        </div>
+                    </div>
+
+                    <!-- Title -->
+                    <div class="mb-4">
+                        <label for="title" class="form-label">Title *</label>
+                        <input type="text" class="form-control minimal-input" name="title" id="title" placeholder="e.g., iPhone 13 Pro Max 256GB" required maxlength="100">
+                    </div>
+
+                    <!-- Description -->
+                    <div class="mb-4">
+                        <label for="description" class="form-label">Description *</label>
+                        <textarea class="form-control minimal-input" name="description" id="description" rows="3" placeholder="Describe your item..." required maxlength="500"></textarea>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Price -->
+                        <div class="col-md-6">
+                            <label for="price" class="form-label">Price (₱) *</label>
+                            <input type="number" class="form-control minimal-input" name="price" id="price" placeholder="0.00" step="0.01" min="0" required>
+                        </div>
+
+                        <!-- Category -->
+                        <div class="col-md-6">
+                            <label for="category" class="form-label">Category *</label>
+                            <select class="form-select minimal-input" name="category" id="category" required>
+                                <option value="">Select category</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Fashion">Fashion</option>
+                                <option value="Home & Living">Home & Living</option>
+                                <option value="Books">Books</option>
+                                <option value="Sports">Sports</option>
+                                <option value="Toys & Games">Toys & Games</option>
+                                <option value="Vehicles">Vehicles</option>
+                                <option value="Beauty">Beauty</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Condition -->
+                    <div class="mt-4">
+                        <label class="form-label">Condition *</label>
+                        <div class="condition-options">
+                            <input type="radio" class="btn-check" name="condition" id="conditionNew" value="New">
+                            <label class="condition-option" for="conditionNew">New</label>
+
+                            <input type="radio" class="btn-check" name="condition" id="conditionLikeNew" value="Like New">
+                            <label class="condition-option" for="conditionLikeNew">Like New</label>
+
+                            <input type="radio" class="btn-check" name="condition" id="conditionGood" value="Good">
+                            <label class="condition-option" for="conditionGood">Good</label>
+
+                            <input type="radio" class="btn-check" name="condition" id="conditionFair" value="Fair">
+                            <label class="condition-option" for="conditionFair">Fair</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn-modal-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn-modal-save btn-save-listing" onclick="saveListing()">
+                    <span id="saveButtonText">Add Listing</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11000">
+    <div id="toastNotification" class="toast" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMessage"></div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+
+<script>
+    // Immediate loading without waiting for Firebase
+    let userListingsLoaded = false;
+    let pendingSoldOutItem = null;
+    let pendingDeleteItem = null;
+    
+    // Update profile details modal with username and address from Firebase
+    async function updateProfileDetailsFromFirebase(){
+        const section = document.querySelector('.profile-page');
+        const currentUserId = section.getAttribute('data-user-id') || '';
+        const currentUsername = section.getAttribute('data-user-name') || '';
+        const titleEl = document.querySelector('#profileDetailsModal .modal-title');
+        const locEl = document.getElementById('profileLocation');
+        if (titleEl){ titleEl.textContent = 'About ' + (currentUsername || currentUserId); }
+        try{
+            let retries = 0; while (typeof window.firebaseGetUserProfile !== 'function' && retries < 30){ await new Promise(r=>setTimeout(r,100)); retries++; }
+            if (typeof window.firebaseGetUserProfile === 'function'){
+                const res = await window.firebaseGetUserProfile(currentUserId);
+                if (res?.success && res.profile){
+                    const uname = res.profile.username || res.profile.user_name || currentUsername || currentUserId;
+                    if (titleEl){ titleEl.textContent = 'About ' + uname; }
+                    const address = res.profile.address || res.profile.location || res.profile.city;
+                    if (locEl && address){ locEl.textContent = address; }
+                }
+            }
+        }catch(e){ console.warn('updateProfileDetailsFromFirebase failed', e); }
+    }
+
+    // Tab switching functionality
+    function switchTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.profile-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        
+        // Update tab contents - ensure active class is set AND display is visible
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+            content.style.display = 'none';
+        });
+        const activeTab = document.getElementById(tabName + 'Content');
+        if (activeTab) {
+            activeTab.classList.add('active');
+            activeTab.style.display = 'block';
+        }
+        
+        // Show/hide Add New Listing button (only show on Listings tab for sellers)
+        const section = document.querySelector('.profile-page');
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        const addBtn = document.getElementById('addNewListingBtn');
+        if (addBtn) {
+            addBtn.style.display = (tabName === 'listings' && userType.toLowerCase() !== 'buyer') ? 'block' : 'none';
+        }
+        
+        // Load content based on tab
+        if (tabName === 'history') {
+            loadHistoryTab();
+        } else if (tabName === 'listings') {
+            // Reload listings content when switching to Listings tab
+            if (userType.toLowerCase() === 'buyer') {
+                loadSavedItemsForBuyer();
+            } else {
+                loadUserListings();
+            }
+        } else if (tabName === 'review') {
+            loadReviewsTab();
+        } else if (tabName === 'reports') {
+            loadReportsTab();
+        }
+    }
+    
+    // Load reviews tab (for sellers to see reviews they received)
+    async function loadReviewsTab() {
+        const reviewsContainer = document.getElementById('reviewsContainer');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        
+        if (!userId) {
+            reviewsContainer.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Reviews</h3>
+                    <p>Please log in to view reviews</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show loading
+        reviewsContainer.innerHTML = `
+            <div class="loading-state">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>Loading reviews...</p>
+            </div>
+        `;
+        
+        try {
+            // For sellers, show reviews they received
+            if (userType.toLowerCase() === 'seller' || userType.toLowerCase() === 'admin') {
+                if (typeof window.firebaseGetSellerReviews === 'function') {
+                    const result = await window.firebaseGetSellerReviews(userId);
+                    
+                    if (result.success && result.reviews && result.reviews.length > 0) {
+                        displaySellerReviews(result.reviews);
+                    } else {
+                        reviewsContainer.innerHTML = `
+                            <div class="empty-tab-state">
+                                <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                                <h3>No Reviews Yet</h3>
+                                <p>You haven't received any reviews yet</p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    throw new Error('Review function not available');
+                }
+            } else {
+                // For buyers, show empty state (buyers write reviews, don't receive them)
+                reviewsContainer.innerHTML = `
+                    <div class="empty-tab-state">
+                        <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                        <h3>Your Reviews</h3>
+                        <p>Reviews you write for sellers will appear here</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading reviews:', error);
+            reviewsContainer.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #dc3545;"></i>
+                    <h3>Error Loading Reviews</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function displaySellerReviews(reviews) {
+        const reviewsContainer = document.getElementById('reviewsContainer');
+        reviewsContainer.innerHTML = '<div class="reviews-list"></div>';
+        const reviewsList = reviewsContainer.querySelector('.reviews-list');
+        
+        reviews.forEach(review => {
+            const reviewCard = createReviewCardForProfile(review);
+            reviewsList.appendChild(reviewCard);
+        });
+    }
+    
+    function createReviewCardForProfile(review) {
+        const card = document.createElement('div');
+        card.className = 'review-card';
+        
+        const buyerInitial = review.buyer_name ? review.buyer_name.charAt(0).toUpperCase() : 'U';
+        const createdDate = review.created_at ? new Date(review.created_at.seconds * 1000).toLocaleDateString() : 'Recently';
+        
+        // Create stars
+        let starsHTML = '';
+        for (let i = 0; i < 5; i++) {
+            if (i < review.rating) {
+                starsHTML += '<i class="bi bi-star-fill" style="color: #fbbf24;"></i>';
+            } else {
+                starsHTML += '<i class="bi bi-star" style="color: #d1d5db;"></i>';
+            }
+        }
+        
+        // Build media gallery (images + optional single legacy image + optional video)
+        let galleryHtml = '';
+        if (review.images && Array.isArray(review.images) && review.images.length > 0) {
+            const thumbs = review.images.map(u => `<div class=\"review-thumb\"><img src=\"${u}\" alt=\"Review image\" onerror=\"this.style.display='none'\" /></div>`).join('');
+            galleryHtml = `<div class=\"review-gallery mt-2\">${thumbs}</div>`;
+        } else if (review.image) {
+            galleryHtml = `<div class=\"mt-2\"><img src=\"${review.image}\" alt=\"Review image\" style=\"max-width:100%; border-radius:8px;\" onerror=\"this.style.display='none'\" /></div>`;
+        }
+        const videoHtml = review.video ? `<div class=\"mt-2\"><video controls style=\"max-width:100%; border-radius:8px;\" src=\"${review.video}\" onerror=\"this.style.display='none'\"></video></div>` : '';
+        
+        card.innerHTML = `
+            <div class="review-header">
+                <div class="review-user-info">
+                    <div class="review-avatar">${buyerInitial}</div>
+                    <div class="review-user-details">
+                        <h5 class="review-user-name">${review.buyer_name || 'Anonymous'}</h5>
+                        <p class="review-username">@@${review.buyer_username || 'user'}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="review-rating">
+                ${starsHTML}
+                <span class="review-date">${createdDate}</span>
+            </div>
+            <div class="review-comment">
+                ${review.comment || '<em>No comment</em>'}
+            </div>
+            ${galleryHtml}
+            ${videoHtml}
+        `;
+        
+        return card;
+    }
+    
+    // Load sold items for History tab
+    async function loadHistoryTab() {
+        const historyContent = document.getElementById('historyContent');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        
+        if (!userId) {
+            historyContent.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                    <h3>Purchase History</h3>
+                    <p>Please log in to view your history</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show loading
+        historyContent.innerHTML = `
+            <div class="text-center p-5">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Loading sold items...</p>
+            </div>
+        `;
+        
+        try {
+            if (typeof window.firebaseFetchSoldItems === 'function') {
+                const result = await window.firebaseFetchSoldItems(userId);
+                
+                if (result.success && result.items && result.items.length > 0) {
+                    // Display sold items
+                    const html = `
+                        <div class="listings-grid">
+                            ${result.items.map(item => `
+                                <div class="listing-card-minimal sold-item">
+                                    <div class="product-image-wrapper">
+                                        <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'}" 
+                                             alt="${item.title || 'Product'}" 
+                                             class="product-image"
+                                             onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                                        <span class="sold-badge">SOLD OUT</span>
+                                    </div>
+                                    <div class="product-info">
+                                        <h3 class="product-title">${item.title || 'Untitled'}</h3>
+                                        <p class="product-description">${(item.description || '').substring(0, 80)}${(item.description || '').length > 80 ? '...' : ''}</p>
+                                        <div class="product-meta">
+                                            <span class="product-price">${window.formatCurrency(item.price || 0)}</span>
+                                            <span class="product-category">${item.category || 'Uncategorized'}</span>
+                                        </div>
+                                        <small class="text-muted">Sold: ${item.sold_date ? new Date(item.sold_date.seconds * 1000).toLocaleDateString() : 'Recently'}</small>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    historyContent.innerHTML = html;
+                } else {
+                    historyContent.innerHTML = `
+                        <div class="empty-tab-state">
+                            <i class="bi bi-clock-history" style="font-size: 4rem; color: #ccc;"></i>
+                            <h3>No Sold Items</h3>
+                            <p>Items you mark as sold will appear here</p>
+                        </div>
+                    `;
+                }
+            } else {
+                throw new Error('History feature not available');
+            }
+        } catch (error) {
+            console.error('Error loading history:', error);
+            historyContent.innerHTML = `
+                <div class="empty-tab-state">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 4rem; color: #dc3545;"></i>
+                    <h3>Error Loading History</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    // Profile details modal open
+    document.addEventListener('DOMContentLoaded', function() {
+        const link = document.getElementById('profileDetailsLink');
+        if (link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const modal = new bootstrap.Modal(document.getElementById('profileDetailsModal'));
+                modal.show();
+                updateProfileDetailsFromFirebase();
+            });
+        }
+    });
+    
+    async function loadUserListings() {
+        const container = document.getElementById('listingsContainer');
+        console.log('🚀 loadUserListings called');
+        
+        // Go directly to Firebase (skip server API)
+        try {
+            await loadFromFirebase(container);
+        } catch (error) {
+            console.error('Firebase loading failed:', error);
+            showError(container, error.message);
+        }
+    }
+    
+    async function loadFromFirebase(container) {
+        // Get user info from page data attributes
+        const section = document.querySelector('.profile-page');
+        var username = section.getAttribute('data-user-name') || '';
+        var fullName = section.getAttribute('data-user-fullname') || '';
+        var userId = section.getAttribute('data-user-id') || '';
+        var userType = section.getAttribute('data-user-type') || 'seller';
+        
+        console.log('🔄 [PROFILE] loadFromFirebase START');
+        console.log('🔄 [PROFILE] Current logged-in userId:', userId);
+        console.log('🔄 [PROFILE] Username:', username);
+
+        sessionStorage.setItem('Username', username);
+        sessionStorage.setItem('FullName', fullName);
+        sessionStorage.setItem('UserId', userId);
+        sessionStorage.setItem('UserType', userType);
+
+        // Wait for Firebase to be ready
+        let retries = 0;
+        while (typeof window.firebaseFetchUserProducts !== 'function' && retries < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        console.log('🔄 [PROFILE] Firebase ready after', retries, 'retries');
+
+        if (typeof window.firebaseFetchUserProducts === 'function') {
+            try {
+                console.log('🔄 [PROFILE] Calling firebaseFetchUserProducts for userId:', userId);
+                // Use optimized function to fetch only this user's products (excludes sold items)
+                const result = await window.firebaseFetchUserProducts(userId, false);
+                console.log('🟢 [PROFILE] firebaseFetchUserProducts result:', result);
+                
+                if (result.success && result.products) {
+                    console.log('🟢 [PROFILE] SUCCESS: Got', result.products.length, 'products for current user');
+                    
+                    if (result.products.length > 0) {
+                        console.log('✅ [PROFILE] Displaying', result.products.length, 'listings');
+                        displayListings(result.products, container);
+                        return;
+                    } else {
+                        console.log('⚠️ [PROFILE] No products found for user');
+                    }
+                } else {
+                    console.log('❌ [PROFILE] result.success:', result.success, '| products:', result.products);
+                }
+            } catch (err) {
+                console.error('❌ [PROFILE] Firebase fetch error:', err);
+            }
+        } else {
+            console.error('❌ [PROFILE] firebaseFetchUserProducts not available');
+        }
+
+        // If Firebase didn't load, show empty state
+        console.log('📌 [PROFILE] Showing empty state');
+        showNoListings(container);
+    }
+    
+    function displayListings(listings, container) {
+        if (!listings || listings.length === 0) {
+            showNoListings(container);
+            return;
+        }
+        
+        const userTypeAttr = document.querySelector('.profile-page').getAttribute('data-user-type');
+        
+        // Build HTML all at once for better performance
+        const listingsHTML = listings.map(listing => {
+            const imageUrl = listing.imageUrl || listing.ImageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const price = listing.price || listing.Price || 0;
+            const title = listing.title || listing.Title || 'Untitled';
+            const description = listing.description || listing.Description || '';
+            const condition = listing.condition || listing.Condition || 'New';
+            const category = listing.category || listing.Category || 'Uncategorized';
+            const listingId = listing.id || listing.Id;
+            const safeTitle = title.replace(/'/g, "\\'");
+            
+            return `
+                <div class="listing-card-minimal" id="listing-${listingId}">
+                    <div class="product-image-wrapper">
+                        <img src="${imageUrl}" alt="${title}" class="product-image" 
+                             onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                        <span class="condition-badge badge-${condition.toLowerCase().replace(' ', '-')}">${condition}</span>
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-title">${title}</h3>
+                        <p class="product-description">${description}</p>
+                        <div class="product-meta">
+                            <span class="product-price">${window.formatCurrency(parseFloat(price))}</span>
+                            <span class="product-category">${category}</span>
+                        </div>
+                        <div class="product-actions">
+                            ${userTypeAttr === 'seller' || userTypeAttr === 'admin' ? `
+                                <button class="btn-action btn-edit-minimal" onclick="editListing('${listingId}')" title="Edit listing">
+                                    <i class="bi bi-pencil"></i>
+                                    <span>Edit</span>
+                                </button>
+                                <button class="btn-action btn-soldout-minimal" onclick="markAsSoldOut('${listingId}', '${safeTitle}')">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    <span>Sold</span>
+                                </button>
+                                <button class="btn-action btn-delete-minimal" onclick="deleteListing('${listingId}', '${safeTitle}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            ` : `
+                                <button class="btn-action btn-buy-minimal" onclick="viewListing('${listingId}')" style="background:#10b981;color:#fff;">
+                                    <i class="bi bi-bag-check"></i>
+                                    View
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Set all HTML at once
+        container.innerHTML = `<div class="listings-grid">${listingsHTML}</div>`;
+    }
+    
+    function showNoListings(container) {
+        container.innerHTML = `
+            <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                <i class="bi bi-box-seam"></i>
+                <h3>No listings yet</h3>
+                <p>Start selling by creating your first listing</p>
+            </div>
+        `;
+    }
+    
+    function showNoAuth(container) {
+        container.innerHTML = `
+            <div class="no-listings">
+                <i class="bi bi-box-seam"></i>
+                <h4>Please log in to view your listings</h4>
+                <a href="@Url.Action("Login", "Home")" class="btn btn-primary mt-3">Login</a>
+            </div>
+        `;
+    }
+    
+    function showError(container, message) {
+        container.innerHTML = `
+            <div class="no-listings">
+                <i class="bi bi-exclamation-triangle"></i>
+                <h4>Error loading listings</h4>
+                <p>${message || 'Please try again later'}</p>
+                <button class="btn btn-primary mt-3" onclick="location.reload()">Retry</button>
+            </div>
+        `;
+    }
+    
+    function viewListing(id) {
+        if (!id) return;
+        window.location.href = `/Home/ProductDetail?id=${id}`;
+    }
+    
+    window.viewListing = viewListing;
+    
+    function shareProfile() {
+        const url = window.location.href;
+        if (navigator.share) {
+            navigator.share({
+                title: 'My Profile',
+                url: url
+            }).catch(err => log('Error sharing:', err));
+        } else {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Profile link copied to clipboard!');
+            });
+        }
+    }
+    
+    // Note: markAsSoldOut will be overridden at the END after all scripts load
+    
+    // Handle sold out confirmation - setup immediately
+    (function setupConfirmButtons() {
+        const confirmSoldBtn = document.getElementById('confirmSoldBtn');
+        if (confirmSoldBtn) {
+            confirmSoldBtn.addEventListener('click', async function() {
+                if (!pendingSoldOutItem) return;
+                
+                const { productId, title } = pendingSoldOutItem;
+                
+                // Close modal
+                const soldModal = bootstrap.Modal.getInstance(document.getElementById('soldOutModal'));
+                soldModal.hide();
+                
+                try {
+                    console.log('🔄 Marking product as sold:', productId);
+                    
+                    // Call Firebase function to update status
+                    if (typeof window.firebaseMarkAsSold === 'function') {
+                        console.log('✅ Calling firebaseMarkAsSold...');
+                        const result = await window.firebaseMarkAsSold(productId);
+                        console.log('📊 Result:', result);
+                        
+                        if (result.success) {
+                            console.log('✅ Product marked as sold successfully');
+                            
+                            // Show success message
+                            const toastEl = document.getElementById('toastNotification');
+                            const toastMsg = document.getElementById('toastMessage');
+                            if (toastEl && toastMsg) {
+                                toastMsg.textContent = '✓ Item marked as sold and moved to history';
+                                const toast = new bootstrap.Toast(toastEl);
+                                toast.show();
+                            }
+                            
+                            // Reload listings to reflect changes
+                            setTimeout(() => {
+                                loadUserListings();
+                            }, 500);
+                        } else {
+                            console.error('❌ Failed to mark as sold:', result.message);
+                            alert('Failed to mark item as sold: ' + (result.message || 'Unknown error'));
+                        }
+                    } else {
+                        console.error('❌ firebaseMarkAsSold function not available');
+                        alert('Sold out feature not available. Please refresh the page.');
+                    }
+                } catch (error) {
+                    console.error('❌ Error marking as sold:', error);
+                    alert('Error: ' + error.message);
+                }
+                
+                pendingSoldOutItem = null;
+            });
+        } else {
+            console.error('❌ confirmSoldBtn not found!');
+        }
+        
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', async function() {
+                if (!pendingDeleteItem) return;
+                
+                const { productId, title } = pendingDeleteItem;
+                
+                // Close modal
+                const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+                deleteModal.hide();
+                
+                try {
+                    console.log('🗑️ Deleting product:', productId);
+                    
+                    // Call Firebase function to delete
+                    if (typeof window.firebaseDeleteListing === 'function') {
+                        const result = await window.firebaseDeleteListing(productId);
+                        
+                        if (result.success) {
+                            console.log('✅ Product deleted successfully');
+                            
+                            // Show success message
+                            const toastEl = document.getElementById('toastNotification');
+                            const toastMsg = document.getElementById('toastMessage');
+                            if (toastEl && toastMsg) {
+                                toastMsg.textContent = '✓ Listing deleted successfully';
+                                const toast = new bootstrap.Toast(toastEl);
+                                toast.show();
+                            }
+                            
+                            // Reload listings
+                            setTimeout(() => {
+                                loadUserListings();
+                            }, 500);
+                        } else {
+                            alert('Failed to delete listing: ' + (result.message || 'Unknown error'));
+                        }
+                    } else {
+                        alert('Delete feature not available. Please refresh the page.');
+                    }
+                } catch (error) {
+                    console.error('❌ Error deleting:', error);
+                    alert('Error: ' + error.message);
+                }
+                
+                pendingDeleteItem = null;
+            });
+        } else {
+            console.error('❌ confirmDeleteBtn not found!');
+        }
+    })();
+    
+    // Note: deleteListing will be overridden at the END after all scripts load
+    
+    // Load saved items for buyers
+    async function loadSavedItems() {
+        const container = document.getElementById('savedItemsContainer');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        
+        console.log('🔖 Loading saved items for buyer:', userId);
+        
+        // Wait for Firebase to be ready
+        let retries = 0;
+        while (typeof window.firebaseGetSavedProducts !== 'function' && retries < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        
+        try {
+            if (typeof window.firebaseGetSavedProducts === 'function') {
+                const result = await window.firebaseGetSavedProducts(userId);
+                
+                if (result.success && result.products && result.products.length > 0) {
+                    console.log('✅ Loaded', result.products.length, 'saved items');
+                    displaySavedItems(result.products, container);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                            <i class="bi bi-heart"></i>
+                            <h3>No Saved Items</h3>
+                            <p>Items you save will appear here</p>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved items:', error);
+            container.innerHTML = `
+                <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <h3>Error Loading Saved Items</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function displaySavedItems(items, container) {
+        // Build HTML string for all items (much faster than DOM node creation loop)
+        const savedItemsHTML = items.map(item => {
+            const imgSrc = item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const conditionClass = `badge-${(item.condition || 'new').toLowerCase().replace(' ', '-')}`;
+            const productId = item.product_id || item.productId;
+            const descLength = (item.description || '').length;
+            const shortDesc = (item.description || '').substring(0, 80);
+            const descSuffix = descLength > 80 ? '...' : '';
+            
+            return `
+                <div class="listing-card-minimal">
+                    <div class="product-image-wrapper">
+                        <img src="${imgSrc}" 
+                             alt="${item.title}" 
+                             class="product-image" 
+                             onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                        <span class="condition-badge ${conditionClass}">${item.condition || 'New'}</span>
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-title">${item.title || 'Untitled'}</h3>
+                        <p class="product-description">${shortDesc}${descSuffix}</p>
+                        <div class="product-meta">
+                            <span class="product-price">${window.formatCurrency(item.price || 0)}</span>
+                            <span class="product-category">${item.category || 'Uncategorized'}</span>
+                        </div>
+                        <div class="product-seller-info">
+                            <span class="seller-name-small"><i class="bi bi-person"></i> ${item.sellerName || 'Unknown Seller'}</span>
+                        </div>
+                        <div class="product-actions">
+                            <button class="btn-action btn-view-minimal" onclick="viewProduct('${productId}')" style="background:#0ea5e9;color:#fff;">
+                                <i class="bi bi-eye"></i>
+                                <span>View</span>
+                            </button>
+                            <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${productId}')" style="background:#ef4444;color:#fff;">
+                                <i class="bi bi-heart-fill"></i>
+                                <span>Unsave</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = `<div class="listings-grid">${savedItemsHTML}</div>`;
+    }
+    
+    async function unsaveSavedItem(productId) {
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id');
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        
+        if (!confirm('Remove this item from your saved items?')) return;
+        
+        try {
+            if (typeof window.firebaseUnsaveProduct === 'function') {
+                const result = await window.firebaseUnsaveProduct(userId, productId);
+                if (result.success) {
+                    console.log('✅ Item unsaved');
+                    // Reload appropriate content based on user type
+                    if (userType.toLowerCase() === 'buyer') {
+                        loadSavedItemsForBuyer();
+                    } else {
+                        loadSavedItems();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error unsaving item:', error);
+            alert('Error removing item. Please try again.');
+        }
+    }
+    
+    function viewProduct(productId) {
+        // Navigate to product detail or open modal
+        window.location.href = `/Home/Browse?productId=${productId}`;
+    }
+    
+    window.unsaveSavedItem = unsaveSavedItem;
+    window.viewProduct = viewProduct;
+
+    // Wait for Firebase functions to be available (optimized - faster timeout)
+    function waitForFirebaseFunctions() {
+        console.log('⏳ Checking Firebase readiness...');
+        const section = document.querySelector('.profile-page');
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+        
+        if (typeof window.firebaseFetchUserProducts === 'function' && typeof window.firebaseCreateListing === 'function') {
+            console.log('✅ Firebase functions ready');
+            
+            // Load appropriate content based on user type
+            if (userType.toLowerCase() === 'buyer') {
+                // For buyers, load saved items in Listings tab
+                loadSavedItemsForBuyer();
+            } else {
+                // For sellers, load their own products
+                loadUserListings();
+            }
+        } else {
+            console.log('⏳ Waiting for Firebase:', {
+                'firebaseFetchUserProducts': typeof window.firebaseFetchUserProducts,
+                'firebaseCreateListing': typeof window.firebaseCreateListing
+            });
+            // Reduced timeout and max retries
+            setTimeout(waitForFirebaseFunctions, 50);
+        }
+    }
+    
+    // Load saved items for buyer in Listings tab
+    async function loadSavedItemsForBuyer() {
+        const container = document.getElementById('listingsContainer');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        
+        console.log('🔖 Loading saved items for buyer in Listings tab:', userId);
+        
+        // Wait for Firebase to be ready
+        let retries = 0;
+        while (typeof window.firebaseGetSavedProducts !== 'function' && retries < 30) {
+            await new Promise(r => setTimeout(r, 100));
+            retries++;
+        }
+        
+        try {
+            if (typeof window.firebaseGetSavedProducts === 'function') {
+                const result = await window.firebaseGetSavedProducts(userId);
+                
+                if (result.success && result.products && result.products.length > 0) {
+                    console.log('✅ Loaded', result.products.length, 'saved items');
+                    displaySavedItemsAsBuyerListings(result.products, container);
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                            <i class="bi bi-heart"></i>
+                            <h3>No Saved Items</h3>
+                            <p>Items you save will appear here</p>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved items:', error);
+            container.innerHTML = `
+                <div class="empty-state-minimal" style="grid-column: 1 / -1;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <h3>Error Loading Saved Items</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    function displaySavedItemsAsBuyerListings(items, container) {
+        // Build HTML string for all items (much faster than DOM node creation loop)
+        const savedItemsHTML = items.map(item => {
+            const imgSrc = item.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+            const conditionClass = `badge-${(item.condition || 'new').toLowerCase().replace(' ', '-')}`;
+            const productId = item.product_id || item.productId;
+            const descLength = (item.description || '').length;
+            const shortDesc = (item.description || '').substring(0, 80);
+            const descSuffix = descLength > 80 ? '...' : '';
+            
+            return `
+                <div class="listing-card-minimal">
+                    <div class="product-image-wrapper">
+                        <img src="${imgSrc}" 
+                             alt="${item.title}" 
+                             class="product-image" 
+                             onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'">
+                        <span class="condition-badge ${conditionClass}">${item.condition || 'New'}</span>
+                    </div>
+                    <div class="product-info">
+                        <h3 class="product-title">${item.title || 'Untitled'}</h3>
+                        <p class="product-description">${shortDesc}${descSuffix}</p>
+                        <div class="product-meta">
+                            <span class="product-price">${window.formatCurrency(item.price || 0)}</span>
+                            <span class="product-category">${item.category || 'Uncategorized'}</span>
+                        </div>
+                        <div class="product-seller-info">
+                            <span class="seller-name-small"><i class="bi bi-person"></i> ${item.sellerName || 'Unknown Seller'}</span>
+                        </div>
+                        <div class="product-actions">
+                            <button class="btn-action btn-view-minimal" onclick="viewProduct('${productId}')" style="background:#0ea5e9;color:#fff;">
+                                <i class="bi bi-eye"></i>
+                                <span>View</span>
+                            </button>
+                            <button class="btn-action btn-unsave-minimal" onclick="unsaveSavedItem('${productId}')" style="background:#ef4444;color:#fff;">
+                                <i class="bi bi-heart-fill"></i>
+                                <span>Unsave</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = `<div class="listings-grid">${savedItemsHTML}</div>`;
+    }
+    
+    // Review media viewer
+    function openReviewMediaViewer(type, src) {
+        const backdrop = document.getElementById('reviewLightboxBackdrop');
+        const box = document.getElementById('reviewLightbox');
+        if (!backdrop || !box) return;
+        // clear previous content except close button
+        Array.from(box.children).forEach(ch => { if (ch.id !== 'lightboxCloseBtn') ch.remove(); });
+        let el;
+        if (type === 'image') {
+            el = document.createElement('img');
+            el.src = src;
+            el.alt = 'Review image';
+            el.onerror = () => { el.style.display = 'none'; };
+        } else if (type === 'video') {
+            el = document.createElement('video');
+            el.src = src;
+            el.controls = true;
+            el.autoplay = true;
+            el.onerror = () => { el.style.display = 'none'; };
+        }
+        if (el) box.appendChild(el);
+        backdrop.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+    function closeReviewMediaViewer() {
+        const backdrop = document.getElementById('reviewLightboxBackdrop');
+        const box = document.getElementById('reviewLightbox');
+        if (!backdrop || !box) return;
+        backdrop.style.display = 'none';
+        // stop video if present
+        const vid = box.querySelector('video'); if (vid) { vid.pause(); vid.src = ''; }
+        document.body.style.overflow = '';
+    }
+    window.openReviewMediaViewer = openReviewMediaViewer;
+    window.closeReviewMediaViewer = closeReviewMediaViewer;
+    document.getElementById('lightboxCloseBtn')?.addEventListener('click', closeReviewMediaViewer);
+    document.getElementById('reviewLightboxBackdrop')?.addEventListener('click', (e)=>{ if (e.target.id === 'reviewLightboxBackdrop') closeReviewMediaViewer(); });
+
+    // Enhance review cards to open viewer on click
+    function enableReviewMediaClicks(root) {
+        const container = root || document;
+        container.querySelectorAll('.review-gallery .review-thumb img').forEach(img => {
+            img.style.cursor = 'zoom-in';
+            img.addEventListener('click', () => openReviewMediaViewer('image', img.src));
+        });
+        container.querySelectorAll('.reviews-container video, .review-card video').forEach(video => {
+            video.style.cursor = 'pointer';
+            video.addEventListener('click', () => openReviewMediaViewer('video', video.currentSrc || video.src));
+        });
+    }
+    // Call after reviews load
+    const origDisplaySellerReviews = window.displaySellerReviews;
+    window.displaySellerReviews = function(reviews){
+        if (origDisplaySellerReviews) origDisplaySellerReviews(reviews);
+        enableReviewMediaClicks(document.getElementById('reviewsContainer'));
+    };
+    // Also enable on DOM ready in case of pre-rendered
+    document.addEventListener('DOMContentLoaded', () => enableReviewMediaClicks());
+</script>
+<script src="~/js/listings-enhanced.js?v=@DateTime.Now.Ticks"></script>
+<script>
+    // OVERRIDE FUNCTIONS AFTER ALL SCRIPTS LOAD - This ensures our modal functions are FINAL
+    console.log('🔧 Installing modal overrides AFTER external scripts...');
+    
+    // Re-override markAsSoldOut to use modal (FINAL VERSION)
+    window.markAsSoldOut = function(productId, title) {
+        console.log('🎯✅ MODAL markAsSoldOut (FINAL) called with:', productId, title);
+        
+        pendingSoldOutItem = { productId, title };
+        document.getElementById('soldOutItemTitle').textContent = title;
+        const soldModal = new bootstrap.Modal(document.getElementById('soldOutModal'));
+        soldModal.show();
+    };
+    
+    // Re-override deleteListing to use modal (FINAL VERSION)
+    window.deleteListing = function(productId, title) {
+        console.log('🎯✅ MODAL deleteListing (FINAL) called with:', productId, title);
+        
+        pendingDeleteItem = { productId, title };
+        document.getElementById('deleteItemTitle').textContent = title;
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        deleteModal.show();
+    };
+    
+    console.log('✅ Modal overrides installed successfully!');
+
+    // ========== REPORTS & ANALYTICS FUNCTIONS ==========
+    // Load reports and display analytics charts
+    async function loadReportsTab() {
+        const reportsContent = document.getElementById('reportsContent');
+        const section = document.querySelector('.profile-page');
+        const userId = section.getAttribute('data-user-id') || '';
+        const userType = section.getAttribute('data-user-type') || 'buyer';
+
+        console.log('📊 Loading reports for user:', userId, 'type:', userType);
+
+        // Ensure reports content is visible
+        if (reportsContent) {
+            reportsContent.style.display = 'block';
+            reportsContent.style.visibility = 'visible';
+            reportsContent.style.opacity = '1';
+        }
+
+        // Only sellers and admins can view reports
+        if (userType.toLowerCase() !== 'seller' && userType.toLowerCase() !== 'admin') {
+            const emptyState = document.getElementById('reportsEmptyState');
+            const container = document.querySelector('#reportsContent .reports-container');
+            if (container) container.style.display = 'none';
+            if (emptyState) {
+                emptyState.style.display = 'block';
+                emptyState.innerHTML = '<i class="bi bi-lock"></i><h3>Access Denied</h3><p>Only sellers can view sales reports</p>';
+            }
+            return;
+        }
+
+        if (!userId) {
+            const emptyState = document.getElementById('reportsEmptyState');
+            const container = document.querySelector('#reportsContent .reports-container');
+            if (container) container.style.display = 'none';
+            if (emptyState) {
+                emptyState.style.display = 'block';
+                emptyState.innerHTML = '<i class="bi bi-person-slash"></i><h3>Not Logged In</h3><p>Please log in to view your reports</p>';
+            }
+            return;
+        }
+
+        try {
+            // Wait for Firebase functions to be available
+            let retries = 0;
+            while (typeof window.firebaseGetSalesAnalytics !== 'function' && retries < 30) {
+                await new Promise(r => setTimeout(r, 100));
+                retries++;
+            }
+
+            if (typeof window.firebaseGetSalesAnalytics !== 'function') {
+                throw new Error('Analytics function not available');
+            }
+
+            console.log('🔄 Fetching analytics for user:', userId);
+            // Fetch sales analytics
+            const analyticsResult = await window.firebaseGetSalesAnalytics(userId);
+            console.log('📊 Analytics result:', analyticsResult);
+            
+            if (!analyticsResult.success) {
+                // Instead of throwing and hiding the entire reports pane,
+                // show a friendly message while keeping the pane visible.
+                console.warn('Analytics fetch returned not-success:', analyticsResult);
+                const tbody = document.getElementById('reportsTableBody');
+                if (tbody) {
+                    // Extract possible index URL for actionable advice
+                    const msg = analyticsResult.message || 'An error occurred';
+                    const urlMatch = msg.match(/https:\/\/console\.firebase\.google\.com\/[\S]+/i);
+                    const indexLink = urlMatch ? urlMatch[0] : null;
+                    tbody.innerHTML = `\n                        <tr>\n                            <td colspan="6" style="padding: 40px; text-align: center; color: #888;">\n                                <i class=\"bi bi-exclamation-circle\" style=\"font-size: 28px; display: block; margin-bottom: 12px; color: #ddd;\"></i>\n                                Failed to fetch analytics: ${msg}\n                                ${indexLink ? `<div style=\"margin-top:12px;\">\n                                    <a href=\"${indexLink}\" target=\"_blank\" style=\"color:#dc2626; text-decoration:underline;\">Create required Firestore index</a>\n                                </div>` : ''}\n                            </td>\n                        </tr>\n                    `;
+                }
+                // show empty state but keep container visible
+                if (container) {
+                    container.style.display = 'block';
+                    container.style.visibility = 'visible';
+                }
+                if (emptyState) {
+                    emptyState.style.display = 'block';
+                    emptyState.innerHTML = `\n+                        <i class=\"bi bi-exclamation-circle\" style=\"font-size: 28px; display: block; margin-bottom: 12px; color: #ddd;\"></i>\n+                        <h3>Error Loading Analytics</h3>\n+                        <p>${analyticsResult.message || 'An error occurred while loading analytics'}</p>\n+                    `;
+                }
+                return;
+            }
+
+            const analytics = analyticsResult.analytics;
+
+            // Get container references
+            const container = document.querySelector('#reportsContent .reports-container');
+            const emptyState = document.getElementById('reportsEmptyState');
+
+            // ALWAYS show the reports container (even with 0 sales)
+            console.log('✅ Displaying reports container - Total Sales:', analytics.totalSales);
+            if (container) {
+                container.style.display = 'block';
+                container.style.visibility = 'visible';
+                container.style.opacity = '1';
+            }
+            if (emptyState) emptyState.style.display = 'none';
+
+            // Store analytics globally for filtering
+            currentAnalytics = analytics;
+            
+            // Reset filter to "All Time"
+            const periodFilter = document.getElementById('reportsPeriodFilter');
+            if (periodFilter) periodFilter.value = 'all';
+            const periodLabel = document.getElementById('periodLabel');
+            if (periodLabel) periodLabel.textContent = 'All Time';
+
+            // Update summary statistics - clean minimal design (3 stats only)
+            const totalSalesStat = document.getElementById('totalSalesStat');
+            const totalRevenueStat = document.getElementById('totalRevenueStat');
+            const totalEarningsStat = document.getElementById('totalEarningsStat');
+            
+            if (totalSalesStat) totalSalesStat.textContent = analytics.totalSales;
+            if (totalRevenueStat) totalRevenueStat.textContent = '₱' + analytics.totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (totalEarningsStat) totalEarningsStat.textContent = '₱' + (analytics.totalRevenue * 0.9).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            // Load charts only if there are sales, otherwise just show empty charts
+            if (analytics.totalSales > 0) {
+                console.log('📈 Loading charts with', analytics.totalSales, 'sales');
+                setTimeout(() => {
+                    loadReportsCharts(analytics);
+                    populateReportsTable(analytics);
+                    
+                    // Final visibility check after charts load
+                    if (container) {
+                        container.style.display = 'block';
+                        container.style.visibility = 'visible';
+                        container.style.opacity = '1';
+                    }
+                }, 100);
+            } else {
+                console.log('📭 No sales yet - showing empty state message in table');
+                // Show helpful message in the table
+                const tbody = document.getElementById('reportsTableBody');
+                if (tbody) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" style="padding: 40px; text-align: center; color: #888;">
+                                <i class="bi bi-graph-up" style="font-size: 32px; display: block; margin-bottom: 12px; color: #ddd;"></i>
+                                No sales yet. Mark items as sold to see your reports.
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading reports:', error);
+            const container = document.querySelector('#reportsContent .reports-container');
+            const emptyState = document.getElementById('reportsEmptyState');
+            // Keep container visible, show a non-blocking friendly error in the empty state
+            if (container) {
+                container.style.display = 'block';
+                container.style.visibility = 'visible';
+                container.style.opacity = '1';
+            }
+            if (emptyState) {
+                emptyState.style.display = 'block';
+                emptyState.innerHTML = `
+                    <i class="bi bi-exclamation-triangle" style="font-size: 4rem; color: #dc3545;"></i>
+                    <h3>Error Loading Reports</h3>
+                    <p>${error.message || 'Please try again later'}</p>
+                `;
+            }
+        }
+    }
+
+    // Load and initialize Chart.js charts
+    function loadReportsCharts(analytics) {
+        // Load Chart.js library if not already loaded
+        if (typeof Chart === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
+            script.onload = () => {
+                initReportsCharts(analytics);
+            };
+            document.head.appendChild(script);
+        } else {
+            initReportsCharts(analytics);
+        }
+    }
+
+    // Initialize all charts
+    function initReportsCharts(analytics) {
+        // Distribution donut (by quantity & price)
+        createDistributionDonut(analytics);
+
+        // Bar Chart - Items by category
+        createBarChart(analytics);
+        
+        // Line Chart - Daily sales
+        createLineChart(analytics);
+    }
+
+    // Distribution Donut - Quantity & Price (concentric donut with quantity + revenue)
+    function createDistributionDonut(analytics) {
+        const ctxEl = document.getElementById('chartDistributionDonut');
+        if (!ctxEl) return;
+
+        // Parent container for placeholder handling
+        const container = ctxEl.parentElement || ctxEl;
+
+        // Get top 5 items by revenue for compact donut
+        const itemsArr = Object.entries(analytics.itemsSold || {}).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5);
+        if (!itemsArr || itemsArr.length === 0) {
+            // Hide canvas and display a friendly placeholder
+            ctxEl.style.display = 'none';
+            if (!container.querySelector('.chart-empty-placeholder')) {
+                container.insertAdjacentHTML('beforeend', `<div class="chart-empty-placeholder" style="color:#9CA3AF;font-size:14px;padding:20px;text-align:center;">No sales data yet</div>`);
+            }
+            return;
+        }
+
+        // Remove placeholder if present
+        const ph = container.querySelector('.chart-empty-placeholder');
+        if (ph) ph.remove();
+        ctxEl.style.display = '';
+
+        // destroy any existing chart instance to avoid overlays
+        try { const existing = Chart.getChart(ctxEl); if (existing) existing.destroy(); } catch(e) { /* ignore */ }
+
+        const labels = itemsArr.map(([name]) => name.length > 16 ? name.substring(0, 16) + '...' : name);
+        const qtyData = itemsArr.map(([_, data]) => data.quantity || 0);
+        const revenueData = itemsArr.map(([_, data]) => data.revenue || 0);
+
+        // Red color palette to match system theme
+        const colors = ['#dc3545', '#ef4444', '#f87171', '#fca5a5', '#fecaca'];
+
+        new Chart(ctxEl, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Revenue',
+                        data: revenueData,
+                        backgroundColor: colors.slice(0, labels.length),
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Quantity',
+                        data: qtyData,
+                        backgroundColor: colors.slice(0, labels.length).map(c => c + '77'), // semi-transparent
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#111827',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                const datasetLabel = context.dataset.label || '';
+                                const value = context.parsed;
+                                if (datasetLabel === 'Revenue') {
+                                    return `${context.label}: ₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+                                }
+                                return `${context.label}: ${value}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Bar Chart - Items sold by category - MINIMAL MODERN DESIGN
+    function createBarChart(analytics) {
+        const ctx = document.getElementById('chartBarCategory');
+        if (!ctx) return;
+
+        const categories = Object.entries(analytics.byCategory);
+        const labels = categories.map(([name]) => name);
+        const data = categories.map(([_, stats]) => stats.count);
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Items Sold',
+                    data: data,
+                    backgroundColor: '#dc3545',
+                    borderColor: '#dc3545',
+                    borderWidth: 0,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barThickness: 40,
+                    maxBarThickness: 50
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { 
+                            font: { size: 11, weight: '500' },
+                            color: '#666',
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            borderRadius: 3,
+                            useBorderRadius: true,
+                            padding: 16
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1a1a1a',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 13, weight: '600' },
+                        bodyFont: { size: 12 }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { 
+                            font: { size: 11 },
+                            color: '#888'
+                        },
+                        border: { display: false }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { 
+                            color: '#f0f0f0',
+                            drawBorder: false
+                        },
+                        ticks: { 
+                            stepSize: 1,
+                            font: { size: 11 },
+                            color: '#888',
+                            padding: 8
+                        },
+                        border: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // Line Chart - Daily sales - MINIMAL MODERN DESIGN
+    function createLineChart(analytics) {
+        const ctx = document.getElementById('chartLineDailySales');
+        if (!ctx) return;
+
+        // Sort dates
+        const dates = Object.keys(analytics.dailySales).sort();
+        const revenues = dates.map(date => analytics.dailySales[date]);
+
+        // Format dates for display
+        const formattedDates = dates.map(date => {
+            const d = new Date(date);
+            return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+        });
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: formattedDates,
+                datasets: [{
+                    label: 'Daily Sales',
+                    data: revenues,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.08)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#dc3545',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 6,
+                    pointHoverBorderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { 
+                            font: { size: 11, weight: '500' },
+                            color: '#666',
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            borderRadius: 3,
+                            useBorderRadius: true,
+                            padding: 16
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1a1a1a',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        padding: 12,
+                        cornerRadius: 8,
+                        titleFont: { size: 13, weight: '600' },
+                        bodyFont: { size: 12 },
+                        callbacks: {
+                            label: function(context) {
+                                return '₱' + context.parsed.y.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { 
+                            font: { size: 11 },
+                            color: '#888'
+                        },
+                        border: { display: false }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { 
+                            color: '#f0f0f0',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { size: 11 },
+                            color: '#888',
+                            padding: 8,
+                            callback: function(value) {
+                                return '₱' + value.toLocaleString('en-PH');
+                            }
+                        },
+                        border: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    // Populate detailed reports table - MINIMAL MODERN DESIGN
+    function populateReportsTable(analytics, filteredItems = null) {
+        const tbody = document.getElementById('reportsTableBody');
+        if (!tbody) return;
+
+        // Use filtered items if provided, otherwise use rawItems from analytics
+        const items = filteredItems || analytics.rawItems || [];
+        
+        if (items.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding: 40px; text-align: center; color: #888;">No sales data available</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = items.map(item => {
+            // Format the date nicely
+            let dateDisplay = 'N/A';
+            if (item.date) {
+                try {
+                    const d = new Date(item.date);
+                    dateDisplay = d.toLocaleDateString('en-PH', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                    });
+                } catch (e) {
+                    dateDisplay = item.date;
+                }
+            }
+            
+            return `
+            <tr style="border-bottom: 1px solid #f0f0f0;">
+                <td style="padding: 14px 16px; font-size: 13px; color: #333; font-weight: 500;">${item.title}</td>
+                <td style="padding: 14px 16px;"><span style="background: #f3f4f6; padding: 4px 10px; border-radius: 4px; font-size: 11px; color: #666;">${item.category}</span></td>
+                <td style="padding: 14px 16px; text-align: center; font-size: 13px; color: #666;">${item.quantity}</td>
+                <td style="padding: 14px 16px; text-align: right; font-size: 13px; color: #666;">₱${item.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 14px 16px; text-align: right; font-size: 13px; font-weight: 600; color: #333;">₱${item.total.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 14px 16px; text-align: right;"><span style="background: #fef2f2; color: #dc3545; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 500;">${dateDisplay}</span></td>
+            </tr>
+        `}).join('');
+    }
+
+    // Store analytics globally for filtering
+    let currentAnalytics = null;
+
+    // Filter reports by time period
+    window.filterReportsByPeriod = function() {
+        if (!currentAnalytics) return;
+        
+        const filter = document.getElementById('reportsPeriodFilter').value;
+        const periodLabel = document.getElementById('periodLabel');
+        const now = new Date();
+        
+        let filteredItems = currentAnalytics.rawItems || [];
+        let periodText = 'All Time';
+        
+        if (filter === 'weekly') {
+            // Get start of current week (Sunday)
+            const startOfWeek = new Date(now);
+            startOfWeek.setDate(now.getDate() - now.getDay());
+            startOfWeek.setHours(0, 0, 0, 0);
+            
+            filteredItems = filteredItems.filter(item => {
+                if (!item.dateObj) return false;
+                return item.dateObj >= startOfWeek;
+            });
+            periodText = 'This Week';
+        } else if (filter === 'monthly') {
+            // Get start of current month
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            
+            filteredItems = filteredItems.filter(item => {
+                if (!item.dateObj) return false;
+                return item.dateObj >= startOfMonth;
+            });
+            periodText = 'This Month';
+        } else if (filter === 'yearly') {
+            // Get start of current year
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            
+            filteredItems = filteredItems.filter(item => {
+                if (!item.dateObj) return false;
+                return item.dateObj >= startOfYear;
+            });
+            periodText = 'This Year';
+        }
+        
+        // Update period label
+        if (periodLabel) periodLabel.textContent = periodText;
+        
+        // Calculate filtered stats
+        const totalSales = filteredItems.length;
+        const totalRevenue = filteredItems.reduce((sum, item) => sum + item.total, 0);
+        const netEarnings = totalRevenue * 0.9;
+        
+        // Update stats display
+        document.getElementById('totalSalesStat').textContent = totalSales;
+        document.getElementById('totalRevenueStat').textContent = '₱' + totalRevenue.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+        document.getElementById('totalEarningsStat').textContent = '₱' + netEarnings.toLocaleString('en-PH', { minimumFractionDigits: 2 });
+        
+        // Rebuild filtered analytics for charts
+        const filteredAnalytics = buildFilteredAnalytics(filteredItems);
+        
+        // Update table
+        populateReportsTable(currentAnalytics, filteredItems);
+        
+        // Rebuild charts with filtered data
+        rebuildChartsWithData(filteredAnalytics);
+    }
+
+    // Build filtered analytics object from filtered items
+    function buildFilteredAnalytics(items) {
+        const analytics = {
+            totalSales: items.length,
+            totalRevenue: 0,
+            totalQuantity: 0,
+            itemsSold: {},
+            byCategory: {},
+            dailySales: {}
+        };
+        
+        items.forEach(item => {
+            analytics.totalRevenue += item.total;
+            analytics.totalQuantity += item.quantity;
+            
+            // Items sold
+            if (!analytics.itemsSold[item.title]) {
+                analytics.itemsSold[item.title] = { quantity: 0, revenue: 0, category: item.category };
+            }
+            analytics.itemsSold[item.title].quantity += item.quantity;
+            analytics.itemsSold[item.title].revenue += item.total;
+            
+            // By category
+            if (!analytics.byCategory[item.category]) {
+                analytics.byCategory[item.category] = { count: 0, revenue: 0, quantity: 0 };
+            }
+            analytics.byCategory[item.category].count++;
+            analytics.byCategory[item.category].revenue += item.total;
+            analytics.byCategory[item.category].quantity += item.quantity;
+            
+            // Daily sales
+            if (item.date) {
+                if (!analytics.dailySales[item.date]) {
+                    analytics.dailySales[item.date] = 0;
+                }
+                analytics.dailySales[item.date] += item.total;
+            }
+        });
+        
+        return analytics;
+    }
+
+    // Rebuild charts with new data
+    function rebuildChartsWithData(analytics) {
+        // Destroy existing charts
+        ['chartDistributionDonut', 'chartBarCategory', 'chartLineDailySales'].forEach(id => {
+            const canvas = document.getElementById(id);
+            if (canvas) {
+                try {
+                    const existing = Chart.getChart(canvas);
+                    if (existing) existing.destroy();
+                } catch(e) {}
+            }
+        });
+        
+        // Recreate charts
+        if (analytics.totalSales > 0) {
+            createDistributionDonut(analytics);
+            createBarChart(analytics);
+            createLineChart(analytics);
+        }
+    }
+
+    // Export reports to PDF
+    window.exportReportsToPDF = async function() {
+        // Load jsPDF if not loaded
+        if (typeof jspdf === 'undefined' && typeof window.jspdf === 'undefined') {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        }
+        
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 15;
+        let yPos = margin;
+        
+        // Helper function to format currency without special symbols
+        const formatCurrency = (amount) => {
+            return 'PHP ' + Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+        
+        // Helper to clean text for PDF (remove special characters)
+        const cleanText = (text) => {
+            if (!text) return '';
+            return String(text)
+                .replace(/₱/g, 'PHP ')
+                .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII characters
+        };
+        
+        // Show loading
+        const exportBtn = document.querySelector('[onclick="exportReportsToPDF()"]');
+        const originalText = exportBtn.innerHTML;
+        exportBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+        exportBtn.disabled = true;
+        
+        try {
+            // Title
+            pdf.setFontSize(22);
+            pdf.setTextColor(220, 53, 69);
+            pdf.text('Sales Reports & Analytics', margin, yPos);
+            yPos += 10;
+            
+            // Period and date
+            const period = document.getElementById('periodLabel')?.textContent || 'All Time';
+            const generatedDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('Period: ' + period + '  |  Generated: ' + generatedDate, margin, yPos);
+            yPos += 8;
+            
+            // Divider line
+            pdf.setDrawColor(220, 53, 69);
+            pdf.setLineWidth(0.5);
+            pdf.line(margin, yPos, pageWidth - margin, yPos);
+            yPos += 10;
+            
+            // Get stats values and clean them
+            const totalSales = document.getElementById('totalSalesStat')?.textContent || '0';
+            const totalRevenueRaw = currentAnalytics?.totalRevenue || 0;
+            const netEarningsRaw = totalRevenueRaw * 0.9;
+            
+            // Stats summary box
+            pdf.setFillColor(250, 250, 250);
+            pdf.roundedRect(margin, yPos, pageWidth - (margin * 2), 20, 3, 3, 'F');
+            
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('Total Sales', margin + 10, yPos + 7);
+            pdf.text('Total Revenue', margin + 60, yPos + 7);
+            pdf.text('Net Earnings (90%)', margin + 120, yPos + 7);
+            
+            pdf.setFontSize(14);
+            pdf.setTextColor(30, 30, 30);
+            pdf.text(totalSales + ' items', margin + 10, yPos + 15);
+            pdf.text(formatCurrency(totalRevenueRaw), margin + 60, yPos + 15);
+            pdf.text(formatCurrency(netEarningsRaw), margin + 120, yPos + 15);
+            yPos += 28;
+            
+            // Capture charts
+            const chartIds = ['chartDistributionDonut', 'chartBarCategory', 'chartLineDailySales'];
+            const chartTitles = ['Distribution of Sales', 'Items Sold by Category', 'Daily Sales Report'];
+            
+            for (let i = 0; i < chartIds.length; i++) {
+                const canvas = document.getElementById(chartIds[i]);
+                if (canvas && canvas.offsetParent !== null) {
+                    // Check if we need a new page
+                    if (yPos > pageHeight - 80) {
+                        pdf.addPage();
+                        yPos = margin;
+                    }
+                    
+                    pdf.setFontSize(12);
+                    pdf.setTextColor(30, 30, 30);
+                    pdf.text(chartTitles[i], margin, yPos);
+                    yPos += 6;
+                    
+                    try {
+                        const imgData = canvas.toDataURL('image/png', 1.0);
+                        const imgWidth = pageWidth - (margin * 2);
+                        const aspectRatio = canvas.height / canvas.width;
+                        const imgHeight = Math.min(imgWidth * aspectRatio, 55);
+                        
+                        pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+                        yPos += imgHeight + 12;
+                    } catch (e) {
+                        console.warn('Could not capture chart:', chartIds[i], e);
+                        yPos += 10;
+                    }
+                }
+            }
+            
+            // Add new page for table
+            pdf.addPage();
+            yPos = margin;
+            
+            // Table title
+            pdf.setFontSize(16);
+            pdf.setTextColor(220, 53, 69);
+            pdf.text('Detailed Sales Report', margin, yPos);
+            yPos += 10;
+            
+            // Table headers
+            pdf.setFontSize(9);
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFillColor(220, 53, 69);
+            pdf.rect(margin, yPos, pageWidth - (margin * 2), 8, 'F');
+            
+            const colWidths = [50, 28, 18, 32, 32, 28];
+            const headers = ['Item', 'Category', 'Qty', 'Price', 'Total', 'Date'];
+            let xPos = margin + 2;
+            
+            headers.forEach((header, idx) => {
+                pdf.text(header, xPos, yPos + 5.5);
+                xPos += colWidths[idx];
+            });
+            yPos += 10;
+            
+            // Table rows
+            pdf.setTextColor(51, 51, 51);
+            const items = currentAnalytics?.rawItems || [];
+            const filter = document.getElementById('reportsPeriodFilter').value;
+            let filteredItems = [...items];
+            
+            if (filter !== 'all') {
+                const now = new Date();
+                if (filter === 'weekly') {
+                    const startOfWeek = new Date(now);
+                    startOfWeek.setDate(now.getDate() - now.getDay());
+                    startOfWeek.setHours(0, 0, 0, 0);
+                    filteredItems = items.filter(item => item.dateObj && item.dateObj >= startOfWeek);
+                } else if (filter === 'monthly') {
+                    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                    filteredItems = items.filter(item => item.dateObj && item.dateObj >= startOfMonth);
+                } else if (filter === 'yearly') {
+                    const startOfYear = new Date(now.getFullYear(), 0, 1);
+                    filteredItems = items.filter(item => item.dateObj && item.dateObj >= startOfYear);
+                }
+            }
+            
+            filteredItems.forEach((item, idx) => {
+                if (yPos > pageHeight - 15) {
+                    pdf.addPage();
+                    yPos = margin;
+                    
+                    // Repeat headers on new page
+                    pdf.setFontSize(9);
+                    pdf.setTextColor(255, 255, 255);
+                    pdf.setFillColor(220, 53, 69);
+                    pdf.rect(margin, yPos, pageWidth - (margin * 2), 8, 'F');
+                    xPos = margin + 2;
+                    headers.forEach((header, hIdx) => {
+                        pdf.text(header, xPos, yPos + 5.5);
+                        xPos += colWidths[hIdx];
+                    });
+                    yPos += 10;
+                    pdf.setTextColor(51, 51, 51);
+                }
+                
+                // Alternate row colors
+                if (idx % 2 === 0) {
+                    pdf.setFillColor(252, 252, 252);
+                    pdf.rect(margin, yPos - 1, pageWidth - (margin * 2), 7, 'F');
+                }
+                
+                // Format date
+                let dateStr = 'N/A';
+                if (item.date) {
+                    try {
+                        const d = new Date(item.date);
+                        dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } catch(e) {
+                        dateStr = 'N/A';
+                    }
+                }
+                
+                xPos = margin + 2;
+                const rowData = [
+                    cleanText(item.title).substring(0, 22) + (item.title.length > 22 ? '...' : ''),
+                    cleanText(item.category).substring(0, 12),
+                    String(item.quantity),
+                    formatCurrency(item.price),
+                    formatCurrency(item.total),
+                    dateStr
+                ];
+                
+                pdf.setFontSize(8);
+                rowData.forEach((cell, cellIdx) => {
+                    pdf.text(String(cell), xPos, yPos + 4);
+                    xPos += colWidths[cellIdx];
+                });
+                yPos += 7;
+            });
+            
+            // Summary row
+            yPos += 3;
+            pdf.setDrawColor(220, 53, 69);
+            pdf.setLineWidth(0.3);
+            pdf.line(margin, yPos, pageWidth - margin, yPos);
+            yPos += 5;
+            
+            const grandTotal = filteredItems.reduce((sum, item) => sum + item.total, 0);
+            pdf.setFontSize(10);
+            pdf.setTextColor(30, 30, 30);
+            pdf.text('Total: ' + filteredItems.length + ' items', margin + 2, yPos);
+            pdf.text('Grand Total: ' + formatCurrency(grandTotal), margin + 100, yPos);
+            
+            // Footer on each page
+            const pageCount = pdf.internal.getNumberOfPages();
+            for (let p = 1; p <= pageCount; p++) {
+                pdf.setPage(p);
+                pdf.setFontSize(8);
+                pdf.setTextColor(150, 150, 150);
+                pdf.text('Generated by Recommerce - Page ' + p + ' of ' + pageCount, margin, pageHeight - 8);
+                pdf.text(new Date().toLocaleString('en-US'), pageWidth - margin - 40, pageHeight - 8);
+            }
+            
+            // Save PDF
+            const filename = 'Sales_Report_' + period.replace(/\s/g, '_') + '_' + new Date().toISOString().split('T')[0] + '.pdf';
+            pdf.save(filename);
+            
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Error generating PDF. Please try again.');
+        } finally {
+            exportBtn.innerHTML = originalText;
+            exportBtn.disabled = false;
+        }
+    }
+
+    // Helper function to load scripts
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    // Update switchTab to handle reports
+    const originalSwitchTab = window.switchTab;
+    window.switchTab = function(tabName) {
+        originalSwitchTab(tabName);
+        if (tabName === 'reports') {
+            loadReportsTab();
+        }
+    };
+
+    console.log('✅ Reports functions loaded!');
+    
+    // Initialize profile page - load content when Firebase is ready
+    window.addEventListener('load', function() {
+        console.log('📄 Page loaded - initializing profile...');
+        waitForFirebaseFunctions();
+    });
+</script>
+}
+
+
+
+
+

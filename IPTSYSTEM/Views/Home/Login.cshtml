@@ -11,6 +11,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"]</title>
+    <link rel="icon" type="image/png" href="/logo/logo.png" />
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
@@ -20,12 +21,19 @@
     <link rel="stylesheet" href="~/css/pages/login.css" asp-append-version="true" />
 </head>
 <body>
+    <!-- Single Back Button -->
+    <button type="button" class="btn btn-light shadow-sm rounded-circle" onclick="handleBack()"
+            aria-label="Go back"
+            style="position: fixed; top: 20px; left: 20px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; z-index: 1100;">
+        <i class="bi bi-arrow-left"></i>
+    </button>
+
     <div class="login-container">
         <div class="login-card">
             <!-- Logo and Welcome Message -->
             <div class="login-header">
-                <div class="logo-circle">
-                    <span class="logo-text">R</span>
+                <div class="logo-circle" style="background: white; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin: 0 auto 16px auto;">
+                    <img src="/logo/logo.png" alt="System Logo" style="height: 40px; width: 40px; object-fit: contain; border-radius: 50%;" />
                 </div>
                 <h1 class="welcome-title">Welcome back</h1>
                 <p class="welcome-subtitle">Log in to continue</p>
@@ -35,13 +43,13 @@
             <form id="loginForm" asp-action="Login" asp-controller="Home" method="post" class="login-form">
                 @Html.AntiForgeryToken()
                 
-                <!-- Email/Username Field -->
+                <!-- Email Field -->
                 <div class="form-group">
-                    <label asp-for="EmailOrUsername" class="form-label">Email or Username</label>
+                    <label asp-for="EmailOrUsername" class="form-label">Email</label>
                     <input asp-for="EmailOrUsername" 
                            class="form-control" 
-                           placeholder="Enter your email or username" 
-                           autocomplete="username" />
+                           placeholder="Enter your email" 
+                           autocomplete="email" />
                     <span asp-validation-for="EmailOrUsername" class="text-danger"></span>
                 </div>
 
@@ -67,7 +75,7 @@
 
                 <!-- Forgot Password Link -->
                 <div class="form-footer">
-                    <a href="#" class="forgot-link">Forgot Password?</a>
+                    <a href="#" class="forgot-link" onclick="openForgotModal(event)">Forgot Password?</a>
                 </div>
 
                 <!-- Login Button -->
@@ -78,31 +86,6 @@
                     </span>
                 </button>
             </form>
-
-            <!-- Divider -->
-            <div class="divider">
-                <span class="divider-text">OR</span>
-            </div>
-
-            <!-- Social Login Buttons -->
-            <div class="social-login">
-                <button type="button" class="btn-social btn-google" id="googleLoginBtn">
-                    <svg class="social-icon" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    <span>Continue with Google</span>
-                </button>
-
-                <button type="button" class="btn-social btn-facebook" id="facebookLoginBtn">
-                    <svg class="social-icon" fill="#1877F2" viewBox="0 0 24 24">
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                    </svg>
-                    <span>Continue with Facebook</span>
-                </button>
-            </div>
 
             <!-- Sign Up Link -->
             <div class="signup-footer">
@@ -126,8 +109,185 @@
         </div>
     </div>
 
+    <!-- Forgot Password Modal -->
+    <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-modal">
+                <div class="modal-header border-0 pb-0">
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center px-5 pb-5 pt-0">
+                    <div class="mb-4 icon-float">
+                        <div class="icon-circle">
+                            <i class="bi bi-shield-lock-fill text-primary" style="font-size: 2.5rem;"></i>
+                        </div>
+                    </div>
+                    
+                    <h3 class="fw-bold mb-2">Forgot Password?</h3>
+                    <p class="text-muted mb-4">Enter your email address and we'll send you a link to reset your password.</p>
+                    
+                    <form id="forgotPasswordForm" onsubmit="handleForgotSubmit(event)">
+                        <div class="form-floating mb-4">
+                            <input type="email" class="form-control rounded-4" id="forgotEmail" placeholder="name@example.com" required>
+                            <label for="forgotEmail">Email address</label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100 py-3 rounded-4 fw-bold btn-send-reset">
+                            <span>Send Reset Link</span>
+                            <div class="spinner-border spinner-border-sm text-light ms-2 d-none" role="status"></div>
+                        </button>
+                    </form>
+                    
+                    <div class="mt-4">
+                        <a href="#" class="text-decoration-none text-muted small" data-bs-dismiss="modal">
+                            <i class="bi bi-arrow-left me-1"></i> Back to Login
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Glassmorphism & Animations */
+        .glass-modal {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            border-radius: 24px;
+            animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @@keyframes slideUpFade {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15);
+        }
+        
+        .icon-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @@keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .btn-send-reset {
+            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            border: none;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+        }
+        
+        .btn-send-reset:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
+        }
+        
+        .form-floating > .form-control:focus ~ label {
+            color: #0ea5e9;
+        }
+        .form-floating > .form-control:focus {
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
+        }
+    </style>
+
+    <script>
+        function openForgotModal(e) {
+            e.preventDefault();
+            const modal = new bootstrap.Modal(document.getElementById('forgotPasswordModal'));
+            modal.show();
+            // Pre-fill email if user typed it in login form
+            const loginEmail = document.getElementById('EmailOrUsername')?.value;
+            if (loginEmail) {
+                document.getElementById('forgotEmail').value = loginEmail;
+            }
+        }
+
+        async function handleForgotSubmit(e) {
+            e.preventDefault();
+            const email = document.getElementById('forgotEmail').value;
+            const btn = document.querySelector('.btn-send-reset');
+            const spinner = btn.querySelector('.spinner-border');
+            const btnText = btn.querySelector('span');
+            
+            if (!email) return;
+
+            // UI Loading State
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            btnText.textContent = 'Sending...';
+
+            try {
+                // Ensure helper exists
+                if (typeof window.firebaseSendPasswordResetEmail !== 'function') {
+                    throw new Error('Firebase client not fully loaded. Please refresh.');
+                }
+
+                const result = await window.firebaseSendPasswordResetEmail(email);
+
+                if (result.success) {
+                    // Success UI
+                    const modalBody = document.querySelector('#forgotPasswordModal .modal-body');
+                    modalBody.innerHTML = `
+                        <div class="text-center py-4 animate__animated animate__fadeIn">
+                            <div class="icon-circle mb-4" style="background: #ecfdf5; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);">
+                                <i class="bi bi-check-lg text-success" style="font-size: 2.5rem;"></i>
+                            </div>
+                            <h3 class="fw-bold mb-2">Check your inbox</h3>
+                            <p class="text-muted mb-4">We've sent a password reset link to <br><strong>${email}</strong></p>
+                            <button class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                // Error UI
+                alert('Failed to send reset email: ' + error.message);
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                btnText.textContent = 'Send Reset Link';
+            }
+        }
+    </script>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Firebase client (module) - ensure same client config as registration -->
+    <script type="module" src="~/js/firebase-client.js" asp-append-version="true"></script>
     <script src="~/js/login-controller.js" asp-append-version="true"></script>
+
+    <script>
+        function handleBack() {
+            try {
+                if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
+                    history.back();
+                    return;
+                }
+            } catch {}
+            window.location.href = '/Home/Landing';
+        }
+    </script>
 </body>
 </html>

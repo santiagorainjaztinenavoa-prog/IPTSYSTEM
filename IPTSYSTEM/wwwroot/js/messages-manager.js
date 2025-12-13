@@ -1,56 +1,493 @@
-// ========== MESSAGES MANAGER - CHAT & AI BOT ==========
+// Messages Manager - Firestore Chat Integration
 
 let currentConversationId = null;
+let currentConversation = null;
+let allConversations = [];
 let toastNotification;
 let messagePollingInterval;
+let notificationPermissionGranted = false;
+
+// Profile cache configuration
+const profileCache = new Map();
+const PROFILE_CACHE_TTL = 10 * 60 * 1000;
+let messageListenerUnsubscribe = null;
+let conversationsLoadedOnce = false;
 
 document.addEventListener('DOMContentLoaded', function () {
     toastNotification = new bootstrap.Toast(document.getElementById('toastNotification'));
-    
-    // Auto-select AI Assistant conversation
-    const aiConversation = document.querySelector('.ai-conversation');
-    if (aiConversation) {
-        aiConversation.click();
+
+    // Load conversations for current user (only once)
+    if (!conversationsLoadedOnce) {
+        loadUserConversations();
+        conversationsLoadedOnce = true;
     }
+
+    // Setup message notifications (uses real-time listeners - efficient)
+    setupMessageNotifications();
+
+    // Request notification permission
+    requestNotificationPermission();
 });
+
+// Request browser notification permission
+async function requestNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+            notificationPermissionGranted = true;
+        } else if (Notification.permission !== 'denied') {
+            const permission = await Notification.requestPermission();
+            notificationPermissionGranted = permission === 'granted';
+        }
+    }
+}
+
+// Setup real-time message notifications
+function setupMessageNotifications() {
+    if (!currentUserId) return;
+
+    // Wait for Firebase to be ready
+    const setupListener = () => {
+        if (typeof window.firebaseListenForNewMessages === 'function') {
+            window.firebaseListenForNewMessages(currentUserId, (notification) => {
+                // Don't notify if we're already viewing this conversation
+                if (notification.conversationId === currentConversationId) {
+                    return;
+                }
+
+                // Show toast notification
+                showToast(`New message from ${notification.senderName}: ${notification.message.substring(0, 50)}...`, 'info');
+
+                // Show browser notification
+                showBrowserNotification(notification);
+
+                // Update unread badge without fetching (increment locally)
+                const badge = document.querySelector('.messages-badge');
+                if (badge) {
+                    const current = parseInt(badge.textContent) || 0;
+                    badge.textContent = current + 1;
+                    badge.style.display = 'inline-block';
+                }
+
+                // Update conversation in local cache instead of reloading
+                const convIndex = allConversations.findIndex(c => c.id === notification.conversationId);
+                if (convIndex !== -1) {
+                    allConversations[convIndex].lastMessage = notification.message;
+                    allConversations[convIndex].lastMessageSenderId = 'other'; // Not current user
+                    // Just highlight the conversation item
+                    const convItem = document.querySelector(`[data-conversation-id="${notification.conversationId}"]`);
+                    if (convItem && !convItem.classList.contains('unread')) {
+                        convItem.classList.add('unread');
+                        // Add unread dot
+                        const meta = convItem.querySelector('.conversation-meta');
+                        if (meta && !meta.querySelector('.unread-dot')) {
+                            meta.innerHTML += '<span class="unread-dot" style="display: inline-block; width: 10px; height: 10px; background: #ef4444; border-radius: 50%; margin-top: 4px;"></span>';
+                        }
+                    }
+                }
+            });
+        } else {
+            // Retry after a short delay
+            setTimeout(setupListener, 1000);
+        }
+    };
+
+    setupListener();
+}
+
+// Show browser notification
+function showBrowserNotification(notification) {
+    if (!notificationPermissionGranted) return;
+
+    try {
+        const browserNotif = new Notification('New Message - Recommerce', {
+            body: `${notification.senderName}: ${notification.message.substring(0, 100)}`,
+            icon: '/logo/logo.png',
+            tag: notification.conversationId
+        });
+
+        browserNotif.onclick = () => {
+            window.focus();
+            loadConversation(notification.conversationId);
+            browserNotif.close();
+        };
+
+        // Auto-close after 5 seconds
+        setTimeout(() => browserNotif.close(), 5000);
+    } catch (err) {
+        console.warn('Browser notification error:', err);
+    }
+}
+
+// Update unread badge in navbar (use cached conversations, no extra reads)
+function updateUnreadBadgeFromCache() {
+    // Count unread from cached conversations - NO Firebase read!
+    let unreadCount = 0;
+    for (const conv of allConversations) {
+        if (conv.lastMessageSenderId && conv.lastMessageSenderId !== currentUserId) {
+            unreadCount++;
+        }
+    }
+
+    const badge = document.querySelector('.messages-badge');
+    if (badge) {
+        if (unreadCount > 0) {
+            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// Load all conversations for the current user
+async function loadUserConversations() {
+    if (!currentUserId) {
+        document.getElementById('conversationList').innerHTML = `
+            <div class="empty-conversations" style="text-align: center; padding: 40px 20px; color: #6b7280;">
+                <i class="bi bi-chat-dots" style="font-size: 2rem; color: #d1d5db;"></i>
+                <p class="mt-2">Please login to view messages</p>
+            </div>
+        `;
+        return;
+    }
+
+    try {
+        // Use client-side Firebase
+        if (typeof window.firebaseGetUserConversations === 'function') {
+            const result = await window.firebaseGetUserConversations(currentUserId);
+
+            if (result.success) {
+                allConversations = result.conversations || [];
+                displayConversationList(allConversations);
+                // Update navbar badge accurately using fetched conversations
+                updateUnreadBadgeAccurate(allConversations);
+
+                // If there's an initial conversation ID from URL, load it
+                if (initialConversationId) {
+                    loadConversation(initialConversationId);
+                }
+            } else {
+                showToast('Error loading conversations: ' + result.message, 'error');
+            }
+        } else {
+            // Fallback to server API
+            const response = await fetch(`/Messaging/GetUserConversations?userId=${encodeURIComponent(currentUserId)}`);
+            const result = await response.json();
+
+            if (result.success) {
+                allConversations = result.conversations || [];
+                displayConversationList(allConversations);
+
+                if (initialConversationId) {
+                    loadConversation(initialConversationId);
+                }
+            } else {
+                showToast('Error loading conversations', 'error');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading conversations:', error);
+        showToast('Error loading conversations', 'error');
+    }
+}
+
+// Display conversation list in sidebar
+async function displayConversationList(conversations) {
+    const container = document.getElementById('conversationList');
+
+    if (!conversations || conversations.length === 0) {
+        container.innerHTML = `
+            <div class="empty-conversations" style="text-align: center; padding: 40px 20px; color: #6b7280;">
+                <i class="bi bi-chat-dots" style="font-size: 3rem; color: #d1d5db;"></i>
+                <p class="mt-3">No conversations yet</p>
+                <p style="font-size: 0.85rem;">Start a conversation by messaging a seller from the Browse page</p>
+            </div>
+        `;
+        updateUnreadBadge(0);
+        return;
+    }
+
+    container.innerHTML = '';
+
+    // Count unread conversations
+    let unreadCount = 0;
+
+    for (const conv of conversations) {
+        // Determine the other person's info (if current user is buyer, show seller, and vice versa)
+        const isBuyer = conv.buyerId === currentUserId;
+        const otherName = isBuyer ? conv.sellerName : conv.buyerName;
+        const otherId = isBuyer ? conv.sellerId : conv.buyerId;
+        const otherInitial = otherName ? otherName.charAt(0).toUpperCase() : 'U';
+
+        // Check if conversation has unread messages using lastReadBy timestamp
+        const readField = `lastReadBy_${currentUserId}`;
+        const lastReadTime = conv[readField]?.seconds || 0;
+        const lastMessageTime = conv.lastMessageTime?.seconds || 0;
+        const isUnread = conv.lastMessageSenderId && conv.lastMessageSenderId !== currentUserId && lastMessageTime > lastReadTime;
+        if (isUnread) unreadCount++;
+
+        const item = document.createElement('div');
+        item.className = `conversation-item ${isUnread ? 'unread' : ''}`;
+        item.setAttribute('data-conversation-id', conv.id);
+        item.setAttribute('data-other-user-id', otherId || '');
+        item.onclick = () => loadConversation(conv.id);
+
+        item.innerHTML = `
+            <div class="conversation-avatar">
+                <div class="avatar-circle conv-avatar-${conv.id}" style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; overflow: hidden; background-size: cover; background-position: center;">
+                    ${otherInitial}
+                </div>
+                <span class="status-indicator ${isUnread ? 'online' : 'offline'}"></span>
+            </div>
+            <div class="conversation-info">
+                <h4 class="conversation-name" style="${isUnread ? 'font-weight: 700;' : ''}">${otherName || 'Unknown'}</h4>
+                <p class="conversation-preview">${conv.listingTitle ? `📦 ${conv.listingTitle}` : ''}</p>
+                <p class="conversation-preview" style="font-size: 0.8rem; color: ${isUnread ? '#374151' : '#9ca3af'}; ${isUnread ? 'font-weight: 600;' : ''}">${conv.lastMessage || 'No messages yet'}</p>
+            </div>
+            <div class="conversation-meta">
+                <span class="conversation-time">${formatTimeAgo(conv.lastMessageTime)}</span>
+                ${isUnread ? '<span class="unread-dot" style="display: inline-block; width: 10px; height: 10px; background: #ef4444; border-radius: 50%; margin-top: 4px;"></span>' : ''}
+            </div>
+        `;
+
+        container.appendChild(item);
+
+        // Load profile photo and name for other user (with caching)
+        if (otherId && typeof window.firebaseGetUserProfile === 'function') {
+            loadConversationUserProfileCached(conv.id, otherId);
+        }
+    }
+
+    // Update navbar badge
+    updateUnreadBadge(unreadCount);
+}
+
+// Get cached profile or fetch from Firebase
+async function getCachedProfile(userId) {
+    // Check cache first
+    const cached = profileCache.get(userId);
+    if (cached && (Date.now() - cached.timestamp < PROFILE_CACHE_TTL)) {
+        return cached.profile;
+    }
+
+    // Fetch from Firebase
+    if (typeof window.firebaseGetUserProfile === 'function') {
+        const result = await window.firebaseGetUserProfile(userId);
+        if (result.success && result.profile) {
+            // Store in cache
+            profileCache.set(userId, {
+                profile: result.profile,
+                timestamp: Date.now()
+            });
+            return result.profile;
+        }
+    }
+    return null;
+}
+
+// Load profile photo and name for conversation (cached)
+async function loadConversationUserProfileCached(convId, userId) {
+    try {
+        const profile = await getCachedProfile(userId);
+        if (profile) {
+            // Update avatar with photo
+            if (profile.photo_url) {
+                const avatar = document.querySelector(`.conv-avatar-${convId}`);
+                if (avatar) {
+                    avatar.style.backgroundImage = `url("${profile.photo_url}")`;
+                    avatar.innerHTML = ''; // Remove initial letter
+                }
+            }
+            // Update name with actual profile name
+            const profileName = profile.full_name || profile.fullName || profile.username;
+            if (profileName) {
+                const convItem = document.querySelector(`[data-conversation-id="${convId}"]`);
+                if (convItem) {
+                    const nameEl = convItem.querySelector('.conversation-name');
+                    if (nameEl && (nameEl.textContent === 'Unknown' || nameEl.textContent !== profileName)) {
+                        nameEl.textContent = profileName;
+                        // Update initial letter if no photo
+                        const avatar = document.querySelector(`.conv-avatar-${convId}`);
+                        if (avatar && !profile.photo_url) {
+                            avatar.innerHTML = profileName.charAt(0).toUpperCase();
+                        }
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Could not load profile for user:', userId, err);
+    }
+}
+
+// Update unread badge in navbar
+function updateUnreadBadge(count) {
+    const badge = document.querySelector('.messages-badge');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// Load profile photo and name for chat header (cached)
+async function loadChatHeaderProfile(userId) {
+    try {
+        const profile = await getCachedProfile(userId);
+        if (profile) {
+            // Update avatar with photo
+            if (profile.photo_url) {
+                const avatar = document.querySelector('.chat-header-avatar');
+                if (avatar) {
+                    avatar.style.backgroundImage = `url("${profile.photo_url}")`;
+                    avatar.innerHTML = ''; // Remove initial letter
+                }
+            }
+            // Update name with actual profile name
+            const profileName = profile.full_name || profile.fullName || profile.username;
+            if (profileName) {
+                const nameEl = document.getElementById('chatUserName');
+                if (nameEl) {
+                    nameEl.textContent = profileName;
+                }
+                // Update initial if no photo
+                if (!profile.photo_url) {
+                    const avatar = document.querySelector('.chat-header-avatar');
+                    if (avatar) {
+                        avatar.innerHTML = profileName.charAt(0).toUpperCase();
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Could not load chat header profile:', err);
+    }
+}
 
 // Load conversation messages
 async function loadConversation(conversationId) {
     try {
         currentConversationId = conversationId;
-        
+
+        // Mark conversation as read when opened
+        if (typeof window.firebaseMarkConversationRead === 'function') {
+            window.firebaseMarkConversationRead(conversationId, currentUserId);
+        }
+
+        // Find conversation details
+        currentConversation = allConversations.find(c => c.id === conversationId);
+
+        // If not in cache, fetch it
+        if (!currentConversation) {
+            if (typeof window.firebaseGetConversation === 'function') {
+                const convResult = await window.firebaseGetConversation(conversationId);
+                if (convResult.success) {
+                    currentConversation = convResult.conversation;
+                } else {
+                    console.warn('Could not load conversation:', convResult.message);
+                }
+            }
+        }
+
         // Update UI
- document.getElementById('chatEmptyState').style.display = 'none';
+        document.getElementById('chatEmptyState').style.display = 'none';
         document.getElementById('chatHeader').style.display = 'flex';
         document.getElementById('chatMessages').style.display = 'flex';
-    document.getElementById('chatInputContainer').style.display = 'flex';
-        
-     // Highlight active conversation
-   document.querySelectorAll('.conversation-item').forEach(item => {
-  item.classList.remove('active');
-});
-        document.querySelector(`[data-conversation-id="${conversationId}"]`).classList.add('active');
-  
+        document.getElementById('chatInputContainer').style.display = 'flex';
+
+        // Highlight active conversation and remove unread state
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        const activeItem = document.querySelector(`[data-conversation-id="${conversationId}"]`);
+        if (activeItem) {
+            activeItem.classList.add('active');
+            // Remove unread styling when conversation is opened
+            if (activeItem.classList.contains('unread')) {
+                activeItem.classList.remove('unread');
+                // Remove the red dot
+                const unreadDot = activeItem.querySelector('.unread-dot');
+                if (unreadDot) unreadDot.remove();
+                // Reset name and preview styles
+                const nameEl = activeItem.querySelector('.conversation-name');
+                const previewEl = activeItem.querySelector('.conversation-preview:last-child');
+                if (nameEl) nameEl.style.fontWeight = '700';
+                if (previewEl) {
+                    previewEl.style.fontWeight = 'normal';
+                    previewEl.style.color = '#9ca3af';
+                }
+                // Update unread count in navbar
+                const currentCount = document.querySelectorAll('.conversation-item.unread').length;
+                updateUnreadBadge(currentCount);
+            }
+        }
+
         // Update chat header
-      const conversation = document.querySelector(`[data-conversation-id="${conversationId}"]`);
-        const userName = conversation.querySelector('.conversation-name').textContent.trim();
-        const userAvatar = conversation.querySelector('.conversation-avatar img').src;
-        const isOnline = conversation.querySelector('.status-indicator').classList.contains('online');
-        
-        document.getElementById('chatUserName').textContent = userName;
-        document.getElementById('chatAvatar').src = userAvatar;
-      document.getElementById('chatStatus').className = `status-indicator ${isOnline ? 'online' : 'offline'}`;
-        document.getElementById('chatUserStatus').textContent = isOnline ? 'Active now' : 'Offline';
-        document.getElementById('chatUserStatus').style.color = isOnline ? '#10b981' : '#9ca3af';
-        
-        // Load messages
-        const response = await fetch(`/Home/GetMessages?conversationId=${conversationId}`);
-        const messages = await response.json();
-        
+        if (currentConversation && (currentConversation.buyerId || currentConversation.sellerId)) {
+            const isBuyer = currentConversation.buyerId === currentUserId;
+            const otherName = isBuyer ? currentConversation.sellerName : currentConversation.buyerName;
+            const otherId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+            // UI Improvements: Better default name and ensuring we have an ID
+            const displayName = otherName || 'User';
+            const otherInitial = displayName.charAt(0).toUpperCase();
+
+            // Set role based on conversation participation
+            const otherRole = isBuyer ? 'Seller' : 'Buyer';
+
+            const nameEl = document.getElementById('chatUserName');
+            const statusEl = document.getElementById('chatUserStatus');
+            const avatarContainer = document.querySelector('.chat-user-avatar');
+
+            if (nameEl) nameEl.textContent = displayName;
+            if (statusEl) {
+                statusEl.textContent = otherRole;
+                statusEl.style.color = '#10b981';
+            }
+
+            // Set avatar with initial first (Capital Letter as requested)
+            if (avatarContainer) {
+                avatarContainer.innerHTML = `
+                    <div class="avatar-circle chat-header-avatar" style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #FF6B6B 0%, #EE5D5D 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.5rem; overflow: hidden; background-size: cover; background-position: center; border: 2px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                        ${otherInitial}
+                    </div>
+                `;
+
+                // Load profile photo and real name for chat header
+                // This will overwrite the defaults if profile is found
+                if (otherId && typeof window.firebaseGetUserProfile === 'function') {
+                    console.log('🔄 Fetching profile for header:', otherId);
+                    loadChatHeaderProfile(otherId);
+                }
+            }
+        } else {
+            // Fallback for conversations without proper data
+            // Try to find ANY other user ID involved if possible, or just default
+            document.getElementById('chatUserName').textContent = 'User (No Info)';
+            document.getElementById('chatUserStatus').textContent = 'Conversation';
+            document.getElementById('chatUserStatus').style.color = '#9ca3af';
+        }
+
+        // Load messages using client-side Firebase
+        let messages = [];
+        if (typeof window.firebaseGetMessages === 'function') {
+            const result = await window.firebaseGetMessages(conversationId);
+            if (result.success) {
+                messages = result.messages || [];
+            }
+        }
+
         displayMessages(messages);
         scrollToBottom();
-        
+
+        // Start polling for new messages
+        startMessagePolling();
+
     } catch (error) {
+        console.error('Error loading conversation:', error);
         showToast('Error loading conversation: ' + error.message, 'error');
     }
 }
@@ -59,30 +496,117 @@ async function loadConversation(conversationId) {
 function displayMessages(messages) {
     const chatMessages = document.getElementById('chatMessages');
     chatMessages.innerHTML = '';
-    
-messages.forEach(message => {
+
+    if (!messages || messages.length === 0) {
+        chatMessages.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #9ca3af;">
+                <i class="bi bi-chat-dots" style="font-size: 2rem;"></i>
+                <p class="mt-2">No messages yet. Start the conversation!</p>
+            </div>
+        `;
+        return;
+    }
+
+    messages.forEach(message => {
+        const isSent = message.senderId === currentUserId;
+
         const messageGroup = document.createElement('div');
-        messageGroup.className = `message-group ${message.senderId === 'me' ? 'sent' : 'received'}`;
-   
+        messageGroup.className = `message-group ${isSent ? 'sent' : 'received'}`;
+        messageGroup.setAttribute('data-message-id', message.id);
+
         const messageBubble = document.createElement('div');
         messageBubble.className = 'message-bubble';
-     
-        if (message.isFromBot) {
-messageBubble.classList.add('bot-message');
-   }
-    
+        messageBubble.style.position = 'relative';
+
+        // Check if this is a product inquiry message
+        if (message.messageType === 'product_inquiry' && message.productData) {
+            // Render product card
+            const productCard = document.createElement('div');
+            productCard.className = 'product-inquiry-card';
+            productCard.style.cssText = 'background: #f3f4f6; border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; gap: 12px; cursor: pointer;';
+
+            const productImg = document.createElement('img');
+            productImg.src = message.productData.imageUrl || 'https://via.placeholder.com/80';
+            productImg.alt = message.productData.title;
+            productImg.style.cssText = 'width: 80px; height: 80px; object-fit: cover; border-radius: 6px; flex-shrink: 0;';
+            productImg.onerror = () => productImg.src = 'https://via.placeholder.com/80';
+
+            const productInfo = document.createElement('div');
+            productInfo.style.cssText = 'flex: 1; min-width: 0;';
+
+            const productTitle = document.createElement('div');
+            productTitle.textContent = message.productData.title;
+            productTitle.style.cssText = 'font-weight: 600; color: #111827; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+
+            const productPrice = document.createElement('div');
+            productPrice.textContent = window.formatCurrency ? window.formatCurrency(message.productData.price) : `₱${message.productData.price}`;
+            productPrice.style.cssText = 'color: #059669; font-weight: 600; margin-bottom: 4px;';
+
+            const productCondition = document.createElement('div');
+            productCondition.textContent = message.productData.condition || 'New';
+            productCondition.style.cssText = 'font-size: 12px; color: #6b7280; background: #e5e7eb; padding: 2px 8px; border-radius: 4px; display: inline-block;';
+
+            productInfo.appendChild(productTitle);
+            productInfo.appendChild(productPrice);
+            productInfo.appendChild(productCondition);
+
+            productCard.appendChild(productImg);
+            productCard.appendChild(productInfo);
+
+            // Make product card clickable
+            productCard.onclick = () => {
+                window.location.href = `/Home/Browse?productId=${message.productData.productId}`;
+            };
+
+            messageBubble.appendChild(productCard);
+        }
+
+        // Render message text with clickable links
         const messageText = document.createElement('p');
         messageText.className = 'message-text';
-        messageText.innerHTML = message.content.replace(/\n/g, '<br>');
-        
+
+        // Linkify URLs in message text
+        const textWithLinks = linkifyText(message.text || '');
+        messageText.innerHTML = textWithLinks.replace(/\n/g, '<br>');
+
         const messageTime = document.createElement('span');
-    messageTime.className = 'message-time';
+        messageTime.className = 'message-time';
         messageTime.textContent = formatTime(message.timestamp);
-        
-messageBubble.appendChild(messageText);
-  messageBubble.appendChild(messageTime);
- messageGroup.appendChild(messageBubble);
+
+        // Add delete button only for sent messages
+        if (isSent) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn-delete-message';
+            deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+            deleteBtn.title = 'Delete message';
+            deleteBtn.style.cssText = 'position: absolute; top: -8px; right: -8px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; cursor: pointer; opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center;';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteMessage(message.id);
+            };
+            messageBubble.appendChild(deleteBtn);
+
+            // Show delete button on hover
+            messageBubble.addEventListener('mouseenter', () => deleteBtn.style.opacity = '1');
+            messageBubble.addEventListener('mouseleave', () => deleteBtn.style.opacity = '0');
+        }
+
+        messageBubble.appendChild(messageText);
+        messageBubble.appendChild(messageTime);
+        messageGroup.appendChild(messageBubble);
         chatMessages.appendChild(messageGroup);
+    });
+}
+
+// Helper function to make URLs clickable
+function linkifyText(text) {
+    if (!text) return '';
+
+    // URL regex pattern
+    const urlPattern = /(https?:\/\/[^\s]+)/g;
+
+    return text.replace(urlPattern, (url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: underline;">${url}</a>`;
     });
 }
 
@@ -90,153 +614,154 @@ messageBubble.appendChild(messageText);
 async function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
-  
-    if (!message || currentConversationId === null) return;
-    
+
+    if (!message || !currentConversationId) return;
+
+    if (!currentUserId) {
+        showToast('Please login to send messages', 'error');
+        return;
+    }
+
+    // Check for blocking before sending
+    if (typeof window.firebaseCheckVerifyBlock === 'function') {
+        const isBuyer = currentConversation.buyerId === currentUserId;
+        const recipientId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+        const blockStatus = await window.firebaseCheckVerifyBlock(currentUserId, recipientId);
+        if (!blockStatus.allowed) {
+            showToast(blockStatus.reason || 'You cannot send messages to this user.', 'error');
+            return;
+        }
+    }
+
     try {
-        // Check if it's AI bot conversation
-        if (currentConversationId === 0) {
-     await sendBotMessage(message);
+        // Add message to UI immediately
+        addMessageToUI(message, true);
+        messageInput.value = '';
+        scrollToBottom();
+
+        // Send using client-side Firebase
+        if (typeof window.firebaseSendMessage === 'function') {
+            const result = await window.firebaseSendMessage(
+                currentConversationId,
+                currentUserId,
+                currentUserName,
+                message
+            );
+
+            if (!result.success) {
+                showToast('Error: ' + result.message, 'error');
+            }
         } else {
-            await sendUserMessage(message);
+            // Fallback to server API
+            const response = await fetch('/Messaging/SendMessage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    conversationId: currentConversationId,
+                    senderId: currentUserId,
+                    senderName: currentUserName,
+                    text: message
+                })
+            });
+
+            const result = await response.json();
+
+            if (!result.success) {
+                showToast('Error: ' + result.message, 'error');
+            }
         }
-      
-     messageInput.value = '';
+
         messageInput.focus();
-        
-    } catch (error) {
-        showToast('Error sending message: ' + error.message, 'error');
-    }
-}
 
-// Send message to AI bot
-async function sendBotMessage(message) {
-    // Add user message to UI immediately
-    addMessageToUI(message, true, false);
-  scrollToBottom();
-    
-    // Show typing indicator
-    showTypingIndicator();
-  
-    try {
-    const response = await fetch('/Home/AskBot', {
-  method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message, context: 'marketplace' })
-        });
-        
-     const result = await response.json();
-
-  // Remove typing indicator
-        removeTypingIndicator();
-        
-   if (result.success) {
-// Add bot response to UI
-     setTimeout(() => {
-       addMessageToUI(result.message.content, false, true);
-         scrollToBottom();
-            }, 300);
-      } else {
-        showToast('Bot error: ' + result.message, 'error');
-      }
     } catch (error) {
-        removeTypingIndicator();
-      showToast('Error communicating with AI: ' + error.message, 'error');
-    }
-}
-
-// Send message to user
-async function sendUserMessage(message) {
-    // Add message to UI immediately
-    addMessageToUI(message, true, false);
-    scrollToBottom();
-    
-    try {
-        const response = await fetch('/Home/SendMessage', {
-            method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversationId: currentConversationId, message: message })
-        });
-      
-        const result = await response.json();
-        
-        if (!result.success) {
-      showToast('Error: ' + result.message, 'error');
-        }
-    } catch (error) {
+        console.error('Error sending message:', error);
         showToast('Error sending message: ' + error.message, 'error');
     }
 }
 
 // Add message to UI
-function addMessageToUI(content, isSent, isBot) {
+function addMessageToUI(content, isSent) {
     const chatMessages = document.getElementById('chatMessages');
-    
+
+    // Remove empty state if present
+    const emptyState = chatMessages.querySelector('div[style*="text-align: center"]');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
     const messageGroup = document.createElement('div');
     messageGroup.className = `message-group ${isSent ? 'sent' : 'received'}`;
-    
+
     const messageBubble = document.createElement('div');
     messageBubble.className = 'message-bubble';
-    
-    if (isBot) {
-        messageBubble.classList.add('bot-message');
-    }
-    
+
     const messageText = document.createElement('p');
     messageText.className = 'message-text';
- messageText.innerHTML = content.replace(/\n/g, '<br>');
-    
+    messageText.innerHTML = content.replace(/\n/g, '<br>');
+
     const messageTime = document.createElement('span');
     messageTime.className = 'message-time';
     messageTime.textContent = 'Just now';
-    
+
     messageBubble.appendChild(messageText);
     messageBubble.appendChild(messageTime);
     messageGroup.appendChild(messageBubble);
     chatMessages.appendChild(messageGroup);
 }
 
-// Show typing indicator
-function showTypingIndicator() {
-    const chatMessages = document.getElementById('chatMessages');
-    
-    const typingDiv = document.createElement('div');
-    typingDiv.className = 'message-group received';
-    typingDiv.id = 'typingIndicator';
-    
-const typingBubble = document.createElement('div');
-    typingBubble.className = 'message-bubble typing-bubble';
-    
-    typingBubble.innerHTML = `
-        <div class="typing-dots">
-  <span></span>
-       <span></span>
-        <span></span>
-        </div>
-    `;
-    
-    typingDiv.appendChild(typingBubble);
-    chatMessages.appendChild(typingDiv);
-    scrollToBottom();
-}
+// Start real-time message listener (replaces polling - much fewer reads!)
+function startMessagePolling() {
+    // Clear existing listener
+    if (messageListenerUnsubscribe) {
+        messageListenerUnsubscribe();
+        messageListenerUnsubscribe = null;
+    }
 
-// Remove typing indicator
-function removeTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    if (indicator) {
-        indicator.remove();
+    // Clear any old polling interval
+    if (messagePollingInterval) {
+        clearInterval(messagePollingInterval);
+        messagePollingInterval = null;
+    }
+
+    if (!currentConversationId) return;
+
+    // Use real-time listener instead of polling
+    if (typeof window.firebaseListenToMessages === 'function') {
+        messageListenerUnsubscribe = window.firebaseListenToMessages(currentConversationId, (messages) => {
+            displayMessages(messages);
+            scrollToBottom();
+        });
+    } else {
+        // Fallback: poll every 10 seconds instead of 3 (reduces reads by 70%)
+        messagePollingInterval = setInterval(async () => {
+            if (currentConversationId && typeof window.firebaseGetMessages === 'function') {
+                try {
+                    const result = await window.firebaseGetMessages(currentConversationId);
+                    if (result.success) {
+                        const currentCount = document.querySelectorAll('.message-group').length;
+                        if ((result.messages || []).length > currentCount) {
+                            displayMessages(result.messages || []);
+                            scrollToBottom();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }
+        }, 10000); // 10 seconds instead of 3
     }
 }
 
-// Open AI chat directly
+// AI Chat feature placeholder
 function openAIChat() {
-    loadConversation(0);
+    showToast('AI Assistant feature coming soon!', 'info');
 }
 
 // Handle Enter key press
 function handleKeyPress(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
+        event.preventDefault();
         sendMessage();
     }
 }
@@ -245,93 +770,325 @@ function handleKeyPress(event) {
 function filterConversations() {
     const searchInput = document.getElementById('searchConversations').value.toLowerCase();
     const conversations = document.querySelectorAll('.conversation-item');
-    
+
     conversations.forEach(conversation => {
-   const name = conversation.querySelector('.conversation-name').textContent.toLowerCase();
-  const preview = conversation.querySelector('.conversation-preview').textContent.toLowerCase();
-        
+        const name = conversation.querySelector('.conversation-name')?.textContent.toLowerCase() || '';
+        const preview = conversation.querySelector('.conversation-preview')?.textContent.toLowerCase() || '';
+
         if (name.includes(searchInput) || preview.includes(searchInput)) {
- conversation.style.display = 'flex';
+            conversation.style.display = 'flex';
         } else {
             conversation.style.display = 'none';
-   }
+        }
     });
 }
 
 // Toggle chat options dropdown
 function toggleChatOptions() {
-  const dropdown = document.getElementById('chatOptionsDropdown');
+    const dropdown = document.getElementById('chatOptionsDropdown');
     dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
 }
 
 // Chat options actions
-function blockUser() {
-    if (confirm('Are you sure you want to block this user?')) {
-   showToast('User blocked successfully', 'success');
-        toggleChatOptions();
+// Chat options actions
+async function blockUser() {
+    if (!currentConversation) return;
+
+    // Determine other user ID
+    const isBuyer = currentConversation.buyerId === currentUserId;
+    const otherId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+    if (confirm('Are you sure you want to block this user? They will no longer be able to message you.')) {
+        try {
+            const result = await window.firebaseBlockUser(currentUserId, otherId);
+            if (result.success) {
+                showToast('User blocked successfully', 'success');
+                toggleChatOptions();
+                // Optionally disable input
+                const input = document.getElementById('messageInput');
+                if (input) {
+                    input.disabled = true;
+                    input.placeholder = 'You have blocked this user.';
+                }
+            } else {
+                showToast('Failed to block user: ' + result.message, 'error');
+            }
+        } catch (error) {
+            console.error('Block error:', error);
+            showToast('An error occurred', 'error');
+        }
     }
 }
 
 function reportUser() {
-    if (confirm('Report this user for inappropriate behavior?')) {
-      showToast('User reported. Our team will review this.', 'success');
-      toggleChatOptions();
+    // Open modal
+    const modalEl = document.getElementById('reportUserModal');
+    if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        toggleChatOptions();
+    } else {
+        showToast('Report modal not found', 'error');
     }
 }
 
-function deleteChat() {
-    if (confirm('Delete this conversation? This action cannot be undone.')) {
-        showToast('Conversation deleted', 'success');
-        toggleChatOptions();
-     document.getElementById('chatEmptyState').style.display = 'flex';
-        document.getElementById('chatHeader').style.display = 'none';
-        document.getElementById('chatMessages').style.display = 'none';
-        document.getElementById('chatInputContainer').style.display = 'none';
+// Setup report form listener (runs once)
+document.addEventListener('DOMContentLoaded', function () {
+    const reportForm = document.getElementById('reportUserForm');
+    if (reportForm) {
+        reportForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            if (!currentConversation) return;
+            const isBuyer = currentConversation.buyerId === currentUserId;
+            const otherId = isBuyer ? currentConversation.sellerId : currentConversation.buyerId;
+
+            const reason = document.getElementById('reportReason').value;
+            const details = document.getElementById('reportDetails').value;
+            const btn = reportForm.querySelector('button[type="submit"]');
+
+            if (!reason || !details) {
+                showToast('Please fill in all fields', 'warning');
+                return;
+            }
+
+            // Disable button
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Submitting...';
+
+            try {
+                const result = await window.firebaseReportUser(
+                    currentUserId,
+                    currentUserName,
+                    otherId,
+                    reason,
+                    details
+                );
+
+                if (result.success) {
+                    showToast('Report submitted. Thank you for helping keep our community safe.', 'success');
+                    // Close modal
+                    const modalEl = document.getElementById('reportUserModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+
+                    // Reset form
+                    reportForm.reset();
+                } else {
+                    showToast('Failed to submit report: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Report error:', error);
+                showToast('An error occurred while reporting', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        });
+    }
+});
+
+// Delete a single message
+async function deleteMessage(messageId) {
+    if (!confirm('Delete this message?')) return;
+
+    try {
+        if (typeof window.firebaseDeleteMessage === 'function') {
+            const result = await window.firebaseDeleteMessage(currentConversationId, messageId);
+            if (result.success) {
+                // Remove message from UI
+                const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+                if (messageEl) {
+                    messageEl.remove();
+                }
+                showToast('Message deleted', 'success');
+            } else {
+                showToast('Failed to delete message: ' + result.message, 'error');
+            }
+        } else {
+            showToast('Delete function not available', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        showToast('Error deleting message', 'error');
+    }
+}
+
+// Delete entire conversation
+async function deleteChat() {
+    if (!confirm('Delete this entire conversation? This action cannot be undone.')) return;
+
+    toggleChatOptions();
+
+    try {
+        if (typeof window.firebaseDeleteConversation === 'function') {
+            showToast('Deleting conversation...', 'info');
+            const result = await window.firebaseDeleteConversation(currentConversationId);
+            if (result.success) {
+                showToast('Conversation deleted', 'success');
+
+                // Remove from UI
+                const convItem = document.querySelector(`[data-conversation-id="${currentConversationId}"]`);
+                if (convItem) {
+                    convItem.remove();
+                }
+
+                // Remove from local array
+                allConversations = allConversations.filter(c => c.id !== currentConversationId);
+
+                // Reset chat panel
+                document.getElementById('chatEmptyState').style.display = 'flex';
+                document.getElementById('chatHeader').style.display = 'none';
+                document.getElementById('chatMessages').style.display = 'none';
+                document.getElementById('chatInputContainer').style.display = 'none';
+                currentConversationId = null;
+                currentConversation = null;
+
+                // Show empty state if no more conversations
+                if (allConversations.length === 0) {
+                    displayConversationList([]);
+                }
+            } else {
+                showToast('Failed to delete: ' + result.message, 'error');
+            }
+        } else {
+            showToast('Delete function not available', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting conversation:', error);
+        showToast('Error deleting conversation', 'error');
     }
 }
 
 // Utility functions
 function scrollToBottom() {
     const chatMessages = document.getElementById('chatMessages');
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 }
 
 function formatTime(timestamp) {
-    const date = new Date(timestamp);
+    if (!timestamp) return 'Just now';
+
+    // Handle Firestore timestamp object
+    let date;
+    if (timestamp && timestamp.seconds) {
+        date = new Date(timestamp.seconds * 1000);
+    } else if (timestamp && timestamp.toDate) {
+        date = timestamp.toDate();
+    } else {
+        date = new Date(timestamp);
+    }
+
+    if (isNaN(date.getTime())) return 'Just now';
+
     const now = new Date();
     const diff = now - date;
-    
+
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatTimeAgo(timestamp) {
+    if (!timestamp) return '';
+
+    // Handle Firestore timestamp object
+    let date;
+    if (timestamp && timestamp.seconds) {
+        date = new Date(timestamp.seconds * 1000);
+    } else if (timestamp && timestamp.toDate) {
+        date = timestamp.toDate();
+    } else {
+        date = new Date(timestamp);
+    }
+
+    if (isNaN(date.getTime())) return '';
+
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function showToast(message, type = 'success') {
     const toastEl = document.getElementById('toastNotification');
     const toastBody = document.getElementById('toastMessage');
-    
+
+    if (!toastEl || !toastBody) return;
+
     toastBody.textContent = message;
-    
-    toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning');
+
+    toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
     if (type === 'success') {
         toastEl.classList.add('text-bg-success');
     } else if (type === 'error') {
- toastEl.classList.add('text-bg-danger');
+        toastEl.classList.add('text-bg-danger');
+    } else if (type === 'info') {
+        toastEl.classList.add('text-bg-info');
     } else {
         toastEl.classList.add('text-bg-warning');
     }
-    
-    toastNotification.show();
+
+    if (toastNotification) {
+        toastNotification.show();
+    }
 }
 
 // Close dropdown when clicking outside
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
     const dropdown = document.getElementById('chatOptionsDropdown');
     const optionsBtn = document.querySelector('.btn-chat-options');
-    
+
     if (dropdown && optionsBtn && !dropdown.contains(event.target) && !optionsBtn.contains(event.target)) {
-      dropdown.style.display = 'none';
+        dropdown.style.display = 'none';
     }
 });
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function () {
+    if (messagePollingInterval) {
+        clearInterval(messagePollingInterval);
+    }
+
+    // Stop message listener
+    if (typeof window.firebaseStopMessageListener === 'function' && currentUserId) {
+        window.firebaseStopMessageListener(currentUserId);
+    }
+});
+
+function updateUnreadBadgeAccurate(conversations) {
+    try {
+        let unread = 0;
+        const userId = typeof currentUserId !== 'undefined' ? currentUserId : null;
+        if (!userId) return;
+        if (Array.isArray(conversations)) {
+            for (const conv of conversations) {
+                const readField = `lastReadBy_${userId}`;
+                const lastReadTime = conv[readField]?.seconds || 0;
+                const lastMessageTime = conv.lastMessageTime?.seconds || 0;
+                const isUnread = conv.lastMessageSenderId && conv.lastMessageSenderId !== userId && lastMessageTime > lastReadTime;
+                if (isUnread) unread++;
+            }
+        }
+        const badge = document.querySelector('.messages-badge');
+        if (badge) {
+            if (unread > 0) {
+                badge.textContent = unread > 99 ? '99+' : unread.toString();
+                badge.style.display = 'inline-block';
+            } else {
+                badge.textContent = '0';
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) { console.warn('Badge update error', e); }
+}

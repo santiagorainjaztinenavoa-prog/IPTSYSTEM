@@ -1,0 +1,621 @@
+@{
+    ViewData["Title"] = "Contact Admin";
+    var currentUserId = Context.Session.GetString("UserId") ?? "";
+    var currentUserName = Context.Session.GetString("FullName") ?? Context.Session.GetString("Username") ?? "";
+    var currentUserEmail = Context.Session.GetString("SessionEmail") ?? "";
+}
+
+@section Styles {
+    <style>
+        .admin-messages-page {
+            padding-top: 100px;
+            min-height: 100vh;
+            background: #f8f9fa;
+        }
+        
+        .messages-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .page-header {
+            margin-bottom: 2rem;
+        }
+        
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 0.5rem;
+        }
+        
+        .page-subtitle {
+            color: #6b7280;
+            font-size: 1rem;
+        }
+        
+        .compose-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .compose-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .compose-icon {
+            width: 48px;
+            height: 48px;
+            background: #fee2e2;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #dc2626;
+            font-size: 1.5rem;
+        }
+        
+        .compose-title {
+            color: #1a1a2e;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .compose-subtitle {
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-label {
+            display: block;
+            color: #374151;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .form-control {
+            width: 100%;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            color: #1a1a2e;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+        }
+        
+        .form-control::placeholder {
+            color: #9ca3af;
+        }
+        
+        textarea.form-control {
+            resize: vertical;
+            min-height: 120px;
+            font-family: inherit;
+        }
+        
+        .btn-send {
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-send:hover {
+            background: #b91c1c;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+        }
+        
+        .btn-send:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .messages-list-section {
+            margin-top: 2rem;
+        }
+        
+        .section-title {
+            color: #1a1a2e;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .message-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .message-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        .message-card.unread {
+            border-left: 4px solid #dc2626;
+        }
+        
+        .message-card.replied {
+            border-left: 4px solid #10b981;
+        }
+        
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+        
+        .message-subject {
+            color: #1a1a2e;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        
+        .message-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .message-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .message-status.unread {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .message-status.read {
+            background: #f0fdf4;
+            color: #166534;
+        }
+        
+        .message-status.replied {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .message-date {
+            color: #6b7280;
+            font-size: 0.75rem;
+        }
+        
+        .message-body {
+            color: #374151;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+        
+        .replies-section {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .reply-item {
+            padding-left: 1rem;
+            border-left: 2px solid #3b82f6;
+            margin-bottom: 0.75rem;
+        }
+        
+        .reply-item.user-reply {
+            border-left-color: #dc2626;
+        }
+        
+        .reply-from {
+            color: #6b7280;
+            font-size: 0.75rem;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        
+        .reply-text {
+            color: #374151;
+            font-size: 0.875rem;
+        }
+        
+        .reply-form {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .reply-input {
+            flex: 1;
+            background: #f8f9fa;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            color: #1a1a2e;
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+        }
+        
+        .reply-input:focus {
+            outline: none;
+            border-color: #dc2626;
+            background: #ffffff;
+        }
+        
+        .btn-reply {
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+        }
+        
+        .btn-reply:hover {
+            background: #2563eb;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #6b7280;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: #d1d5db;
+        }
+        
+        .loading-state {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+        }
+        
+        .toast-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            color: #fff;
+            font-weight: 500;
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .toast-notification.success {
+            background: #10b981;
+        }
+        
+        .toast-notification.error {
+            background: #dc2626;
+        }
+        
+        @@keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+}
+
+<section class="admin-messages-page">
+    <div class="messages-container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <h1 class="page-title">Contact Administrator</h1>
+            <p class="page-subtitle">Send messages to the admin for support, concerns, or inquiries</p>
+        </div>
+
+        <!-- Compose New Message -->
+        <div class="compose-card">
+            <div class="compose-header">
+                <div class="compose-icon">
+                    <i class="bi bi-envelope-plus"></i>
+                </div>
+                <div>
+                    <div class="compose-title">New Message</div>
+                    <div class="compose-subtitle">Send a message to the administrator</div>
+                </div>
+            </div>
+            
+            <form id="composeForm">
+                <div class="form-group">
+                    <label class="form-label">Subject</label>
+                    <input type="text" id="messageSubject" class="form-control" placeholder="Enter subject..." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Message</label>
+                    <textarea id="messageBody" class="form-control" placeholder="Type your message here..." required></textarea>
+                </div>
+                <button type="submit" class="btn-send" id="sendBtn">
+                    <i class="bi bi-send"></i>
+                    Send Message
+                </button>
+            </form>
+        </div>
+
+        <!-- Previous Messages -->
+        <div class="messages-list-section">
+            <h2 class="section-title">
+                <i class="bi bi-inbox"></i>
+                Your Messages
+            </h2>
+            
+            <div id="messagesLoading" class="loading-state">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="ms-2">Loading your messages...</span>
+            </div>
+            
+            <div id="messagesList">
+                <!-- Messages will be loaded here -->
+            </div>
+            
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="bi bi-envelope-open"></i>
+                <h3>No messages yet</h3>
+                <p>Your conversations with the administrator will appear here</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Toast Container -->
+<div id="toastContainer"></div>
+
+@section Scripts {
+    <script>
+        const currentUserId = '@currentUserId';
+        const currentUserName = '@currentUserName';
+        const currentUserEmail = '@currentUserEmail';
+    </script>
+    <script type="module" src="~/js/firebase-client.js"></script>
+    <script>
+        let userMessages = [];
+        
+        // Wait for Firebase
+        function waitForFirebase() {
+            return new Promise((resolve) => {
+                const check = () => {
+                    if (typeof window.firebaseSendAdminMessage === 'function') {
+                        resolve();
+                    } else {
+                        setTimeout(check, 100);
+                    }
+                };
+                check();
+            });
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast-notification ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+        
+        // Format date
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            let date;
+            if (timestamp.seconds) {
+                date = new Date(timestamp.seconds * 1000);
+            } else if (timestamp.toDate) {
+                date = timestamp.toDate();
+            } else if (typeof timestamp === 'string') {
+                date = new Date(timestamp);
+            } else {
+                return 'N/A';
+            }
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        // Load user messages
+        async function loadMessages() {
+            const loading = document.getElementById('messagesLoading');
+            const list = document.getElementById('messagesList');
+            const empty = document.getElementById('emptyState');
+            
+            try {
+                loading.style.display = 'block';
+                list.innerHTML = '';
+                empty.style.display = 'none';
+                
+                const result = await window.firebaseGetUserAdminMessages(currentUserId);
+                loading.style.display = 'none';
+                
+                if (result.success && result.messages.length > 0) {
+                    userMessages = result.messages;
+                    renderMessages();
+                } else {
+                    empty.style.display = 'block';
+                }
+            } catch (err) {
+                console.error('Error loading messages:', err);
+                loading.style.display = 'none';
+                empty.style.display = 'block';
+            }
+        }
+        
+        // Render messages
+        function renderMessages() {
+            const list = document.getElementById('messagesList');
+            
+            list.innerHTML = userMessages.map((msg, index) => `
+                <div class="message-card ${msg.status}">
+                    <div class="message-header">
+                        <div class="message-subject">${msg.subject || 'No Subject'}</div>
+                        <div class="message-meta">
+                            <span class="message-status ${msg.status}">${msg.status === 'replied' ? 'Replied' : msg.status === 'read' ? 'Read' : 'Pending'}</span>
+                            <span class="message-date">${formatDate(msg.created_at)}</span>
+                        </div>
+                    </div>
+                    <div class="message-body">${msg.message}</div>
+                    
+                    ${msg.replies && msg.replies.length > 0 ? `
+                        <div class="replies-section">
+                            <div style="color: #9ca3af; font-size: 0.75rem; margin-bottom: 0.5rem;">Conversation:</div>
+                            ${msg.replies.map(reply => `
+                                <div class="reply-item ${reply.from === 'user' ? 'user-reply' : ''}">
+                                    <div class="reply-from">${reply.from === 'admin' ? '👤 Admin' : '📤 You'} • ${reply.timestamp ? new Date(reply.timestamp).toLocaleString() : ''}</div>
+                                    <div class="reply-text">${reply.text}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    <div class="reply-form">
+                        <input type="text" class="reply-input" id="replyInput_${index}" placeholder="Type a reply...">
+                        <button class="btn-reply" onclick="sendReply('${msg.id}', ${index})">
+                            <i class="bi bi-reply"></i> Reply
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Send new message
+        async function sendMessage(e) {
+            e.preventDefault();
+            
+            const subject = document.getElementById('messageSubject').value.trim();
+            const body = document.getElementById('messageBody').value.trim();
+            const sendBtn = document.getElementById('sendBtn');
+            
+            if (!subject || !body) {
+                showToast('Please fill in all fields', 'error');
+                return;
+            }
+            
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sending...';
+            
+            try {
+                const result = await window.firebaseSendAdminMessage(
+                    currentUserId,
+                    currentUserName,
+                    currentUserEmail,
+                    subject,
+                    body
+                );
+                
+                if (result.success) {
+                    showToast('Message sent successfully!', 'success');
+                    document.getElementById('messageSubject').value = '';
+                    document.getElementById('messageBody').value = '';
+                    loadMessages();
+                } else {
+                    showToast('Failed to send message: ' + (result.message || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                console.error('Error sending message:', err);
+                showToast('Failed to send message', 'error');
+            }
+            
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<i class="bi bi-send"></i> Send Message';
+        }
+        
+        // Send reply to existing thread
+        window.sendReply = async function(messageId, index) {
+            const input = document.getElementById(`replyInput_${index}`);
+            const replyText = input.value.trim();
+            
+            if (!replyText) {
+                showToast('Please enter a reply', 'error');
+                return;
+            }
+            
+            try {
+                const result = await window.firebaseUserReplyAdminMessage(messageId, currentUserId, replyText);
+                
+                if (result.success) {
+                    showToast('Reply sent!', 'success');
+                    input.value = '';
+                    loadMessages();
+                } else {
+                    showToast('Failed to send reply: ' + (result.message || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                console.error('Error sending reply:', err);
+                showToast('Failed to send reply', 'error');
+            }
+        };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await waitForFirebase();
+            
+            // Setup form submission
+            document.getElementById('composeForm').addEventListener('submit', sendMessage);
+            
+            // Load messages
+            if (currentUserId) {
+                loadMessages();
+            } else {
+                document.getElementById('messagesLoading').style.display = 'none';
+                document.getElementById('emptyState').innerHTML = `
+                    <i class="bi bi-exclamation-circle"></i>
+                    <h3>Please log in</h3>
+                    <p>You need to be logged in to send messages to the administrator</p>
+                `;
+                document.getElementById('emptyState').style.display = 'block';
+            }
+        });
+    </script>
+}
