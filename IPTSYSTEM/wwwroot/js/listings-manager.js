@@ -1,13 +1,13 @@
-// ========== LISTINGS MANAGER - ENHANCED CRUD OPERATIONS ==========
+// Listings Manager - CRUD Operations
 
 console.log('🔍 listings-manager.js LOADED');
 
-// Expose placeholder functions immediately so onclick handlers don't fail
-window.openListingModal = window.openListingModal || function () { console.warn('openListingModal placeholder called - real function not ready yet'); };
-window.editListing = window.editListing || function () { console.warn('editListing placeholder called - real function not ready yet'); };
-window.saveListing = window.saveListing || function () { console.warn('saveListing placeholder called - real function not ready yet'); };
-window.deleteListing = window.deleteListing || function () { console.warn('deleteListing placeholder called - real function not ready yet'); };
-window.removeImage = window.removeImage || function () { console.warn('removeImage placeholder called - real function not ready yet'); };
+// Expose placeholder functions for global access
+window.openListingModal = window.openListingModal || function () { console.warn('openListingModal placeholder called'); };
+window.editListing = window.editListing || function () { console.warn('editListing placeholder called'); };
+window.saveListing = window.saveListing || function () { console.warn('saveListing placeholder called'); };
+window.deleteListing = window.deleteListing || function () { console.warn('deleteListing placeholder called'); };
+window.removeImage = window.removeImage || function () { console.warn('removeImage placeholder called'); };
 
 let listingModal;
 let toastNotification;
@@ -37,7 +37,7 @@ function normalizeCategoryName(category) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log('🎯 listings-manager.js DOMContentLoaded event fired');
+    console.log('listings-manager.js initialized');
 
     // Initialize Bootstrap components
     const modalEl = document.getElementById('listingModal');

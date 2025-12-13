@@ -152,7 +152,7 @@
         async function loadUserSavedItems() {
             if (!currentUserId) return;
             try {
-                console.log('🔍 Loading saved items for user:', currentUserId);
+                console.log('Loading saved items for user:', currentUserId);
                 if (typeof window.firebaseGetSavedProducts === 'function') {
                     const result = await window.firebaseGetSavedProducts(currentUserId);
                     if (result.success && result.products) {

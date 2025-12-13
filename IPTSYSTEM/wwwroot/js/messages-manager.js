@@ -1,4 +1,4 @@
-// ========== MESSAGES MANAGER - FIRESTORE CHAT ==========
+// Messages Manager - Firestore Chat Integration
 
 let currentConversationId = null;
 let currentConversation = null;
@@ -7,11 +7,10 @@ let toastNotification;
 let messagePollingInterval;
 let notificationPermissionGranted = false;
 
-// Profile cache to minimize Firebase reads
+// Profile cache configuration
 const profileCache = new Map();
-const PROFILE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache (increased from 5)
+const PROFILE_CACHE_TTL = 10 * 60 * 1000;
 let messageListenerUnsubscribe = null;
-// Track if conversations have been loaded to prevent duplicate calls
 let conversationsLoadedOnce = false;
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -754,7 +753,7 @@ function startMessagePolling() {
     }
 }
 
-// Open AI chat (placeholder)
+// AI Chat feature placeholder
 function openAIChat() {
     showToast('AI Assistant feature coming soon!', 'info');
 }

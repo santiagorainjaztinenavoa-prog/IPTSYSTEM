@@ -1,6 +1,5 @@
-// Firebase client initialization module
-// NOTE: This file intentionally contains the public Firebase web config as requested.
-// It initializes Firebase (Auth + Firestore + Analytics) and exposes window.firebaseRegister
+// Firebase Client Initialization
+// Initializes Firebase Services (Auth, Firestore, Analytics)
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
 import { getAnalytics } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js';
@@ -13,8 +12,7 @@ const app = initializeApp(firebaseConfig);
 let analytics = null; try { analytics = getAnalytics(app); } catch (e) { console.debug('Firebase analytics not available:', e?.message || e); }
 const auth = getAuth(app); const db = getFirestore(app); const storage = getStorage(app);
 
-// ========== GLOBAL CACHE SYSTEM ==========
-// Reduces Firestore reads by caching frequently accessed data
+// Global Cache System
 const CACHE_TTL = {
     PRODUCTS: 3 * 60 * 1000,      // 3 minutes for all products
     PROFILE: 10 * 60 * 1000,      // 10 minutes for user profiles
@@ -67,11 +65,8 @@ window.firebaseClearCache = function (cacheType) {
     console.log('✅ Cleared ALL caches');
 };
 
-// -----------------------
-// Geo data (Regions/Provinces/Cities/Barangays) from LOCAL JSON (ZERO Firestore reads!)
-// Data file: /data/ph-addresses.json
-// Structure: { regions: [], provinces: [], cities: [], barangays: [] }
-// -----------------------
+// Geo Data (Regions/Provinces/Cities/Barangays)
+// Source: /data/ph-addresses.json
 const geoCache = {
     loaded: false,
     allData: null,
@@ -82,7 +77,7 @@ const geoCache = {
     barangaysByCity: {}
 };
 
-// Load all geo data from local JSON file (one-time fetch, zero Firestore reads)
+// Load geo data from local JSON
 async function loadGeoDataFromJson() {
     if (geoCache.loaded && geoCache.allData) {
         return geoCache.allData;
@@ -170,7 +165,7 @@ async function geoLoadBarangaysByCity(cityCode) {
 
 window.firebaseGeo = { loadRegions: geoLoadRegions, loadProvincesByRegion: geoLoadProvincesByRegion, loadCitiesByRegion: geoLoadCitiesByRegion, loadCitiesByProvince: geoLoadCitiesByProvince, loadBarangaysByCity: geoLoadBarangaysByCity };
 
-// Presentation Mode removed: using local JSON and caching by default to reduce reads.
+// Presentation Mode: using local JSON and caching by default.
 
 auth.onAuthStateChanged((user) => { if (user) { console.log('Firebase user authenticated:', user.uid, user.email); } else { console.log('No Firebase user authenticated'); tryAutoSignInFromSession(); } });
 async function tryAutoSignInFromSession() { try { const userEmail = document.querySelector('[data-user-email]')?.getAttribute('data-user-email'); const sessionEmail = sessionStorage.getItem('SessionEmail'); if (!userEmail && !sessionEmail) { console.log('No user email in session, auto-sign in skipped'); return; } const email = userEmail || sessionEmail; console.log('Attempting auto-sign in with:', email); console.log('Auto-sign in prepared for:', email); } catch (err) { console.debug('Auto-sign in not available:', err.message); } }
